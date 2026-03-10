@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onyx</title>
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,600;0,7..72,700;1,7..72,400&family=IBM+Plex+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="text/css">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-base: #0e0e12;
+  --bg-surface: #141418;
+  --bg-elevated: #1a1a20;
+  --bg-hover: #22222a;
+  --bg-active: #2a2a34;
+  --bg-editor: #111115;
+  --border: #2a2a32;
+  --border-subtle: #1e1e26;
+  --text-primary: #d4d4dc;
+  --text-secondary: #78788a;
+  --text-muted: #4e4e5c;
+  --text-heading: #eaeaf0;
+  --accent: #8b7cf6;
+  --accent-dim: #6b5cd6;
+  --accent-glow: rgba(139, 124, 246, 0.12);
+  --link: #6ba8e8;
+  --link-broken: #e86b6b;
+  --tag: #5cb8a4;
+  --tag-bg: rgba(92, 184, 164, 0.1);
+  --block-sep: #2a2a34;
+  --cal-dot: #8b7cf6;
+  --cal-today: #eaeaf0;
+  --cal-today-bg: rgba(139, 124, 246, 0.2);
+  --bookmark-star: #e8c96b;
+  --dir-zettel: #8b7cf6;
+  --dir-work: #5cb8a4;
+  --sidebar-w: 248px;
+  --context-w: 280px;
+  --titlebar-h: 38px;
+  --tabbar-h: 36px;
+  --statusbar-h: 26px;
+  --font-ui: 'DM Sans', -apple-system, sans-serif;
+  --font-editor: 'Literata', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --radius: 4px;
+  --radius-lg: 6px;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-ui);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* === TITLEBAR === */
+.titlebar {
+  height: var(--titlebar-h);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  -webkit-app-region: drag;
+  position: relative;
+  z-index: 100;
+}
+.traffic-lights {
+  display: flex;
+  gap: 8px;
+  margin-right: 16px;
+}
+.traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+.tl-close { background: #ff5f57; }
+.tl-min { background: #febc2e; }
+.tl-max { background: #28c840; }
+.titlebar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+/* === MAIN LAYOUT === */
+.app-body {
+  display: flex;
+  height: calc(100vh - var(--titlebar-h) - var(--statusbar-h));
+}
+
+/* === SIDEBAR === */
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.2s ease, min-width 0.2s ease, opacity 0.15s ease;
+}
+.sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.sidebar-scroll::-webkit-scrollbar { width: 4px; }
+.sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.dir-root {
+  margin-bottom: 2px;
+}
+.dir-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  gap: 4px;
+  position: relative;
+  user-select: none;
+}
+.dir-header::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--dir-color, var(--accent));
+}
+.dir-header:hover { color: var(--text-primary); }
+.dir-chevron {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+.dir-chevron.open { transform: rotate(90deg); }
+.dir-children {
+  overflow: hidden;
+}
+.dir-children.collapsed { display: none; }
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  padding: 3px 12px 3px 24px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  gap: 6px;
+  border-radius: 0;
+  position: relative;
+  user-select: none;
+}
+.tree-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.tree-item.active {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+.tree-item .icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+.tree-folder { padding-left: 20px; }
+.tree-folder .tree-item { padding-left: 32px; }
+.tree-folder .tree-folder .tree-item { padding-left: 44px; }
+
+.tree-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Bookmarks pinned at bottom */
+.sidebar-bookmarks {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 0 6px;
+  flex-shrink: 0;
+}
+.bookmarks-header {
+  display: flex;
+  align-items: center;
+  padding: 2px 12px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  gap: 5px;
+}
+.bookmark-item {
+  display: flex;
+  align-items: center;
+  padding: 3px 12px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  gap: 6px;
+}
+.bookmark-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.bookmark-star {
+  color: var(--bookmark-star);
+  font-size: 10px;
+}
+
+/* === EDITOR AREA === */
+.editor-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-editor);
+}
+
+/* Tab bar */
+.tab-bar {
+  height: var(--tabbar-h);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+.tab {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-right: 1px solid var(--border-subtle);
+  gap: 6px;
+  white-space: nowrap;
+  position: relative;
+  min-width: 0;
+  user-select: none;
+}
+.tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+.tab.active {
+  background: var(--bg-editor);
+  color: var(--text-primary);
+}
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+}
+.tab-modified {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.tab-close {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 14px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.tab:hover .tab-close { opacity: 1; }
+.tab-close:hover { background: var(--bg-active); color: var(--text-primary); }
+
+/* Editor content */
+.editor-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 60px;
+  font-family: var(--font-editor);
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--text-primary);
+  max-width: 100%;
+}
+.editor-content::-webkit-scrollbar { width: 6px; }
+.editor-content::-webkit-scrollbar-track { background: transparent; }
+.editor-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.editor-inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* Frontmatter */
+.frontmatter {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  margin-bottom: 28px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  cursor: pointer;
+  position: relative;
+}
+.frontmatter-label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.frontmatter-type {
+  color: var(--accent);
+  text-transform: none;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.fm-key { color: var(--tag); }
+.fm-val { color: var(--text-secondary); }
+
+/* Headings */
+.editor-content h1 {
+  font-family: var(--font-editor);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-heading);
+  margin: 32px 0 16px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.editor-content h3 {
+  font-family: var(--font-editor);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-heading);
+  margin: 24px 0 10px;
+  line-height: 1.4;
+}
+
+/* Block separator */
+.block-sep {
+  border: none;
+  height: 1px;
+  background: var(--block-sep);
+  margin: 24px 0;
+  position: relative;
+}
+.block-sep::after {
+  content: '***';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg-editor);
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 3px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.block-sep:hover::after { opacity: 1; }
+
+/* Block hover actions */
+.block {
+  position: relative;
+  padding: 2px 0;
+  border-radius: var(--radius);
+}
+.block:hover .block-actions { opacity: 1; }
+.block-actions {
+  position: absolute;
+  right: -36px;
+  top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.block-action {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.block-action:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+/* Wiki links */
+.wikilink {
+  color: var(--link);
+  cursor: pointer;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(107, 168, 232, 0.25);
+  transition: border-color 0.15s;
+}
+.wikilink:hover {
+  border-color: var(--link);
+}
+.wikilink.broken {
+  color: var(--link-broken);
+  border-bottom-style: dashed;
+  border-color: rgba(232, 107, 107, 0.3);
+}
+
+/* Tags */
+.tag {
+  color: var(--tag);
+  background: var(--tag-bg);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.tag:hover { background: rgba(92, 184, 164, 0.18); }
+
+/* Lists */
+.editor-content ul {
+  padding-left: 20px;
+  margin: 6px 0;
+}
+.editor-content li {
+  margin: 3px 0;
+  color: var(--text-primary);
+}
+.editor-content li::marker {
+  color: var(--text-muted);
+}
+
+/* Checkbox */
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.checkbox.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.checkbox.checked::after {
+  content: '✓';
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Embed */
+.embed {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 12px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.embed-title {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* === CONTEXT PANEL === */
+.context-panel {
+  width: var(--context-w);
+  min-width: var(--context-w);
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.2s ease, min-width 0.2s ease, opacity 0.15s ease;
+}
+.context-panel.collapsed {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.context-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+.context-scroll::-webkit-scrollbar { width: 4px; }
+.context-scroll::-webkit-scrollbar-track { background: transparent; }
+.context-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Calendar */
+.calendar {
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.cal-month {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-heading);
+  letter-spacing: -0.01em;
+}
+.cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cal-nav-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  border: none;
+  background: none;
+}
+.cal-nav-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.cal-today-btn {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  letter-spacing: 0.04em;
+  border: none;
+  background: none;
+}
+.cal-today-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  text-align: center;
+}
+.cal-weekday {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 2px 0 6px;
+  letter-spacing: 0.04em;
+}
+.cal-day {
+  font-size: 11.5px;
+  padding: 3px 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-secondary);
+  position: relative;
+  font-variant-numeric: tabular-nums;
+}
+.cal-day:hover { background: var(--bg-hover); color: var(--text-primary); }
+.cal-day.today {
+  background: var(--cal-today-bg);
+  color: var(--cal-today);
+  font-weight: 600;
+}
+.cal-day.has-note::after {
+  content: '';
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--cal-dot);
+}
+.cal-day.other-month { color: var(--text-muted); opacity: 0.4; }
+.cal-day.selected {
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+.cal-day.selected::after { background: white; }
+
+/* Accordion sections */
+.ctx-section {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ctx-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+.ctx-section-header:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.ctx-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+.ctx-chevron.open { transform: rotate(90deg); }
+.ctx-section-body {
+  padding: 0 14px 10px;
+}
+.ctx-section-body.collapsed { display: none; }
+
+/* Backlinks */
+.backlink-item {
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.backlink-item:hover { background: var(--bg-hover); }
+.backlink-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--link);
+  margin-bottom: 3px;
+}
+.backlink-context {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.backlink-context em {
+  color: var(--text-secondary);
+  font-style: normal;
+  font-weight: 500;
+}
+
+/* Properties */
+.prop-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+  gap: 8px;
+}
+.prop-key {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  min-width: 70px;
+  flex-shrink: 0;
+}
+.prop-val {
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prop-val:hover { border-color: var(--border); }
+.prop-val.empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.prop-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.prop-tag {
+  font-size: 11px;
+  color: var(--tag);
+  background: var(--tag-bg);
+  padding: 1px 7px;
+  border-radius: 3px;
+}
+
+/* Outline */
+.outline-item {
+  padding: 3px 0 3px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.outline-item:hover { color: var(--text-primary); }
+.outline-item.h1 { font-weight: 500; }
+.outline-item.h3 { padding-left: 16px; font-size: 11.5px; }
+
+/* === STATUS BAR === */
+.statusbar {
+  height: var(--statusbar-h);
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  gap: 4px;
+  z-index: 100;
+}
+.status-item {
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.status-sep {
+  width: 1px;
+  height: 12px;
+  background: var(--border-subtle);
+}
+.status-breadcrumb {
+  flex: 1;
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status-breadcrumb span {
+  cursor: pointer;
+}
+.status-breadcrumb span:hover { color: var(--text-secondary); }
+.status-breadcrumb .sep { color: var(--text-muted); opacity: 0.4; margin: 0 3px; }
+.status-mode {
+  cursor: pointer;
+  padding: 1px 8px;
+  border-radius: 3px;
+}
+.status-mode:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.status-ok { color: var(--tag); }
+
+/* === SVG ICONS (inline) === */
+svg.icon {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* === ANIMATIONS === */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.editor-inner > * {
+  animation: fadeIn 0.3s ease both;
+}
+.editor-inner > *:nth-child(1) { animation-delay: 0.02s; }
+.editor-inner > *:nth-child(2) { animation-delay: 0.05s; }
+.editor-inner > *:nth-child(3) { animation-delay: 0.08s; }
+.editor-inner > *:nth-child(4) { animation-delay: 0.11s; }
+.editor-inner > *:nth-child(5) { animation-delay: 0.14s; }
+.editor-inner > *:nth-child(6) { animation-delay: 0.17s; }
+.editor-inner > *:nth-child(7) { animation-delay: 0.20s; }
+.editor-inner > *:nth-child(8) { animation-delay: 0.23s; }
+.editor-inner > *:nth-child(9) { animation-delay: 0.26s; }
+.editor-inner > *:nth-child(10) { animation-delay: 0.29s; }
+.editor-inner > *:nth-child(11) { animation-delay: 0.32s; }
+
+/* Cursor blink */
+.cursor {
+  display: inline-block;
+  width: 1.5px;
+  height: 1.1em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+  margin-left: -1px;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Quick Open overlay hint */
+.quick-open-hint {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  width: 440px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+  display: none;
+  z-index: 1000;
+}
+.quick-open-hint.show { display: block; animation: fadeIn 0.12s ease; }
+.qo-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 14px 16px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  color: var(--text-primary);
+  outline: none;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.qo-input::placeholder { color: var(--text-muted); }
+.qo-results {
+  padding: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.qo-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  gap: 10px;
+}
+.qo-item:hover, .qo-item.selected { background: var(--bg-hover); }
+.qo-item-title { font-size: 13px; color: var(--text-primary); }
+.qo-item-path { font-size: 11px; color: var(--text-muted); }
+.qo-item-icon { color: var(--text-muted); font-size: 14px; }
+
+/* Tooltip */
+.kbd {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  line-height: 1.5;
+}
+</style>
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div class="titlebar">
+  <div class="traffic-lights">
+    <div class="traffic-light tl-close"></div>
+    <div class="traffic-light tl-min"></div>
+    <div class="traffic-light tl-max"></div>
+  </div>
+  <span class="titlebar-title">Onyx</span>
+</div>
+
+<!-- MAIN -->
+<div class="app-body">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-scroll">
+
+      <!-- Zettelkasten directory -->
+      <div class="dir-root">
+        <div class="dir-header" style="--dir-color: var(--dir-zettel)" onclick="toggleDir(this)">
+          <span class="dir-chevron open">&#9654;</span>
+          Zettelkasten
+        </div>
+        <div class="dir-children">
+          <div class="tree-item" style="padding-left: 24px;">
+            <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span class="tree-item-label">Inbox</span>
+          </div>
+          <div class="tree-folder">
+            <div class="tree-item" onclick="toggleDir(this)">
+              <span class="dir-chevron open" style="font-size:10px; width:12px;">&#9654;</span>
+              <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+              <span class="tree-item-label">Calendar</span>
+            </div>
+            <div class="dir-children">
+              <div class="tree-folder">
+                <div class="tree-item" onclick="toggleDir(this)">
+                  <span class="dir-chevron open" style="font-size:10px; width:12px;">&#9654;</span>
+                  <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                  <span class="tree-item-label">2026</span>
+                </div>
+                <div class="dir-children">
+                  <div class="tree-item" style="padding-left: 56px;">
+                    <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                    <span class="tree-item-label">2026-03</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tree-item" style="padding-left: 24px;">
+            <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span class="tree-item-label">Dharma Path</span>
+          </div>
+          <div class="tree-item" style="padding-left: 24px;">
+            <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span class="tree-item-label">Notes</span>
+          </div>
+          <div class="tree-item" style="padding-left: 24px;">
+            <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span class="tree-item-label">People</span>
+          </div>
+          <div class="tree-item active" style="padding-left: 36px;">
+            <svg class="icon" style="width:13px;height:13px;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+            <span class="tree-item-label">Alice.md</span>
+          </div>
+          <div class="tree-item" style="padding-left: 24px;">
+            <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span class="tree-item-label">Personal</span>
+          </div>
+          <div class="tree-item" style="padding-left: 24px;">
+            <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span class="tree-item-label">Recipes</span>
+          </div>
+          <div class="tree-item" style="padding-left: 24px;">
+            <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span class="tree-item-label">Work - Andre</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Work directory -->
+      <div class="dir-root">
+        <div class="dir-header" style="--dir-color: var(--dir-work)" onclick="toggleDir(this)">
+          <span class="dir-chevron">&#9654;</span>
+          Work Projects
+        </div>
+        <div class="dir-children collapsed">
+          <div class="tree-item" style="padding-left: 24px;">
+            <svg class="icon"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span class="tree-item-label">docs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bookmarks (pinned at bottom) -->
+    <div class="sidebar-bookmarks">
+      <div class="bookmarks-header">
+        <span class="bookmark-star">&#9733;</span> Bookmarks
+      </div>
+      <div class="bookmark-item">
+        <span class="bookmark-star">&#9733;</span>
+        <span>2026-03-09</span>
+      </div>
+      <div class="bookmark-item">
+        <span class="bookmark-star">&#9733;</span>
+        <span>My Principles List</span>
+      </div>
+      <div class="bookmark-item">
+        <span class="bookmark-star">&#9733;</span>
+        <span>Alice</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDITOR -->
+  <div class="editor-area">
+    <div class="tab-bar">
+      <div class="tab" onclick="switchTab(this, 'daily')">
+        <span>2026-03-09.md</span>
+        <span class="tab-close">&times;</span>
+      </div>
+      <div class="tab active" onclick="switchTab(this, 'mihai')">
+        <span>Alice.md</span>
+        <span class="tab-modified"></span>
+        <span class="tab-close">&times;</span>
+      </div>
+      <div class="tab" onclick="switchTab(this, 'blamership')">
+        <span>Blamership.md</span>
+        <span class="tab-close">&times;</span>
+      </div>
+    </div>
+
+    <div class="editor-content" id="editor">
+      <!-- Alice note content -->
+      <div class="editor-inner" id="content-mihai">
+        <div class="frontmatter">
+          <div class="frontmatter-label">
+            <svg class="icon" style="width:12px;height:12px;"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Properties &middot; <span class="frontmatter-type">Person</span>
+          </div>
+          <span class="fm-key">Full Name:</span> <span class="fm-val">Alice Chen</span>
+        </div>
+
+        <div class="block">
+          <p>Call with Alice <a class="wikilink">2024-10-02</a>:</p>
+          <ul>
+            <li>Good to Great - book Alice</li>
+            <li><a href="#" class="wikilink" style="font-size:inherit; border:none; text-decoration:underline; text-decoration-color: rgba(107,168,232,0.25);">Video recordings on how to lead them</a></li>
+            <li>James zoom sesh?</li>
+            <li>Before the 14th? find time for facilitator</li>
+            <li>entrepreneur operating system, Traction - book</li>
+            <li>Light Emerging - Barbara Brennan book</li>
+          </ul>
+          <div class="block-actions">
+            <div class="block-action" title="Copy block">&#9776;</div>
+          </div>
+        </div>
+
+        <hr class="block-sep">
+
+        <div class="block">
+          <p>45000 for 25h/week<br>
+          Goal: Break even.<br>
+          I facilitate is part of the deal.</p>
+          <div class="block-actions">
+            <div class="block-action" title="Copy block">&#9776;</div>
+          </div>
+        </div>
+
+        <hr class="block-sep">
+
+        <div class="block">
+          <p>4-week series of just contracted CG.<br>
+          6-week SL-CG.<br>
+          Falcon-like Open Space.</p>
+
+          <p>The Signature Workshop outline in OCL drive?</p>
+          <ul>
+            <li>1 doc
+              <ul>
+                <li>3 videos</li>
+              </ul>
+            </li>
+            <li>1 keynote</li>
+            <li>Signature Workshop is free.</li>
+          </ul>
+          <div class="block-actions">
+            <div class="block-action" title="Copy block">&#9776;</div>
+          </div>
+        </div>
+
+        <hr class="block-sep">
+
+        <div class="block">
+          <h3>Projects</h3>
+          <ul>
+            <li>Make 3300E in September</li>
+            <li><span class="checkbox"></span> Work on the pricing model</li>
+            <li>200E for 4-week
+              <ul>
+                <li>10 ppl 2 facilitators</li>
+                <li>Email coaching has been promised</li>
+                <li>One 30 min video coaching</li>
+              </ul>
+            </li>
+          </ul>
+          <p style="margin-top: 12px;">Tags: <span class="tag">#collaborator</span> <span class="tag">#friend</span></p>
+          <span class="cursor"></span>
+          <div class="block-actions">
+            <div class="block-action" title="Copy block">&#9776;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTEXT PANEL -->
+  <div class="context-panel" id="contextPanel">
+    <div class="context-scroll">
+      <!-- Calendar -->
+      <div class="calendar">
+        <div class="cal-header">
+          <span class="cal-month">March 2026</span>
+          <div class="cal-nav">
+            <button class="cal-nav-btn">&#9664;</button>
+            <button class="cal-today-btn">TODAY</button>
+            <button class="cal-nav-btn">&#9654;</button>
+          </div>
+        </div>
+        <div class="cal-grid">
+          <div class="cal-weekday">M</div>
+          <div class="cal-weekday">T</div>
+          <div class="cal-weekday">W</div>
+          <div class="cal-weekday">T</div>
+          <div class="cal-weekday">F</div>
+          <div class="cal-weekday">S</div>
+          <div class="cal-weekday">S</div>
+
+          <div class="cal-day other-month">23</div>
+          <div class="cal-day other-month">24</div>
+          <div class="cal-day other-month">25</div>
+          <div class="cal-day other-month">26</div>
+          <div class="cal-day other-month">27</div>
+          <div class="cal-day other-month">28</div>
+          <div class="cal-day">1</div>
+
+          <div class="cal-day has-note">2</div>
+          <div class="cal-day has-note">3</div>
+          <div class="cal-day has-note">4</div>
+          <div class="cal-day has-note">5</div>
+          <div class="cal-day has-note">6</div>
+          <div class="cal-day has-note">7</div>
+          <div class="cal-day has-note">8</div>
+
+          <div class="cal-day today has-note">9</div>
+          <div class="cal-day">10</div>
+          <div class="cal-day">11</div>
+          <div class="cal-day">12</div>
+          <div class="cal-day">13</div>
+          <div class="cal-day">14</div>
+          <div class="cal-day">15</div>
+
+          <div class="cal-day">16</div>
+          <div class="cal-day">17</div>
+          <div class="cal-day">18</div>
+          <div class="cal-day">19</div>
+          <div class="cal-day">20</div>
+          <div class="cal-day">21</div>
+          <div class="cal-day">22</div>
+
+          <div class="cal-day">23</div>
+          <div class="cal-day">24</div>
+          <div class="cal-day">25</div>
+          <div class="cal-day">26</div>
+          <div class="cal-day">27</div>
+          <div class="cal-day">28</div>
+          <div class="cal-day">29</div>
+
+          <div class="cal-day">30</div>
+          <div class="cal-day">31</div>
+          <div class="cal-day other-month">1</div>
+          <div class="cal-day other-month">2</div>
+          <div class="cal-day other-month">3</div>
+          <div class="cal-day other-month">4</div>
+          <div class="cal-day other-month">5</div>
+        </div>
+      </div>
+
+      <!-- Backlinks -->
+      <div class="ctx-section">
+        <div class="ctx-section-header" onclick="toggleSection(this)">
+          <span>Backlinks <span style="font-weight:400; opacity:0.6;">(3)</span></span>
+          <span class="ctx-chevron open">&#9654;</span>
+        </div>
+        <div class="ctx-section-body">
+          <div class="backlink-item">
+            <div class="backlink-title">2024-10-02</div>
+            <div class="backlink-context">Call with <em>Alice</em> about OCL partnership and pricing model discussion</div>
+          </div>
+          <div class="backlink-item">
+            <div class="backlink-title">Work - Andre / Team</div>
+            <div class="backlink-context"><em>Alice</em> Banulescu — co-facilitator, Stemless partnership</div>
+          </div>
+          <div class="backlink-item">
+            <div class="backlink-title">Signature Workshop</div>
+            <div class="backlink-context">Coordinate with <em>Alice</em> on Berlin venue and scheduling</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Properties -->
+      <div class="ctx-section">
+        <div class="ctx-section-header" onclick="toggleSection(this)">
+          <span>Properties</span>
+          <span class="ctx-chevron open">&#9654;</span>
+        </div>
+        <div class="ctx-section-body">
+          <div class="prop-row">
+            <span class="prop-key">Type</span>
+            <span class="prop-val" style="color: var(--accent); font-weight: 500;">Person</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-key">Full Name</span>
+            <span class="prop-val">Alice Chen</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-key">Birthday</span>
+            <span class="prop-val empty">not set</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-key">Email</span>
+            <span class="prop-val empty">not set</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-key">Tags</span>
+            <div class="prop-tags">
+              <span class="prop-tag">collaborator</span>
+              <span class="prop-tag">friend</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Outline -->
+      <div class="ctx-section">
+        <div class="ctx-section-header" onclick="toggleSection(this)">
+          <span>Outline</span>
+          <span class="ctx-chevron">&#9654;</span>
+        </div>
+        <div class="ctx-section-body collapsed">
+          <div class="outline-item h3">Projects</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <span class="status-item">Ln 47, Col 12</span>
+  <span class="status-sep"></span>
+  <span class="status-item">324 words</span>
+  <span class="status-sep"></span>
+  <span class="status-item status-mode">Live Preview</span>
+  <span class="status-sep"></span>
+  <span class="status-item status-ok">&#10003; No issues</span>
+  <span class="status-breadcrumb">
+    <span>Zettelkasten</span><span class="sep">/</span><span>People</span><span class="sep">/</span><span>Alice.md</span>
+  </span>
+</div>
+
+<!-- Quick Open Modal -->
+<div class="quick-open-hint" id="quickOpen">
+  <input class="qo-input" placeholder="Open note..." autofocus id="qoInput">
+  <div class="qo-results">
+    <div class="qo-item selected">
+      <span class="qo-item-icon">&#9782;</span>
+      <div>
+        <div class="qo-item-title">Alice</div>
+        <div class="qo-item-path">Zettelkasten / People</div>
+      </div>
+    </div>
+    <div class="qo-item">
+      <span class="qo-item-icon">&#9782;</span>
+      <div>
+        <div class="qo-item-title">My Principles List</div>
+        <div class="qo-item-path">Zettelkasten / Notes</div>
+      </div>
+    </div>
+    <div class="qo-item">
+      <span class="qo-item-icon">&#9782;</span>
+      <div>
+        <div class="qo-item-title">Month of Potential</div>
+        <div class="qo-item-path">Zettelkasten / Calendar / 2026 / Monthlies</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Toggle directory expand/collapse
+function toggleDir(el) {
+  const chevron = el.querySelector('.dir-chevron') || el.closest('.dir-header')?.querySelector('.dir-chevron');
+  const parent = el.closest('.dir-root') || el.closest('.tree-folder');
+  if (!parent) return;
+  const children = parent.querySelector('.dir-children');
+  if (!children) return;
+  children.classList.toggle('collapsed');
+  if (chevron) chevron.classList.toggle('open');
+}
+
+// Toggle context panel sections
+function toggleSection(header) {
+  const body = header.nextElementSibling;
+  const chevron = header.querySelector('.ctx-chevron');
+  body.classList.toggle('collapsed');
+  chevron.classList.toggle('open');
+}
+
+// Tab switching (visual only)
+function switchTab(tabEl) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tabEl.classList.add('active');
+}
+
+// Quick Open toggle with Cmd+O
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey && e.key === 'o') {
+    e.preventDefault();
+    const qo = document.getElementById('quickOpen');
+    qo.classList.toggle('show');
+    if (qo.classList.contains('show')) {
+      document.getElementById('qoInput').focus();
+      document.getElementById('qoInput').value = '';
+    }
+  }
+  if (e.key === 'Escape') {
+    document.getElementById('quickOpen').classList.remove('show');
+  }
+  // Toggle sidebar
+  if (e.metaKey && e.altKey && e.key === '[') {
+    e.preventDefault();
+    document.getElementById('sidebar').classList.toggle('collapsed');
+  }
+  // Toggle context panel
+  if (e.metaKey && e.altKey && e.key === ']') {
+    e.preventDefault();
+    document.getElementById('contextPanel').classList.toggle('collapsed');
+  }
+});
+
+// Calendar day click
+document.querySelectorAll('.cal-day:not(.other-month)').forEach(day => {
+  day.addEventListener('click', () => {
+    document.querySelectorAll('.cal-day.selected').forEach(d => d.classList.remove('selected'));
+    day.classList.add('selected');
+  });
+});
+
+// Checkbox toggle
+document.querySelectorAll('.checkbox').forEach(cb => {
+  cb.addEventListener('click', () => cb.classList.toggle('checked'));
+});
+</script>
+
+</body>
+</html>
