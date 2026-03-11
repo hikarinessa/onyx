@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod dirs;
 mod indexer;
+mod object_types;
 mod watcher;
 
 use std::sync::{Arc, Mutex};
@@ -93,6 +94,10 @@ pub fn run() {
             commands::toggle_bookmark,
             commands::get_bookmarks,
             commands::is_file_bookmarked,
+            commands::get_object_types,
+            commands::query_by_type,
+            commands::get_file_frontmatter,
+            commands::update_frontmatter,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

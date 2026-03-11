@@ -13,7 +13,8 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 
 - **Phase 1 (Skeleton):** Complete
 - **Phase 2 (Core Editor):** Complete
-- **Phase 3 (Links & Connections):** Next — start at 3.2 (3.1 indexer already done)
+- **Phase 3 (Links & Connections):** Complete
+- **Phase 4 (Typed Objects & Properties):** Next
 
 ## Project Structure
 

@@ -959,3 +959,7 @@ Items identified during Phase 1 review. Fix before or during the indicated phase
 11. **Full-doc decoration scan.** Wikilink and tag extensions iterate every line on every `docChanged`. Fine for <500 line notes, but should switch to viewport-aware iteration before adding live preview decorations.
 
 12. **Bookmark toggle on unindexed file fails silently.** `toggle_bookmark` returns "File not indexed" error which the frontend catches but doesn't surface. Needs a toast/notification system before this can be user-visible.
+
+13. **No index on `json_extract(frontmatter, '$.type')`.** `query_by_type` does a full table scan. Fine for <50k files, but if it becomes a bottleneck, add a generated column or expression index.
+
+14. **`update_frontmatter` doesn't update `title` column.** If an untyped note's raw frontmatter edit changes the title, the `files.title` column won't reflect it until the next full reindex. Low impact since title is derived from filename, not frontmatter.
