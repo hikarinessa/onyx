@@ -66,3 +66,16 @@ Never add a button or shortcut for something that isn't also in the menu bar. Wh
 - Rust: unit tests for extractors, parsers, and DB operations.
 - Frontend: manual testing via dev server for now. Automated tests are a Tier 2 goal.
 - Always run `cargo check`, `cargo test`, and `npx tsc --noEmit` before committing.
+
+## 10. Post-Phase Review Loop
+
+Run this after completing each phase, before moving on. Execute independently — no user approval between steps.
+
+1. **`/linus` review** — Linus reviews the full diff since last phase. Fix all issues he flags (even minor nits).
+2. **Commit** the Linus fixes.
+3. **`/team` review** — Assemble the relevant specialist team to review the current state.
+4. **`/linus` evaluates team feedback** — Linus triages team findings into "fix now" vs "document for later."
+5. **Fix** all "fix now" items. **Document** "later" items in ARCHITECTURE.md §18 (Known Technical Debt).
+6. **Compile check** — `cargo check`, `cargo test`, `npx tsc --noEmit`. All must pass.
+7. **Build and launch** — Run `cargo tauri dev`, check for runtime errors (white screen, console errors, panics). Fix anything that surfaces.
+8. **Commit and report** — Summarize what was fixed, what was documented, and any gotchas discovered. Include a numbered list of verification steps the user should test manually.
