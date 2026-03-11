@@ -84,7 +84,7 @@ const wikilinkDecorations = ViewPlugin.fromClass(
 
 /** DOM click handler — Cmd+click on a .cm-wikilink span follows the link */
 const wikilinkClickHandler = EditorView.domEventHandlers({
-  click(event, view) {
+  click(event, _view) {
     if (!event.metaKey) return false;
     const target = event.target as HTMLElement;
     const el =
