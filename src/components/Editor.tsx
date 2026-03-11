@@ -34,8 +34,9 @@ const lastSavedContent = new Map<string, string>();
 /**
  * Mutable ref for active tab id — the updateListener closure reads this
  * to know which tab is currently active, avoiding stale closure captures.
+ * Stored as an object so closures capture the reference, not the value.
  */
-let activeTabIdRef: string | null = null;
+const activeTabIdBox = { current: null as string | null };
 
 // ---------------------------------------------------------------------------
 // Shared styles and highlight
@@ -88,11 +89,16 @@ const onyxTheme = EditorView.theme({
 // Extensions builder
 // ---------------------------------------------------------------------------
 
-function buildExtensions(
-  saveTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | undefined>,
-): Extension[] {
+/**
+ * Module-level save timer — avoids coupling a React ref into the extensions.
+ * The extensions are built once and live for the app lifetime, so a module-level
+ * mutable is the right scope.
+ */
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+function buildExtensions(): Extension[] {
   const updateListener = EditorView.updateListener.of((update) => {
-    const tabId = activeTabIdRef;
+    const tabId = activeTabIdBox.current;
     if (!tabId) return;
 
     const { setCursorInfo, setModified, setWordCount } = useAppStore.getState();
@@ -113,11 +119,11 @@ function buildExtensions(
       setWordCount(words);
 
       // Debounced auto-save
-      clearTimeout(saveTimerRef.current);
+      clearTimeout(saveTimer);
       if (isModified) {
         const tab = useAppStore.getState().tabs.find((t) => t.id === tabId);
         if (tab) {
-          saveTimerRef.current = setTimeout(async () => {
+          saveTimer = setTimeout(async () => {
             try {
               await invoke("write_file", { path: tab.path, content });
               lastSavedContent.set(tabId, content);
@@ -195,7 +201,6 @@ export async function flushSaveForTab(id: string): Promise<void> {
 export function Editor() {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
   /** Tracks which tab the EditorView is currently showing */
   const viewTabIdRef = useRef<string | null>(null);
 
@@ -203,12 +208,15 @@ export function Editor() {
   const tabs = useAppStore((s) => s.tabs);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  // Keep the mutable ref in sync so the updateListener reads the right tab
-  activeTabIdRef = activeTabId;
+  // Keep the mutable ref in sync so the updateListener reads the right tab.
+  // Using useEffect so it only runs on committed renders (safe for concurrent mode).
+  useEffect(() => {
+    activeTabIdBox.current = activeTabId;
+  }, [activeTabId]);
 
-  // Initialize shared extensions once (needs saveTimerRef)
+  // Initialize shared extensions once
   if (!sharedExtensions) {
-    sharedExtensions = buildExtensions(saveTimerRef);
+    sharedExtensions = buildExtensions();
   }
 
   // Register hooks so closeTab can snapshot + flush
@@ -295,7 +303,7 @@ export function Editor() {
     useAppStore.getState().setCursorInfo(line.number, pos - line.from + 1);
 
     return () => {
-      clearTimeout(saveTimerRef.current);
+      clearTimeout(saveTimer);
     };
   }, [activeTab?.id, activeTab?.path]); // eslint-disable-line -- CM6 manages its own state
 

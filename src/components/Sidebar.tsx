@@ -261,13 +261,36 @@ export function Sidebar() {
     setContextMenu({ x: e.clientX, y: e.clientY, entry });
   };
 
+  const findAvailablePath = async (dir: string): Promise<{ path: string; name: string }> => {
+    const baseName = "Untitled";
+    let name = `${baseName}.md`;
+    let path = `${dir}/${name}`;
+    let counter = 1;
+
+    // Check existence via read_file — if it succeeds, the file exists
+    while (true) {
+      try {
+        await invoke("read_file", { path });
+        // File exists, try next number
+        counter++;
+        name = `${baseName} ${counter}.md`;
+        path = `${dir}/${name}`;
+      } catch {
+        // File doesn't exist — path is available
+        break;
+      }
+    }
+
+    return { path, name };
+  };
+
   const handleNewNote = async (entry: DirEntry) => {
     const dir = entry.is_dir ? entry.path : entry.path.replace(/\/[^/]+$/, "");
-    const path = `${dir}/Untitled.md`;
     try {
+      const { path, name } = await findAvailablePath(dir);
       await invoke("write_file", { path, content: "" });
       loadFileIntoCache(path, "");
-      openFile(path, "Untitled.md");
+      openFile(path, name);
       loadDirectories();
     } catch (err) {
       console.error("Failed to create note:", err);
@@ -275,11 +298,11 @@ export function Sidebar() {
   };
 
   const handleNewNoteInDir = async (dirPath: string) => {
-    const path = `${dirPath}/Untitled.md`;
     try {
+      const { path, name } = await findAvailablePath(dirPath);
       await invoke("write_file", { path, content: "" });
       loadFileIntoCache(path, "");
-      openFile(path, "Untitled.md");
+      openFile(path, name);
       loadDirectories();
     } catch (err) {
       console.error("Failed to create note:", err);

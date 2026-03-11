@@ -153,6 +153,12 @@ impl Database {
         Ok(())
     }
 
+    pub fn delete_by_dir(&self, dir_id: &str) -> Result<u32, String> {
+        let count = self.conn.execute("DELETE FROM files WHERE dir_id = ?1", params![dir_id])
+            .map_err(|e| format!("Failed to delete files for directory: {}", e))?;
+        Ok(count as u32)
+    }
+
     pub fn set_links(&self, file_id: i64, links: &[LinkRecord]) -> Result<(), String> {
         let tx = self.conn.unchecked_transaction()
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
@@ -198,11 +204,16 @@ impl Database {
     }
 
     pub fn search_files(&self, query: &str) -> Result<Vec<FileRecord>, String> {
-        let pattern = format!("%{}%", query);
+        // Escape LIKE metacharacters so %, _, and \ are treated as literals
+        let escaped = query
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        let pattern = format!("%{}%", escaped);
         let mut stmt = self.conn.prepare(
             "SELECT id, path, dir_id, title, modified_at, frontmatter
              FROM files
-             WHERE title LIKE ?1 OR path LIKE ?1
+             WHERE title LIKE ?1 ESCAPE '\\' OR path LIKE ?1 ESCAPE '\\'
              ORDER BY title ASC
              LIMIT 50"
         ).map_err(|e| format!("Failed to prepare search: {}", e))?;

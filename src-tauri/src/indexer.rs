@@ -1,9 +1,12 @@
 use crate::db::{Database, LinkRecord};
 use regex::Regex;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use tauri::Emitter;
 use walkdir::WalkDir;
+
+static RE_WIKILINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[\[([^\]]+)\]\]").unwrap());
+static RE_TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?:^|[\s])#([a-zA-Z][a-zA-Z0-9_/-]*)").unwrap());
 
 #[derive(Clone, serde::Serialize)]
 struct IndexProgress {
@@ -136,11 +139,10 @@ fn extract_frontmatter(content: &str) -> Option<String> {
 
 /// Extract wikilinks [[target]] from content, with line numbers and context
 fn extract_wikilinks(content: &str) -> Vec<LinkRecord> {
-    let re = Regex::new(r"\[\[([^\]]+)\]\]").unwrap();
     let mut links = Vec::new();
 
     for (line_idx, line) in content.lines().enumerate() {
-        for cap in re.captures_iter(line) {
+        for cap in RE_WIKILINK.captures_iter(line) {
             let target = cap.get(1).unwrap().as_str();
 
             // Handle [[target|alias]] — take the target part
@@ -167,11 +169,10 @@ fn extract_wikilinks(content: &str) -> Vec<LinkRecord> {
 
 /// Extract #tags from content
 fn extract_tags(content: &str) -> Vec<String> {
-    let re = Regex::new(r"(?:^|[\s])#([a-zA-Z][a-zA-Z0-9_/-]*)").unwrap();
     let mut tags: Vec<String> = Vec::new();
 
     for line in content.lines() {
-        for cap in re.captures_iter(line) {
+        for cap in RE_TAG.captures_iter(line) {
             let tag = cap.get(1).unwrap().as_str().to_string();
             if !tags.contains(&tag) {
                 tags.push(tag);
