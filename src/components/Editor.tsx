@@ -41,6 +41,9 @@ const lastSavedContent = new Map<string, string>();
  */
 const activeTabIdBox = { current: null as string | null };
 
+/** Module-level reference to the live EditorView for external content updates */
+let _liveViewRef: EditorView | null = null;
+
 // ---------------------------------------------------------------------------
 // Shared styles and highlight
 // ---------------------------------------------------------------------------
@@ -199,6 +202,30 @@ export function loadFileIntoCache(id: string, content: string) {
   lastSavedContent.set(id, content);
 }
 
+/**
+ * Replace the document content for a tab after an external write (e.g. frontmatter update).
+ * Updates the cache, the live view if it's the active tab, and the saved-content tracker.
+ */
+export function replaceTabContent(tabId: string, newContent: string) {
+  const cached = editorStateCache.get(tabId);
+  if (cached) {
+    const tr = cached.update({
+      changes: { from: 0, to: cached.doc.length, insert: newContent },
+    });
+    editorStateCache.set(tabId, tr.state);
+  }
+  lastSavedContent.set(tabId, newContent);
+
+  // If this tab is currently displayed, update the live view too
+  if (activeTabIdBox.current === tabId && _liveViewRef) {
+    _liveViewRef.dispatch({
+      changes: { from: 0, to: _liveViewRef.state.doc.length, insert: newContent },
+    });
+  }
+
+  useAppStore.getState().setModified(tabId, false);
+}
+
 /** Flush any pending save for a tab (called before closing) */
 export async function flushSaveForTab(id: string): Promise<void> {
   const state = editorStateCache.get(id);
@@ -328,6 +355,7 @@ export function Editor() {
       });
     }
 
+    _liveViewRef = viewRef.current;
     viewTabIdRef.current = activeTab.id;
 
     // Restore scroll position (deferred so layout is complete)
@@ -367,6 +395,7 @@ export function Editor() {
         }
         viewRef.current.destroy();
         viewRef.current = null;
+        _liveViewRef = null;
       }
     };
   }, []);

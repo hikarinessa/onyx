@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
+import { replaceTabContent } from "./Editor";
 
 // ── Types ──
 
@@ -221,11 +222,21 @@ function PropertiesSection({
   const scheduleSave = useCallback(
     (updated: FrontmatterMap) => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
-        invoke("update_frontmatter", {
-          path,
-          frontmatterJson: JSON.stringify(updated),
-        }).catch((err) => console.error("Failed to update frontmatter:", err));
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          await invoke("update_frontmatter", {
+            path,
+            frontmatterJson: JSON.stringify(updated),
+          });
+          // Sync the editor: read file back from disk so CM6 has the new frontmatter
+          const content = await invoke<string>("read_file", { path });
+          const activeTabId = useAppStore.getState().activeTabId;
+          if (activeTabId) {
+            replaceTabContent(activeTabId, content);
+          }
+        } catch (err) {
+          console.error("Failed to update frontmatter:", err);
+        }
       }, 500);
     },
     [path],
@@ -291,20 +302,30 @@ function PropertiesSection({
             ))
           ) : (
             // Untyped: raw key-value editor for all frontmatter
-            Object.entries(frontmatter).map(([key, val]) => (
-              <div key={key} className="prop-row">
-                <div className="prop-label" title={key}>
-                  {key}
+            Object.entries(frontmatter).map(([key, val]) => {
+              // Infer widget type from value shape
+              const inferredType: PropertyDef["type"] = Array.isArray(val)
+                ? "tags"
+                : typeof val === "boolean"
+                  ? "checkbox"
+                  : typeof val === "number"
+                    ? "number"
+                    : "text";
+              return (
+                <div key={key} className="prop-row">
+                  <div className="prop-label" title={key}>
+                    {key}
+                  </div>
+                  <div className="prop-value">
+                    <PropertyField
+                      def={{ key, type: inferredType }}
+                      value={val}
+                      onChange={(v) => handleChange(key, v)}
+                    />
+                  </div>
                 </div>
-                <div className="prop-value">
-                  <PropertyField
-                    def={{ key, type: "text" }}
-                    value={typeof val === "object" && val !== null ? JSON.stringify(val) : val}
-                    onChange={(v) => handleChange(key, v)}
-                  />
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
