@@ -219,6 +219,7 @@ pub fn resolve_wikilink(
     if link.contains('/') {
         let candidate = context_dir.join(format!("{}.md", link));
         if candidate.exists() {
+            validate_path(&candidate, &state)?;
             return Ok(Some(candidate.to_string_lossy().to_string()));
         }
     }
@@ -226,10 +227,11 @@ pub fn resolve_wikilink(
     // Step 2: Same directory as context file
     let same_dir_candidate = context_dir.join(format!("{}.md", link));
     if same_dir_candidate.exists() {
+        validate_path(&same_dir_candidate, &state)?;
         return Ok(Some(same_dir_candidate.to_string_lossy().to_string()));
     }
 
-    // Step 3: Query SQLite by title or filename
+    // Step 3: Query SQLite by title or filename (already in index = already validated)
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.resolve_by_title(&link)
 }
@@ -244,13 +246,8 @@ pub fn toggle_bookmark(
 
     let db = state.db.lock().map_err(|e| e.to_string())?;
 
-    // Look up the file id
-    let file_id: Option<i64> = {
-        let conn_result = db.get_file_id(&path)?;
-        conn_result
-    };
-
-    let file_id = file_id.ok_or_else(|| format!("File not indexed: {}", path))?;
+    let file_id = db.get_file_id(&path)?
+        .ok_or_else(|| format!("File not indexed: {}", path))?;
 
     let currently_bookmarked = db.is_bookmarked(file_id)?;
     if currently_bookmarked {
@@ -268,4 +265,13 @@ pub fn get_bookmarks(
 ) -> Result<Vec<crate::db::BookmarkRecord>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.get_bookmarks()
+}
+
+#[tauri::command]
+pub fn is_file_bookmarked(
+    path: String,
+    state: State<AppState>,
+) -> Result<bool, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.is_path_bookmarked(&path)
 }

@@ -92,6 +92,7 @@ pub fn run() {
             commands::resolve_wikilink,
             commands::toggle_bookmark,
             commands::get_bookmarks,
+            commands::is_file_bookmarked,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

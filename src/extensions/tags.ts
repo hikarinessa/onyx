@@ -19,21 +19,14 @@ import type { Extension } from "@codemirror/state";
 // We capture the position of `#` by checking for a non-word char or line start before it.
 const TAG_RE = /(?:^|[\s])#([a-zA-Z][a-zA-Z0-9_/-]*)/g;
 
-/** Returns true if the given 1-based line index falls inside a frontmatter block */
-function isInFrontmatter(
-  doc: EditorView["state"]["doc"],
-  lineNum: number
-): boolean {
-  if (doc.lines < 2) return false;
-  const firstLine = doc.line(1);
-  if (firstLine.text.trim() !== "---") return false;
-  if (lineNum === 1) return true;
+/** Find the closing line of YAML frontmatter, or 0 if none */
+function frontmatterEndLine(doc: EditorView["state"]["doc"]): number {
+  if (doc.lines < 2) return 0;
+  if (doc.line(1).text.trim() !== "---") return 0;
   for (let i = 2; i <= doc.lines; i++) {
-    if (doc.line(i).text.trim() === "---") {
-      return lineNum <= i;
-    }
+    if (doc.line(i).text.trim() === "---") return i;
   }
-  return false;
+  return 0;
 }
 
 /** Build decorations for all #tags in the document, skipping fenced regions */
@@ -42,6 +35,7 @@ function buildTagDecorations(view: EditorView): DecorationSet {
   const doc = view.state.doc;
   const mark = Decoration.mark({ class: "cm-tag-highlight" });
 
+  const fmEnd = frontmatterEndLine(doc);
   let inCodeBlock = false;
 
   for (let i = 1; i <= doc.lines; i++) {
@@ -55,7 +49,7 @@ function buildTagDecorations(view: EditorView): DecorationSet {
     }
 
     // Skip lines inside code blocks or frontmatter
-    if (inCodeBlock || isInFrontmatter(doc, i)) continue;
+    if (inCodeBlock || (fmEnd > 0 && i <= fmEnd)) continue;
 
     // Find all tag matches on this line
     let match: RegExpExecArray | null;
