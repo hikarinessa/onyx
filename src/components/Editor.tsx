@@ -1,34 +1,180 @@
 import { useEffect, useRef } from "react";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import { oneDark } from "@codemirror/theme-one-dark";
+import {
+  syntaxHighlighting,
+  HighlightStyle,
+  codeFolding,
+  foldGutter,
+  foldKeymap,
+} from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
+import { frontmatterExtension } from "../extensions/frontmatter";
 
 const SAVE_DEBOUNCE_MS = 500;
 
-/**
- * Content lives in CM6, not Zustand. The store only tracks tab metadata
- * (path, name, modified). This avoids duplicating large file contents in
- * the React state tree.
- */
-const editorContentCache = new Map<string, string>();
+// ---------------------------------------------------------------------------
+// Module-level caches
+// ---------------------------------------------------------------------------
+
+/** Full EditorState snapshots — preserves undo history, selections, etc. */
+const editorStateCache = new Map<string, EditorState>();
+
+/** Scroll positions per tab */
+const scrollCache = new Map<string, number>();
+
+/** Last-saved content strings — used for dirty detection */
 const lastSavedContent = new Map<string, string>();
+
+/**
+ * Mutable ref for active tab id — the updateListener closure reads this
+ * to know which tab is currently active, avoiding stale closure captures.
+ */
+let activeTabIdRef: string | null = null;
+
+// ---------------------------------------------------------------------------
+// Shared styles and highlight
+// ---------------------------------------------------------------------------
+
+const onyxHighlightStyle = HighlightStyle.define([
+  { tag: tags.heading1, fontSize: "1.6em", color: "var(--text-primary)", fontWeight: "600" },
+  { tag: tags.heading2, fontSize: "1.3em", color: "var(--text-primary)", fontWeight: "600" },
+  { tag: tags.heading3, fontSize: "1.1em", color: "var(--text-primary)", fontWeight: "600" },
+  { tag: tags.heading4, color: "var(--text-primary)", fontWeight: "600" },
+  { tag: tags.heading5, color: "var(--text-primary)", fontWeight: "600" },
+  { tag: tags.heading6, color: "var(--text-primary)", fontWeight: "600" },
+  { tag: tags.strong, fontWeight: "700" },
+  { tag: tags.emphasis, fontStyle: "italic" },
+  { tag: tags.monospace, fontFamily: "var(--font-mono)", background: "var(--bg-elevated)" },
+  { tag: tags.link, color: "var(--link-color)" },
+  { tag: tags.url, color: "var(--link-color)" },
+  { tag: tags.quote, color: "var(--text-tertiary)", fontStyle: "italic" },
+  { tag: tags.list, color: "var(--text-tertiary)" },
+]);
+
+const onyxTheme = EditorView.theme({
+  "&": {
+    backgroundColor: "var(--bg-base)",
+  },
+  ".cm-content": {
+    caretColor: "var(--accent)",
+  },
+  ".cm-cursor": {
+    borderLeftColor: "var(--accent)",
+  },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
+    background: "var(--accent-muted) !important",
+  },
+  ".cm-line": {
+    padding: "0 2px",
+  },
+  "&.cm-focused": {
+    outline: "none",
+  },
+  ".cm-activeLineGutter": {
+    background: "transparent",
+  },
+  ".cm-activeLine": {
+    background: "var(--bg-hover)",
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Extensions builder
+// ---------------------------------------------------------------------------
+
+function buildExtensions(
+  saveTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | undefined>,
+): Extension[] {
+  const updateListener = EditorView.updateListener.of((update) => {
+    const tabId = activeTabIdRef;
+    if (!tabId) return;
+
+    const { setCursorInfo, setModified, setWordCount } = useAppStore.getState();
+
+    // Cursor position — always update (cheap)
+    const pos = update.state.selection.main.head;
+    const line = update.state.doc.lineAt(pos);
+    setCursorInfo(line.number, pos - line.from + 1);
+
+    if (update.docChanged) {
+      const content = update.state.doc.toString();
+      const saved = lastSavedContent.get(tabId) ?? "";
+      const isModified = content !== saved;
+      setModified(tabId, isModified);
+
+      // Word count
+      const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+      setWordCount(words);
+
+      // Debounced auto-save
+      clearTimeout(saveTimerRef.current);
+      if (isModified) {
+        const tab = useAppStore.getState().tabs.find((t) => t.id === tabId);
+        if (tab) {
+          saveTimerRef.current = setTimeout(async () => {
+            try {
+              await invoke("write_file", { path: tab.path, content });
+              lastSavedContent.set(tabId, content);
+              setModified(tabId, false);
+            } catch (err) {
+              console.error("Failed to save:", err);
+            }
+          }, SAVE_DEBOUNCE_MS);
+        }
+      }
+    }
+  });
+
+  return [
+    keymap.of([...defaultKeymap, ...foldKeymap, indentWithTab]),
+    markdown({ base: markdownLanguage, codeLanguages: languages }),
+    syntaxHighlighting(onyxHighlightStyle),
+    codeFolding(),
+    foldGutter(),
+    onyxTheme,
+    EditorView.lineWrapping,
+    updateListener,
+    frontmatterExtension(),
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Public API — used by openFile / Sidebar
+// ---------------------------------------------------------------------------
+
+/** Shared extensions ref — initialized on first Editor mount */
+let sharedExtensions: Extension[] | null = null;
+
+/** Create an EditorState with the shared extensions */
+function createStateWithExtensions(doc: string): EditorState {
+  if (!sharedExtensions) {
+    // Fallback: create minimal state. This shouldn't happen in practice
+    // because loadFileIntoCache is called after Editor mounts.
+    return EditorState.create({ doc });
+  }
+  return EditorState.create({ doc, extensions: sharedExtensions });
+}
 
 /** Seed content into the editor cache before opening a tab */
 export function loadFileIntoCache(id: string, content: string) {
-  editorContentCache.set(id, content);
+  editorStateCache.set(id, createStateWithExtensions(content));
   lastSavedContent.set(id, content);
 }
 
 /** Flush any pending save for a tab (called before closing) */
 export async function flushSaveForTab(id: string): Promise<void> {
-  const content = editorContentCache.get(id);
+  const state = editorStateCache.get(id);
+  if (!state) return;
+
+  const content = state.doc.toString();
   const saved = lastSavedContent.get(id);
-  if (content !== undefined && content !== saved) {
+  if (content !== saved) {
     const tab = useAppStore.getState().tabs.find((t) => t.id === id);
     if (tab) {
       try {
@@ -42,20 +188,35 @@ export async function flushSaveForTab(id: string): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export function Editor() {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  /** Tracks which tab the EditorView is currently showing */
+  const viewTabIdRef = useRef<string | null>(null);
 
   const activeTabId = useAppStore((s) => s.activeTabId);
   const tabs = useAppStore((s) => s.tabs);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  // Register hooks once on mount so closeTab can snapshot + flush
+  // Keep the mutable ref in sync so the updateListener reads the right tab
+  activeTabIdRef = activeTabId;
+
+  // Initialize shared extensions once (needs saveTimerRef)
+  if (!sharedExtensions) {
+    sharedExtensions = buildExtensions(saveTimerRef);
+  }
+
+  // Register hooks so closeTab can snapshot + flush
   useEffect(() => {
     setSnapshotEditorHook((id: string) => {
-      if (viewRef.current && activeTabId === id) {
-        editorContentCache.set(id, viewRef.current.state.doc.toString());
+      if (viewRef.current && viewTabIdRef.current === id) {
+        editorStateCache.set(id, viewRef.current.state);
+        scrollCache.set(id, viewRef.current.scrollDOM.scrollTop);
       }
     });
     setFlushSaveHook(flushSaveForTab);
@@ -63,118 +224,102 @@ export function Editor() {
       setSnapshotEditorHook(() => {});
       setFlushSaveHook(async () => {});
     };
-  }, [activeTabId]);
+  }, []);
 
+  // Create or swap the EditorView when the active tab changes
   useEffect(() => {
     if (!containerRef.current || !activeTab) return;
 
-    // Save current editor content before switching
-    if (viewRef.current && activeTabId) {
-      const prevId = viewRef.current.dom.parentElement?.dataset.tabId;
-      if (prevId && prevId !== activeTab.id) {
-        editorContentCache.set(prevId, viewRef.current.state.doc.toString());
-      }
+    // --- Save current tab state before switching ---
+    if (viewRef.current && viewTabIdRef.current && viewTabIdRef.current !== activeTab.id) {
+      editorStateCache.set(viewTabIdRef.current, viewRef.current.state);
+      scrollCache.set(viewTabIdRef.current, viewRef.current.scrollDOM.scrollTop);
     }
 
-    // Destroy previous editor
-    if (viewRef.current) {
-      viewRef.current.destroy();
-      viewRef.current = null;
-    }
-
-    // Get content: from cache (tab switch) or from initial load
-    const initialContent = editorContentCache.get(activeTab.id) ?? "";
-
-    const { setModified, setCursorInfo, setWordCount } = useAppStore.getState();
-
-    const updateListener = EditorView.updateListener.of((update) => {
-      // Cursor position — always update (cheap)
-      const pos = update.state.selection.main.head;
-      const line = update.state.doc.lineAt(pos);
-      setCursorInfo(line.number, pos - line.from + 1);
-
-      if (update.docChanged) {
-        const content = update.state.doc.toString();
-        const saved = lastSavedContent.get(activeTab.id) ?? "";
-        const isModified = content !== saved;
-        setModified(activeTab.id, isModified);
-
-        // Word count — only on doc changes
-        const words = content.trim() ? content.trim().split(/\s+/).length : 0;
-        setWordCount(words);
-
-        // Debounced auto-save
-        clearTimeout(saveTimerRef.current);
-        if (isModified) {
-          saveTimerRef.current = setTimeout(async () => {
-            try {
-              await invoke("write_file", { path: activeTab.path, content });
-              lastSavedContent.set(activeTab.id, content);
-              setModified(activeTab.id, false);
-            } catch (err) {
-              console.error("Failed to save:", err);
-            }
-          }, SAVE_DEBOUNCE_MS);
+    // --- Get or create EditorState for the new tab ---
+    let state = editorStateCache.get(activeTab.id);
+    if (state) {
+      // Check if state was created without extensions (by loadFileIntoCache
+      // before sharedExtensions were initialized). If so, rebuild with extensions.
+      // We detect this by checking if the state has fewer extensions facets.
+      // A simple heuristic: if the state has no keymaps configured, it's bare.
+      try {
+        const hasKeymap = state.facet(keymap).length > 0;
+        if (!hasKeymap) {
+          state = createStateWithExtensions(state.doc.toString());
+          editorStateCache.set(activeTab.id, state);
         }
+      } catch {
+        // Facet check failed — rebuild to be safe
+        state = createStateWithExtensions(state.doc.toString());
+        editorStateCache.set(activeTab.id, state);
       }
-    });
+    } else {
+      state = createStateWithExtensions("");
+      editorStateCache.set(activeTab.id, state);
+    }
 
-    const state = EditorState.create({
-      doc: initialContent,
-      extensions: [
-        keymap.of([...defaultKeymap, indentWithTab]),
-        markdown({ base: markdownLanguage, codeLanguages: languages }),
-        oneDark,
-        EditorView.lineWrapping,
-        updateListener,
-        EditorView.theme({
-          "&": {
-            backgroundColor: "var(--bg-base)",
-          },
-          ".cm-content": {
-            caretColor: "var(--accent)",
-          },
-          ".cm-cursor": {
-            borderLeftColor: "var(--accent)",
-          },
-          "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-            background: "var(--accent-muted) !important",
-          },
-        }),
-      ],
-    });
+    if (viewRef.current) {
+      // View exists — swap state (preserves the DOM element)
+      viewRef.current.setState(state);
+    } else {
+      // First tab ever — create the EditorView
+      viewRef.current = new EditorView({
+        state,
+        parent: containerRef.current,
+      });
+    }
 
-    const view = new EditorView({
-      state,
-      parent: containerRef.current,
-    });
+    viewTabIdRef.current = activeTab.id;
 
-    // Tag the container so we can identify which tab it belongs to
-    containerRef.current.dataset.tabId = activeTab.id;
-    viewRef.current = view;
-    view.focus();
+    // Restore scroll position (deferred so layout is complete)
+    const savedScroll = scrollCache.get(activeTab.id);
+    if (savedScroll !== undefined) {
+      requestAnimationFrame(() => {
+        if (viewRef.current) {
+          viewRef.current.scrollDOM.scrollTop = savedScroll;
+        }
+      });
+    }
 
-    // Initial word count
-    const words = initialContent.trim()
-      ? initialContent.trim().split(/\s+/).length
-      : 0;
-    setWordCount(words);
+    viewRef.current.focus();
+
+    // Initial word count + cursor info
+    const doc = viewRef.current.state.doc;
+    const content = doc.toString();
+    const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+    useAppStore.getState().setWordCount(words);
+
+    const pos = viewRef.current.state.selection.main.head;
+    const line = doc.lineAt(pos);
+    useAppStore.getState().setCursorInfo(line.number, pos - line.from + 1);
 
     return () => {
       clearTimeout(saveTimerRef.current);
-      // Save content to cache before unmount
+    };
+  }, [activeTab?.id, activeTab?.path]); // eslint-disable-line -- CM6 manages its own state
+
+  // Destroy the view on unmount, saving state first
+  useEffect(() => {
+    return () => {
       if (viewRef.current) {
-        editorContentCache.set(activeTab.id, viewRef.current.state.doc.toString());
+        if (viewTabIdRef.current) {
+          editorStateCache.set(viewTabIdRef.current, viewRef.current.state);
+          scrollCache.set(viewTabIdRef.current, viewRef.current.scrollDOM.scrollTop);
+        }
+        viewRef.current.destroy();
+        viewRef.current = null;
       }
     };
-  }, [activeTab?.id, activeTab?.path]); // eslint-disable-line -- CM6 manages its own state; re-creating on every render would destroy the editor
+  }, []);
 
   // Clean up caches when tabs close
   useEffect(() => {
     const tabIds = new Set(tabs.map((t) => t.id));
-    for (const key of editorContentCache.keys()) {
+    for (const key of editorStateCache.keys()) {
       if (!tabIds.has(key)) {
-        editorContentCache.delete(key);
+        editorStateCache.delete(key);
+        scrollCache.delete(key);
         lastSavedContent.delete(key);
       }
     }

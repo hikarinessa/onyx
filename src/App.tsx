@@ -7,6 +7,7 @@ import { ContextPanel } from "./components/ContextPanel";
 import { StatusBar } from "./components/StatusBar";
 import { QuickOpen } from "./components/QuickOpen";
 import { useAppStore } from "./stores/app";
+import { restoreSession, initSessionPersistence } from "./lib/session";
 
 export default function App() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
@@ -14,6 +15,15 @@ export default function App() {
   const closeTab = useAppStore((s) => s.closeTab);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
+
+  // Restore session on mount + start periodic saving
+  useEffect(() => {
+    restoreSession().catch((err) =>
+      console.error("Failed to restore session:", err)
+    );
+    const cleanup = initSessionPersistence();
+    return cleanup;
+  }, []);
 
   // Global keyboard shortcuts
   useEffect(() => {

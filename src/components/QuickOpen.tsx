@@ -2,6 +2,15 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openFileInEditor } from "../lib/openFile";
 
+interface FileRecord {
+  id: number;
+  path: string;
+  dir_id: string;
+  title: string | null;
+  modified_at: number | null;
+  frontmatter: string | null;
+}
+
 interface SearchResult {
   name: string;
   path: string;
@@ -41,11 +50,16 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
 
     const doSearch = async () => {
       try {
-        const hits = await invoke<SearchResult[]>("search_files", {
+        const hits = await invoke<FileRecord[]>("search_files", {
           query: query.trim(),
         });
         if (!cancelled) {
-          setResults(hits.slice(0, 10));
+          setResults(
+            hits.slice(0, 10).map((f) => ({
+              name: f.title ? f.title + ".md" : f.path.split("/").pop() || f.path,
+              path: f.path,
+            }))
+          );
           setSelectedIndex(0);
         }
       } catch {

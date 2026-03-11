@@ -2413,6 +2413,7 @@ dependencies = [
  "log",
  "notify",
  "notify-debouncer-full",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",
