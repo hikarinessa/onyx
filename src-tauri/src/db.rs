@@ -45,6 +45,13 @@ pub struct IndexStats {
     pub total_tags: u32,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct BookmarkRecord {
+    pub path: String,
+    pub title: Option<String>,
+    pub label: Option<String>,
+}
+
 impl Database {
     pub fn new(path: &Path) -> Result<Self, String> {
         if let Some(parent) = path.parent() {
@@ -270,6 +277,80 @@ impl Database {
         }
 
         Ok(results)
+    }
+
+    pub fn get_file_id(&self, path: &str) -> Result<Option<i64>, String> {
+        let result = self.conn.query_row(
+            "SELECT id FROM files WHERE path = ?1",
+            params![path],
+            |row| row.get(0),
+        ).optional().map_err(|e| format!("Failed to get file id: {}", e))?;
+
+        Ok(result)
+    }
+
+    pub fn resolve_by_title(&self, title: &str) -> Result<Option<String>, String> {
+        let result = self.conn.query_row(
+            "SELECT path FROM files WHERE title = ?1 COLLATE NOCASE OR path LIKE '%/' || ?1 || '.md' LIMIT 1",
+            params![title],
+            |row| row.get(0),
+        ).optional().map_err(|e| format!("Failed to resolve wikilink: {}", e))?;
+
+        Ok(result)
+    }
+
+    pub fn add_bookmark(&self, file_id: i64, label: Option<&str>, position: Option<i32>) -> Result<(), String> {
+        // Remove existing bookmark first (enforce one bookmark per file)
+        self.conn.execute("DELETE FROM bookmarks WHERE file_id = ?1", params![file_id])
+            .map_err(|e| format!("Failed to remove existing bookmark: {}", e))?;
+
+        self.conn.execute(
+            "INSERT INTO bookmarks (file_id, label, position) VALUES (?1, ?2, ?3)",
+            params![file_id, label, position],
+        ).map_err(|e| format!("Failed to add bookmark: {}", e))?;
+
+        Ok(())
+    }
+
+    pub fn remove_bookmark(&self, file_id: i64) -> Result<(), String> {
+        self.conn.execute("DELETE FROM bookmarks WHERE file_id = ?1", params![file_id])
+            .map_err(|e| format!("Failed to remove bookmark: {}", e))?;
+
+        Ok(())
+    }
+
+    pub fn get_bookmarks(&self) -> Result<Vec<BookmarkRecord>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT f.path, f.title, b.label
+             FROM bookmarks b
+             JOIN files f ON f.id = b.file_id
+             ORDER BY b.position ASC, f.title ASC"
+        ).map_err(|e| format!("Failed to prepare bookmarks query: {}", e))?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(BookmarkRecord {
+                path: row.get(0)?,
+                title: row.get(1)?,
+                label: row.get(2)?,
+            })
+        }).map_err(|e| format!("Failed to execute bookmarks query: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read bookmark row: {}", e))?);
+        }
+
+        Ok(results)
+    }
+
+    pub fn is_bookmarked(&self, file_id: i64) -> Result<bool, String> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM bookmarks WHERE file_id = ?1",
+            params![file_id],
+            |row| row.get(0),
+        ).map_err(|e| format!("Failed to check bookmark: {}", e))?;
+
+        Ok(count > 0)
     }
 
     pub fn get_stats(&self) -> Result<IndexStats, String> {
