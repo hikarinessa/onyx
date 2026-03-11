@@ -1,0 +1,42 @@
+[package]
+name = "onyx"
+version = "0.1.0"
+description = "A lightweight markdown note-taking app"
+authors = ["hikarinessa"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "onyx_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.6" }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.10.3" }
+tauri-plugin-log = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+
+# File system
+notify = "8.2"
+notify-debouncer-full = "0.5"
+walkdir = "2.5"
+ignore = "0.4"
+
+# Data
+rusqlite = { version = "0.33", features = ["bundled"] }
+
+# Serialization
+serde_yaml_ng = "0.10"
+
+# Platform
+dirs-next = "2.0"
+
+# Async/concurrency
+tokio = { version = "1", features = ["sync", "time"] }
