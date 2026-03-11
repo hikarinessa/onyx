@@ -1,7 +1,7 @@
 import {
   ViewPlugin,
   Decoration,
-  DecorationSet,
+  type DecorationSet,
   EditorView,
 } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
