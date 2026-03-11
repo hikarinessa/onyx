@@ -141,7 +141,28 @@ function buildExtensions(): Extension[] {
   });
 
   return [
-    keymap.of([...defaultKeymap, ...foldKeymap, indentWithTab]),
+    keymap.of([
+      // Global shortcuts that must work even when editor is focused
+      {
+        key: "Mod-Alt-[",
+        run: () => { useAppStore.getState().toggleSidebar(); return true; },
+      },
+      {
+        key: "Mod-Alt-]",
+        run: () => { useAppStore.getState().toggleContextPanel(); return true; },
+      },
+      {
+        key: "Mod-w",
+        run: () => {
+          const { activeTabId, closeTab } = useAppStore.getState();
+          if (activeTabId) closeTab(activeTabId);
+          return true;
+        },
+      },
+      ...defaultKeymap,
+      ...foldKeymap,
+      indentWithTab,
+    ]),
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     syntaxHighlighting(onyxHighlightStyle),
     codeFolding(),

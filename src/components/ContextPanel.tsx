@@ -72,6 +72,7 @@ export function ContextPanel() {
         path: activeTab.path,
       });
       setIsBookmarked(nowBookmarked);
+      useAppStore.getState().bumpBookmarkVersion();
     } catch (err) {
       console.error("toggle_bookmark not yet available:", err);
     }

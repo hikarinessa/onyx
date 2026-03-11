@@ -229,6 +229,7 @@ export function Sidebar() {
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [bookmarks, setBookmarks] = useState<BookmarkRecord[]>([]);
+  const bookmarkVersion = useAppStore((s) => s.bookmarkVersion);
 
   const loadBookmarks = useCallback(async () => {
     try {
@@ -242,7 +243,7 @@ export function Sidebar() {
 
   useEffect(() => {
     loadBookmarks();
-  }, [loadBookmarks, activeTabId]);
+  }, [loadBookmarks, bookmarkVersion]);
 
   const addDirectory = async () => {
     const selected = await open({ directory: true, multiple: false });
