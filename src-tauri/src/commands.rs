@@ -144,17 +144,74 @@ pub fn register_directory(
     if let Some(ref mut fw) = *watcher_lock {
         fw.watch(&dir.path).map_err(|e| format!("Failed to watch directory: {}", e))?;
     } else {
-        match crate::watcher::FileWatcher::new(app, &[dir.path.clone()]) {
+        let dir_pairs = vec![(dir.id.clone(), dir.path.clone())];
+        match crate::watcher::FileWatcher::new(app.clone(), &[dir.path.clone()], state.db.clone(), dir_pairs) {
             Ok(fw) => *watcher_lock = Some(fw),
             Err(e) => log::error!("Failed to start watcher: {}", e),
         }
     }
+    drop(watcher_lock);
+
+    // Trigger indexing of the new directory
+    let dir_id = dir.id.clone();
+    let dir_path = dir.path.clone();
+    let db_ref = state.db.clone();
+    let app_ref = app.clone();
+    std::thread::spawn(move || {
+        crate::indexer::Indexer::full_scan(&[(dir_id, dir_path)], &db_ref, &app_ref);
+    });
 
     Ok(dir)
 }
 
 #[tauri::command]
-pub fn unregister_directory(id: String, state: State<AppState>) -> Result<(), String> {
+pub fn unregister_directory(
+    id: String,
+    state: State<AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     let mut dirs = state.directories.lock().map_err(|e| e.to_string())?;
-    dirs.unregister(&id)
+    dirs.unregister(&id)?;
+
+    // Re-index after directory removal: spawn a full scan with remaining dirs
+    let dir_list: Vec<(String, PathBuf)> = dirs
+        .list()
+        .iter()
+        .map(|d| (d.id.clone(), d.path.clone()))
+        .collect();
+    drop(dirs);
+
+    let db_ref = state.db.clone();
+    let app_ref = app.clone();
+    std::thread::spawn(move || {
+        crate::indexer::Indexer::full_scan(&dir_list, &db_ref, &app_ref);
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn search_files(
+    query: String,
+    state: State<AppState>,
+) -> Result<Vec<crate::db::FileRecord>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.search_files(&query)
+}
+
+#[tauri::command]
+pub fn get_backlinks(
+    path: String,
+    state: State<AppState>,
+) -> Result<Vec<crate::db::BacklinkRecord>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_backlinks(&path)
+}
+
+#[tauri::command]
+pub fn get_index_stats(
+    state: State<AppState>,
+) -> Result<crate::db::IndexStats, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_stats()
 }
