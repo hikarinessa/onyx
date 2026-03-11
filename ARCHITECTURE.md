@@ -909,3 +909,19 @@ Decisions made during the design phase:
 2. **Canvas editing** — Read-only in v1. Basic editing (move/add cards) is a Tier 3 goal, only if read-only proves useful enough to warrant investment.
 3. **Search scope** — Ripgrep-style direct file search via Rust. No full-text index in SQLite. Simpler, no stale index risk, fast enough for vaults under 50k files. If performance becomes an issue, full-text indexing can be added later without changing the UX.
 4. **Periodic note navigation** — Calendar widget in the context panel is the sole navigation mechanism. No prev/next buttons in the editor header — keeps the editor chrome minimal.
+
+---
+
+## 18. Known Technical Debt
+
+Items identified during Phase 1 review. Fix before or during the indicated phase.
+
+### Fix before Phase 2
+
+1. **Tab switch destroys undo/cursor/scroll state.** Currently the CM6 `EditorView` is destroyed and recreated on every tab switch. The editor content is preserved (via `editorContentCache`), but undo history, cursor position, and scroll offset are lost. **Fix:** Cache `EditorState` snapshots per tab (not just string content) and restore via `view.setState()`, or keep multiple `EditorView` instances alive and toggle visibility.
+
+2. **Extract shared `openFileInEditor` function.** Both `Sidebar.tsx` and the future quick-open/wikilink-follow need to read a file, seed the cache, and open a tab. Currently duplicated in `Sidebar.handleFileClick`. Extract to a shared utility when building quick open (Phase 2 command palette).
+
+### Phase 2+ considerations
+
+3. **External edit conflict detection.** If a file is modified externally while Onyx has it open with unsaved changes, the stale editor cache can overwrite the external edit on the next auto-save. **Fix:** On `fs:change` events for open files, compare the on-disk content with `lastSavedContent`. If they differ and the editor also has unsaved changes, show a conflict notification (reload / keep mine / diff). Reference Otterly's pattern (watcher → diff → notify).

@@ -46,13 +46,10 @@ impl DirectoryManager {
         &self.directories
     }
 
-    /// Check if a path is under any registered directory
-    pub fn is_path_allowed(&self, path: &PathBuf) -> bool {
-        let canonical = match path.canonicalize() {
-            Ok(p) => p,
-            Err(_) => return false,
-        };
-        self.directories.iter().any(|d| canonical.starts_with(&d.path))
+    /// Check if a resolved path is under any registered directory.
+    /// The caller is responsible for canonicalizing the path first.
+    pub fn is_path_allowed(&self, resolved: &PathBuf) -> bool {
+        self.directories.iter().any(|d| resolved.starts_with(&d.path))
     }
 
     pub fn register(&mut self, path: PathBuf, label: String, color: String) -> Result<RegisteredDirectory, String> {
