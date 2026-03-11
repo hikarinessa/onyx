@@ -5,8 +5,6 @@ export interface Tab {
   path: string;
   name: string;
   modified: boolean;
-  content: string;
-  lastSavedContent: string;
 }
 
 interface AppState {
@@ -21,17 +19,17 @@ interface AppState {
   // Tabs
   tabs: Tab[];
   activeTabId: string | null;
-  openFile: (path: string, name: string, content: string) => void;
+  openFile: (path: string, name: string) => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
-  updateContent: (id: string, content: string) => void;
-  markSaved: (id: string) => void;
+  setModified: (id: string, modified: boolean) => void;
 
   // Status bar
   cursorLine: number;
   cursorCol: number;
   wordCount: number;
-  setCursorInfo: (line: number, col: number, wordCount: number) => void;
+  setCursorInfo: (line: number, col: number) => void;
+  setWordCount: (count: number) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -45,7 +43,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   tabs: [],
   activeTabId: null,
 
-  openFile: (path, name, content) => {
+  openFile: (path, name) => {
     const { tabs } = get();
     const existing = tabs.find((t) => t.path === path);
     if (existing) {
@@ -54,14 +52,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const id = path;
-    const tab: Tab = {
-      id,
-      path,
-      name,
-      modified: false,
-      content,
-      lastSavedContent: content,
-    };
+    const tab: Tab = { id, path, name, modified: false };
     set({ tabs: [...tabs, tab], activeTabId: id });
   },
 
@@ -86,27 +77,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveTab: (id) => set({ activeTabId: id }),
 
-  updateContent: (id, content) => {
+  setModified: (id, modified) => {
     set((s) => ({
-      tabs: s.tabs.map((t) =>
-        t.id === id
-          ? { ...t, content, modified: content !== t.lastSavedContent }
-          : t
-      ),
-    }));
-  },
-
-  markSaved: (id) => {
-    set((s) => ({
-      tabs: s.tabs.map((t) =>
-        t.id === id ? { ...t, modified: false, lastSavedContent: t.content } : t
-      ),
+      tabs: s.tabs.map((t) => (t.id === id ? { ...t, modified } : t)),
     }));
   },
 
   cursorLine: 1,
   cursorCol: 1,
   wordCount: 0,
-  setCursorInfo: (line, col, wordCount) =>
-    set({ cursorLine: line, cursorCol: col, wordCount }),
+  setCursorInfo: (line, col) => set({ cursorLine: line, cursorCol: col }),
+  setWordCount: (count) => set({ wordCount: count }),
 }));

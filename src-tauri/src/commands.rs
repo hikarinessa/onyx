@@ -1,9 +1,12 @@
 use crate::AppState;
 use serde::Serialize;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::State;
 
 const IGNORED_NAMES: &[&str] = &[".obsidian", ".git", "node_modules", ".DS_Store", ".trash"];
+
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Serialize)]
 pub struct DirEntry {
@@ -13,9 +16,19 @@ pub struct DirEntry {
     pub extension: Option<String>,
 }
 
+fn validate_path(path: &PathBuf, state: &State<AppState>) -> Result<(), String> {
+    let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+    if !dirs.is_path_allowed(path) {
+        return Err(format!("Access denied: path is not under a registered directory"));
+    }
+    Ok(())
+}
+
 #[tauri::command]
-pub fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
+pub fn list_directory(path: String, state: State<AppState>) -> Result<Vec<DirEntry>, String> {
     let dir_path = PathBuf::from(&path);
+    validate_path(&dir_path, &state)?;
+
     if !dir_path.is_dir() {
         return Err(format!("Not a directory: {}", path));
     }
@@ -26,12 +39,10 @@ pub fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
             let entry = entry.ok()?;
             let name = entry.file_name().to_string_lossy().to_string();
 
-            // Filter ignored names
             if IGNORED_NAMES.contains(&name.as_str()) {
                 return None;
             }
 
-            // Skip hidden files (starting with .)
             if name.starts_with('.') {
                 return None;
             }
@@ -53,7 +64,6 @@ pub fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
         })
         .collect();
 
-    // Sort: directories first, then alphabetical
     entries.sort_by(|a, b| {
         b.is_dir.cmp(&a.is_dir).then_with(|| {
             a.name.to_lowercase().cmp(&b.name.to_lowercase())
@@ -64,24 +74,36 @@ pub fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
 }
 
 #[tauri::command]
-pub fn read_file(path: String) -> Result<String, String> {
+pub fn read_file(path: String, state: State<AppState>) -> Result<String, String> {
+    let file_path = PathBuf::from(&path);
+    validate_path(&file_path, &state)?;
+
     std::fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read file: {}", e))
 }
 
 #[tauri::command]
-pub fn write_file(path: String, content: String) -> Result<(), String> {
-    // Atomic write: write to temp file then rename
+pub fn write_file(path: String, content: String, state: State<AppState>) -> Result<(), String> {
     let target = PathBuf::from(&path);
+    validate_path(&target, &state)?;
+
     let dir = target.parent().ok_or("Invalid file path")?;
-    let temp_path = dir.join(format!(".onyx-tmp-{}", std::process::id()));
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_path = dir.join(format!(".onyx-tmp-{}-{}", std::process::id(), counter));
 
     std::fs::write(&temp_path, &content)
         .map_err(|e| format!("Failed to write temp file: {}", e))?;
 
+    // Mark self-write BEFORE rename so the watcher suppresses the event
+    {
+        let watcher_lock = state.watcher.lock().map_err(|e| e.to_string())?;
+        if let Some(ref fw) = *watcher_lock {
+            fw.mark_self_write(&target);
+        }
+    }
+
     std::fs::rename(&temp_path, &target)
         .map_err(|e| {
-            // Clean up temp file on rename failure
             let _ = std::fs::remove_file(&temp_path);
             format!("Failed to rename temp file: {}", e)
         })
@@ -101,10 +123,13 @@ pub fn register_directory(
     state: State<AppState>,
     app: tauri::AppHandle,
 ) -> Result<crate::dirs::RegisteredDirectory, String> {
-    let mut dirs = state.directories.lock().map_err(|e| e.to_string())?;
-    let dir = dirs.register(PathBuf::from(path), label, color)?;
+    // Lock directories, register, then drop before acquiring watcher lock (#2: lock ordering)
+    let dir = {
+        let mut dirs = state.directories.lock().map_err(|e| e.to_string())?;
+        dirs.register(PathBuf::from(path), label, color)?
+    };
 
-    // Start watching the new directory
+    // Now safe to lock watcher — directories lock is released
     let mut watcher_lock = state.watcher.lock().map_err(|e| e.to_string())?;
     if let Some(ref mut fw) = *watcher_lock {
         fw.watch(&dir.path).map_err(|e| format!("Failed to watch directory: {}", e))?;

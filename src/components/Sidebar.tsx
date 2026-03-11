@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "../stores/app";
+import { loadFileIntoCache } from "./Editor";
 
 interface DirEntry {
   name: string;
@@ -137,9 +138,17 @@ export function Sidebar() {
   const handleFileClick = async (path: string, name: string) => {
     if (!name.endsWith(".md")) return;
 
+    // Check if tab already open — just switch to it
+    const existing = useAppStore.getState().tabs.find((t) => t.path === path);
+    if (existing) {
+      openFile(path, name);
+      return;
+    }
+
     try {
       const content = await invoke<string>("read_file", { path });
-      openFile(path, name, content);
+      loadFileIntoCache(path, content);
+      openFile(path, name);
     } catch (err) {
       console.error("Failed to read file:", err);
     }
