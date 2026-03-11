@@ -7,6 +7,18 @@ export interface Tab {
   modified: boolean;
 }
 
+// Injected by Editor.tsx to avoid circular imports
+let flushSaveHook: ((id: string) => Promise<void>) | null = null;
+export function setFlushSaveHook(fn: (id: string) => Promise<void>) {
+  flushSaveHook = fn;
+}
+
+// Injected by Editor.tsx — snapshots live CM6 content into the cache
+let snapshotEditorHook: ((id: string) => void) | null = null;
+export function setSnapshotEditorHook(fn: (id: string) => void) {
+  snapshotEditorHook = fn;
+}
+
 interface AppState {
   // Sidebar
   sidebarVisible: boolean;
@@ -20,7 +32,7 @@ interface AppState {
   tabs: Tab[];
   activeTabId: string | null;
   openFile: (path: string, name: string) => void;
-  closeTab: (id: string) => void;
+  closeTab: (id: string) => Promise<void>;
   setActiveTab: (id: string) => void;
   setModified: (id: string, modified: boolean) => void;
 
@@ -56,7 +68,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ tabs: [...tabs, tab], activeTabId: id });
   },
 
-  closeTab: (id) => {
+  closeTab: async (id) => {
+    // Snapshot live CM6 content into cache, then flush to disk
+    if (snapshotEditorHook) snapshotEditorHook(id);
+    if (flushSaveHook) await flushSaveHook(id);
+
     const { tabs, activeTabId } = get();
     const idx = tabs.findIndex((t) => t.id === id);
     const newTabs = tabs.filter((t) => t.id !== id);

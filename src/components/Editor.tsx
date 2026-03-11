@@ -6,7 +6,7 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/app";
+import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -24,6 +24,24 @@ export function loadFileIntoCache(id: string, content: string) {
   lastSavedContent.set(id, content);
 }
 
+/** Flush any pending save for a tab (called before closing) */
+export async function flushSaveForTab(id: string): Promise<void> {
+  const content = editorContentCache.get(id);
+  const saved = lastSavedContent.get(id);
+  if (content !== undefined && content !== saved) {
+    const tab = useAppStore.getState().tabs.find((t) => t.id === id);
+    if (tab) {
+      try {
+        await invoke("write_file", { path: tab.path, content });
+        lastSavedContent.set(id, content);
+        useAppStore.getState().setModified(id, false);
+      } catch (err) {
+        console.error("Failed to flush save for tab:", err);
+      }
+    }
+  }
+}
+
 export function Editor() {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -32,6 +50,20 @@ export function Editor() {
   const activeTabId = useAppStore((s) => s.activeTabId);
   const tabs = useAppStore((s) => s.tabs);
   const activeTab = tabs.find((t) => t.id === activeTabId);
+
+  // Register hooks once on mount so closeTab can snapshot + flush
+  useEffect(() => {
+    setSnapshotEditorHook((id: string) => {
+      if (viewRef.current && activeTabId === id) {
+        editorContentCache.set(id, viewRef.current.state.doc.toString());
+      }
+    });
+    setFlushSaveHook(flushSaveForTab);
+    return () => {
+      setSnapshotEditorHook(() => {});
+      setFlushSaveHook(async () => {});
+    };
+  }, [activeTabId]);
 
   useEffect(() => {
     if (!containerRef.current || !activeTab) return;

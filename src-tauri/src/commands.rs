@@ -18,7 +18,17 @@ pub struct DirEntry {
 
 fn validate_path(path: &PathBuf, state: &State<AppState>) -> Result<(), String> {
     let dirs = state.directories.lock().map_err(|e| e.to_string())?;
-    if !dirs.is_path_allowed(path) {
+    // Try canonicalizing the full path first (works for existing files).
+    // If that fails (new file), canonicalize the parent directory and append the filename.
+    let canonical = path.canonicalize().or_else(|_| {
+        let parent = path.parent().ok_or("Invalid file path")?;
+        let name = path.file_name().ok_or("Invalid file name")?;
+        parent.canonicalize()
+            .map(|p| p.join(name))
+            .map_err(|e| format!("Cannot resolve parent directory: {}", e))
+    }).map_err(|e: String| e)?;
+
+    if !dirs.is_path_allowed(&canonical) {
         return Err(format!("Access denied: path is not under a registered directory"));
     }
     Ok(())
