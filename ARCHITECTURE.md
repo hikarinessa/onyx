@@ -30,7 +30,7 @@ A lightweight, fast, offline-first markdown note-taking app that respects your e
 | UI Framework | **React 18 + TypeScript** | Familiar, large ecosystem, good CodeMirror integration |
 | Editor | **CodeMirror 6** | Best-in-class extensibility, lightweight, native markdown support, active development |
 | State | **Zustand** (UI state) + **Rust backend** (file index, metadata) | Split: ephemeral UI state in JS, persistent data in Rust |
-| Styling | **Tailwind CSS** | Utility-first, easy theming, small output |
+| Styling | **Plain CSS** (custom properties) | No framework overhead, full control, CSS variables for theming |
 | Build | **Vite** | Fast HMR, good Tauri integration |
 
 ### Backend (Rust)
@@ -38,9 +38,13 @@ A lightweight, fast, offline-first markdown note-taking app that respects your e
 |-------|--------|-----------|
 | Index/Cache | **SQLite** (via rusqlite) | Fast queries for backlinks/tags/properties, persisted across sessions, negligible memory |
 | File watching | **notify** crate | Cross-platform file system events |
-| YAML parsing | **serde_yaml** | Parse frontmatter on the Rust side for indexing |
-| Markdown parsing | **pulldown-cmark** | Fast link/tag extraction for indexing (not rendering — CM6 handles that) |
-| MCP server | **rmcp** or custom | Expose core as MCP tools for Claude Code / other AI clients |
+| YAML parsing | **serde_yaml_ng** | Parse frontmatter on the Rust side for indexing. ⚠️ `serde_yaml` is deprecated, `serde_yml` has a security advisory |
+| Markdown parsing | **pulldown-cmark** | Fast link/tag extraction for indexing (not rendering — CM6 handles that). Has native `[[wikilink]]` support |
+| Templates | **minijinja** | `{{ var }}` syntax for periodic note templates. 10x faster than handlebars/tera |
+| MCP server | **rmcp + axum** | Official Rust MCP SDK with streamable HTTP transport. Axum runs on Tauri's tokio runtime |
+| Fuzzy search | **nucleo-matcher** | From Helix editor, ~6x faster than alternatives. For quick open (Cmd+O) |
+| File utilities | **ignore + trash** | `ignore` for .gitignore-style filtering (from ripgrep). `trash` for OS-native trash |
+| CPU parallelism | **rayon** | Work-stealing thread pool for background indexing. Tokio for async I/O, rayon for CPU-bound |
 
 ### Why split state between JS and Rust?
 
