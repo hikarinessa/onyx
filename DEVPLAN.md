@@ -44,8 +44,15 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 - `read_file(path) → String`
 - `write_file(path, content) → ()`
 - Auto-save: frontend debounces 500ms, calls `write_file`
+- **Guard against empty writes:** track a dirty flag per tab — only auto-save if the user has made an edit since the last load. Prevents overwriting files with empty content during CM6 initialization.
 
-**Milestone:** You can open the app, see your Zettelkasten folder tree, click a note, read it, edit it, and it saves automatically.
+1.7 **File watcher (basic)**
+- `notify` crate watching all registered directories
+- On file change/create/delete → emit Tauri event to frontend → refresh file tree
+- **Self-write ignore:** after Onyx writes a file, suppress watcher events for that path for 2s to avoid feedback loops
+- No indexing yet — just keeps the sidebar in sync
+
+**Milestone:** You can open the app, see your Zettelkasten folder tree, click a note, read it, edit it, and it saves automatically. File tree stays in sync when files change on disk.
 
 ---
 
@@ -55,83 +62,83 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 
 ### Steps
 
-2.1 **Tabs**
+2.1 **SQLite setup in Rust**
+- Create `~/.onyx/cache/index.db` on startup
+- Schema from ARCHITECTURE.md (files, links, tags, bookmarks, object_types + indexes)
+- Initial indexer: scan registered directories on a **background thread**, index filenames + paths + frontmatter
+- Emit progress events to frontend ("Indexing... 342/1204 files")
+- App is usable (file tree, editing) while indexing completes
+- Delta re-index on file watcher events (3s debounce)
+
+2.2 **Tabs**
 - Zustand store: open tabs, active tab, tab order
 - Open file → add tab (or focus existing)
 - Close tab (middle-click, X button, Cmd+W)
 - Modified indicator (dot)
-- Tab state persisted in Zustand (not across sessions yet)
 
-2.2 **Frontmatter handling**
+2.3 **Session state persistence**
+- Save open tabs + active tab + sidebar state to `~/.onyx/session.json` on quit
+- Restore on launch — reopen previous tabs
+- Prevents losing your workspace on every restart
+
+2.4 **Frontmatter handling**
 - Detect YAML frontmatter in CM6 (first `---` pair)
 - Fold frontmatter by default, show a subtle collapsed header
-- Parse frontmatter in Rust for later indexing
+- Parse frontmatter in Rust during indexing
 
-2.3 **Editor polish**
+2.5 **Editor polish**
 - Apply theme from mockup (Literata font, line height, content width)
 - Line wrapping
 - Cursor position + word count in status bar (live updates)
 - Editor mode toggle (Live Preview vs Source) — start with Source only, stub the toggle
 
-2.4 **File tree polish**
+2.6 **File tree polish**
 - Directory color accents
 - Active file highlight in tree
 - Right-click context menu: new note, new folder, rename, delete (to OS trash), reveal in Finder
 - Refresh button per directory
 
-2.5 **Quick open (Cmd+O)**
+2.7 **Quick open (Cmd+O)**
 - Modal with text input
-- Fuzzy search over all `.md` filenames in registered directories
+- Fuzzy search over filenames from SQLite index (async, results stream in as indexing progresses)
 - Results list, keyboard navigation (up/down/enter)
-- Needs: Rust command to list all indexed filenames (flat scan on startup, no SQLite yet)
 
-**Milestone:** Multi-tab editing with quick open. You can navigate your vault efficiently and write comfortably.
+**Milestone:** Multi-tab editing with quick open and session restore. You can navigate your vault efficiently and write comfortably.
 
 ---
 
-## Phase 3 — Index & Links
+## Phase 3 — Links & Connections
 
-**Goal:** SQLite index powers backlinks, tags, and wikilink resolution. Notes feel connected.
+**Goal:** Wikilinks resolve, backlinks work, tags highlight. Notes feel connected.
 
 ### Steps
 
-3.1 **SQLite setup in Rust**
-- Create `~/.onyx/cache/index.db` on startup
-- Schema from ARCHITECTURE.md (files, links, tags, bookmarks, object_types)
-- Indexes
+3.1 **Full indexer**
+- Extend the Phase 2 indexer to also extract: wikilinks, tags
+- Populate `links` and `tags` tables
+- File watcher triggers re-index of changed files (3s debounce, background thread)
 
-3.2 **Indexer**
-- On startup: scan all registered directories, parse each `.md` file
-- Extract: title (filename), frontmatter (as JSON), wikilinks, tags
-- Insert into SQLite
-- Delta re-index: compare `modified_at` vs file mtime, only re-index changed files
-- Debounced re-index on file watcher events (3s)
-
-3.3 **File watcher**
-- `notify` crate watching all registered directories
-- On file change/create/delete → update index + notify frontend via Tauri event
-- Frontend refreshes file tree and backlinks on event
-
-3.4 **Wikilink resolution**
+3.2 **Wikilink resolution**
 - Rust command: `resolve_wikilink(link, context_dir) → Option<path>`
 - Resolution order: same directory tree → cross-directory → unresolved
 
-3.5 **CM6: wikilink extension**
+3.3 **CM6: wikilink extension**
 - Syntax highlight `[[links]]` in the editor
 - Cmd+Enter on a wikilink → resolve and open in current tab
 - Broken links styled differently (dashed, red-ish)
-- Click broken link → create note in same directory, open it
+- Click broken link → show small "Create note?" tooltip, confirm to create in same directory
 
-3.6 **CM6: tag extension**
+3.4 **CM6: tag extension**
 - Syntax highlight `#tags`
 - (No tag pane yet — just visual highlighting)
 
-3.7 **Backlinks panel**
+3.5 **Backlinks panel**
 - Context panel section: query `links` table WHERE target matches current file
 - Show source note title + context snippet
 - Click backlink → open that note
+- Shows "Indexing..." while initial index is in progress
 
-3.8 **Bookmarks**
+3.6 **Bookmarks**
 - Star/unstar current note (Cmd+Shift+B or similar)
 - Bookmarks section pinned at sidebar bottom
 - Stored in SQLite `bookmarks` table
@@ -198,45 +205,57 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 
 ---
 
-## Phase 6 — Blocks & Editor Extensions
+## Phase 6 — Blocks, Command Palette & Theming
 
-**Goal:** Block operations work. Editor has outliner and table support.
+**Goal:** Block operations, command palette, and theming. The app becomes comfortable and customizable.
 
 ### Steps
 
-6.1 **Block awareness in CM6**
+6.1 **Command palette (Cmd+P)**
+- Modal with fuzzy search over all registered commands
+- Every action is a command (open today, toggle sidebar, switch theme, etc.)
+- Recent commands shown first
+- Contextual commands (block ops only when cursor is in a block)
+
+6.2 **Theming**
+- Load themes from `~/.onyx/themes/`
+- Ship dark + light built-in themes
+- CSS custom properties controlled by theme JSON
+- Theme switch via command palette
+
+6.3 **Block awareness in CM6**
 - Detect `***` separators
 - Track block boundaries (line ranges)
 - Visual: subtle separator line, block actions on hover (copy icon)
 
-6.2 **Block operations**
+6.4 **Block operations**
 - Copy block as markdown
 - Move block up/down (reorder across separators)
 - Delete block
 - Extract block to new note (create note with block content, replace block with wikilink)
 
-6.3 **Outliner extension**
+6.5 **Outliner extension**
 - Tab / Shift+Tab to indent/outdent list items
 - Alt+Up / Alt+Down to move list items
 - Enter at end of list item creates new item
 - Backspace on empty list item outdents or removes
 
-6.4 **Table editing extension**
+6.6 **Table editing extension**
 - Tab to move between cells
 - Enter to move to next row
 - Auto-align columns on format
 - Add/remove rows and columns via context menu
 
-6.5 **URL paste extension**
+6.7 **URL paste extension**
 - Detect URL on clipboard + text selected → create `[text](url)` automatically
 
-**Milestone:** Block-level note management and comfortable structured editing.
+**Milestone:** The app is customizable and has power-editing features. Command palette makes everything discoverable.
 
 ---
 
-## Phase 7 — Live Preview & Polish
+## Phase 7 — Live Preview & Split Panes
 
-**Goal:** Live preview mode renders markdown inline. The app feels polished.
+**Goal:** Live preview mode renders markdown inline. Split panes for side-by-side editing.
 
 ### Steps
 
@@ -254,27 +273,16 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 - Each pane has own tab bar
 - Cmd+W closes pane if last tab
 
-7.3 **Command palette (Cmd+P)**
-- Modal with fuzzy search over all registered commands
-- Every action is a command (open today, toggle sidebar, switch theme, etc.)
-- Recent commands first
-- Contextual commands (block ops only when in a block)
+7.3 **Per-tab navigation stack**
+- Back/forward history per tab (Cmd+[ / Cmd+])
+- Maintained when following wikilinks
+- Capped at 50 entries per tab (drop oldest)
 
-7.4 **Theming**
-- Load themes from `~/.onyx/themes/`
-- Ship dark + light built-in themes
-- CSS custom properties controlled by theme JSON
-- Theme switch via command palette
-
-7.5 **Linting**
+7.4 **Linting**
 - Inline lint decorations in CM6
 - Rules from ARCHITECTURE.md
 - Auto-fix on save
 - Status bar indicator
-
-7.6 **Per-tab navigation stack**
-- Back/forward history per tab (Cmd+[ / Cmd+])
-- Maintained when following wikilinks
 
 **Milestone:** The editor looks and feels great. Live preview makes writing pleasant. The app is genuinely usable as a daily driver.
 
@@ -315,7 +323,7 @@ Build incrementally as desired:
 - 9.1 Slash commands (`/h1`, `/table`, `/template`, `/divider`)
 - 9.2 Custom keybindings (`~/.onyx/keybindings.json`)
 - 9.3 Full-text search across files (Cmd+Shift+F) — ripgrep-style in Rust
-- 9.4 Natural language dates (`@today` → `[[2026-03-09]]`)
+- 9.4 Natural language dates (`@today` → `[[2026-03-11]]`)
 - 9.5 Custom sort (drag-to-reorder in sidebar)
 - 9.6 Heatmap calendar (activity visualization)
 - 9.7 Print / PDF export
@@ -330,3 +338,5 @@ Build incrementally as desired:
 - **Rust for data, React for pixels.** When in doubt about where logic goes, put it in Rust.
 - **No premature abstraction.** Build the specific thing, refactor later if patterns emerge.
 - **Ship each phase.** Tag a release at each milestone. v0.1 = Phase 1, v0.2 = Phase 2, etc.
+- **Background-first for heavy work.** Indexing, scanning, and search always run on background threads. The UI must never block.
+- **Protect user data.** Dirty flags before auto-save, self-write suppression on file watcher, confirmation on destructive link actions.
