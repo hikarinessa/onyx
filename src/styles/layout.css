@@ -14,8 +14,8 @@
   padding: 0 12px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
-  -webkit-app-region: drag;
   flex-shrink: 0;
+  user-select: none;
 }
 
 .titlebar-traffic-lights {
@@ -32,8 +32,34 @@
 }
 
 .titlebar-actions {
-  width: 70px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
   flex-shrink: 0;
+}
+
+.titlebar-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+}
+
+.titlebar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.titlebar-btn-close:hover {
+  background: #c42b1c;
+  color: #fff;
 }
 
 /* Tab bar */
