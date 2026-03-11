@@ -12,7 +12,7 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 
 1.1 **Scaffold Tauri 2 + React + TypeScript + Vite project**
 - `npm create tauri-app` with React/TS template
-- Add Tailwind CSS
+- Set up CSS architecture (reset, custom properties, theme variables)
 - Verify it builds and opens a window
 
 1.2 **App shell layout**
