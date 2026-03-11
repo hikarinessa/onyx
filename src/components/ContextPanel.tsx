@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
+
+// ── Types ──
 
 interface BacklinkRecord {
   source_path: string;
@@ -9,6 +11,308 @@ interface BacklinkRecord {
   line_number: number | null;
   context: string | null;
 }
+
+interface ObjectType {
+  name: string;
+  properties: PropertyDef[];
+}
+
+interface PropertyDef {
+  key: string;
+  type: "text" | "date" | "number" | "select" | "multiselect" | "tags" | "checkbox" | "link";
+  required?: boolean;
+  options?: string[];
+  min?: number;
+  max?: number;
+}
+
+type FrontmatterValue = string | number | boolean | string[] | null | undefined;
+type FrontmatterMap = Record<string, FrontmatterValue>;
+
+// ── Property field widgets ──
+
+function PropertyField({
+  def,
+  value,
+  onChange,
+}: {
+  def: PropertyDef;
+  value: FrontmatterValue;
+  onChange: (val: FrontmatterValue) => void;
+}) {
+  switch (def.type) {
+    case "checkbox":
+      return (
+        <label className="prop-checkbox-label">
+          <input
+            type="checkbox"
+            checked={!!value}
+            onChange={(e) => onChange(e.target.checked)}
+            className="prop-checkbox"
+          />
+        </label>
+      );
+
+    case "date":
+      return (
+        <input
+          type="date"
+          className="prop-input prop-input-date"
+          value={typeof value === "string" ? value : ""}
+          onChange={(e) => onChange(e.target.value || null)}
+        />
+      );
+
+    case "number":
+      return (
+        <input
+          type="number"
+          className="prop-input prop-input-number"
+          value={typeof value === "number" ? value : ""}
+          min={def.min}
+          max={def.max}
+          onChange={(e) => {
+            const v = e.target.value;
+            onChange(v === "" ? null : Number(v));
+          }}
+        />
+      );
+
+    case "select":
+      return (
+        <select
+          className="prop-input prop-select"
+          value={typeof value === "string" ? value : ""}
+          onChange={(e) => onChange(e.target.value || null)}
+        >
+          <option value="">—</option>
+          {(def.options || []).map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      );
+
+    case "multiselect": {
+      const selected = Array.isArray(value) ? value : [];
+      return (
+        <div className="prop-multiselect">
+          {(def.options || []).map((opt) => {
+            const checked = selected.includes(opt);
+            return (
+              <label key={opt} className="prop-multiselect-option">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => {
+                    const next = checked
+                      ? selected.filter((s) => s !== opt)
+                      : [...selected, opt];
+                    onChange(next.length > 0 ? next : null);
+                  }}
+                />
+                <span>{opt}</span>
+              </label>
+            );
+          })}
+        </div>
+      );
+    }
+
+    case "tags": {
+      const tagStr = Array.isArray(value) ? value.join(", ") : typeof value === "string" ? value : "";
+      return (
+        <input
+          type="text"
+          className="prop-input"
+          placeholder="tag1, tag2, ..."
+          value={tagStr}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw.trim() === "") {
+              onChange(null);
+            } else {
+              onChange(raw.split(",").map((t) => t.trim()).filter(Boolean));
+            }
+          }}
+        />
+      );
+    }
+
+    case "link":
+    case "text":
+    default:
+      return (
+        <input
+          type="text"
+          className="prop-input"
+          value={typeof value === "string" ? value : value == null ? "" : String(value)}
+          placeholder={def.type === "link" ? "[[Note]]" : ""}
+          onChange={(e) => onChange(e.target.value || null)}
+        />
+      );
+  }
+}
+
+// ── Properties section ──
+
+function PropertiesSection({
+  path,
+  expanded,
+  onToggle,
+  onTypeDetected,
+}: {
+  path: string;
+  expanded: boolean;
+  onToggle: () => void;
+  onTypeDetected: (hasType: boolean) => void;
+}) {
+  const [frontmatter, setFrontmatter] = useState<FrontmatterMap | null>(null);
+  const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load frontmatter + object types when path changes
+  useEffect(() => {
+    let stale = false;
+    setLoading(true);
+
+    Promise.all([
+      invoke<string | null>("get_file_frontmatter", { path }),
+      invoke<ObjectType[]>("get_object_types"),
+    ])
+      .then(([fmJson, types]) => {
+        if (stale) return;
+        let parsed: FrontmatterMap | null = null;
+        if (fmJson) {
+          try {
+            const obj = JSON.parse(fmJson);
+            parsed = obj && typeof obj === "object" ? obj : null;
+          } catch {
+            // ignore
+          }
+        }
+        setFrontmatter(parsed);
+        setObjectTypes(types);
+        setLoading(false);
+        onTypeDetected(!!(parsed && parsed.type));
+      })
+      .catch(() => {
+        if (stale) return;
+        setFrontmatter(null);
+        setObjectTypes([]);
+        setLoading(false);
+        onTypeDetected(false);
+      });
+
+    return () => {
+      stale = true;
+    };
+  }, [path]);
+
+  // Cancel pending save on path change or unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [path]);
+
+  const scheduleSave = useCallback(
+    (updated: FrontmatterMap) => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        invoke("update_frontmatter", {
+          path,
+          frontmatterJson: JSON.stringify(updated),
+        }).catch((err) => console.error("Failed to update frontmatter:", err));
+      }, 500);
+    },
+    [path],
+  );
+
+  const handleChange = useCallback(
+    (key: string, val: FrontmatterValue) => {
+      setFrontmatter((prev) => {
+        const updated = { ...prev, [key]: val };
+        // Remove null/undefined keys for cleanliness
+        if (val == null) delete updated[key];
+        scheduleSave(updated);
+        return updated;
+      });
+    },
+    [scheduleSave],
+  );
+
+  // Determine display mode
+  const typeName = frontmatter?.type as string | undefined;
+  const matchedType = typeName
+    ? objectTypes.find((t) => t.name.toLowerCase() === typeName.toLowerCase())
+    : undefined;
+
+  const label = frontmatter
+    ? matchedType
+      ? `Properties (${matchedType.name})`
+      : "Properties"
+    : "Properties";
+
+  return (
+    <div className="context-panel-section">
+      <div
+        className="context-panel-section-title collapsible"
+        onClick={onToggle}
+      >
+        <span className="collapse-arrow">{expanded ? "▾" : "▸"}</span>
+        {label}
+      </div>
+
+      {expanded && (
+        <div className="properties-list">
+          {loading ? (
+            <div className="properties-empty">Loading...</div>
+          ) : !frontmatter ? (
+            <div className="properties-empty">No properties</div>
+          ) : matchedType ? (
+            // Typed: render fields from object type definition
+            matchedType.properties.map((def) => (
+              <div key={def.key} className="prop-row">
+                <div className="prop-label" title={def.key}>
+                  {def.key}
+                  {def.required && <span className="prop-required">*</span>}
+                </div>
+                <div className="prop-value">
+                  <PropertyField
+                    def={def}
+                    value={frontmatter[def.key]}
+                    onChange={(v) => handleChange(def.key, v)}
+                  />
+                </div>
+              </div>
+            ))
+          ) : (
+            // Untyped: raw key-value editor for all frontmatter
+            Object.entries(frontmatter).map(([key, val]) => (
+              <div key={key} className="prop-row">
+                <div className="prop-label" title={key}>
+                  {key}
+                </div>
+                <div className="prop-value">
+                  <PropertyField
+                    def={{ key, type: "text" }}
+                    value={typeof val === "object" && val !== null ? JSON.stringify(val) : val}
+                    onChange={(v) => handleChange(key, v)}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main component ──
 
 export function ContextPanel() {
   const visible = useAppStore((s) => s.contextPanelVisible);
@@ -18,12 +322,21 @@ export function ContextPanel() {
 
   const [backlinks, setBacklinks] = useState<BacklinkRecord[]>([]);
   const [backlinksExpanded, setBacklinksExpanded] = useState(false);
+  const [propsExpanded, setPropsExpanded] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
 
+  // Reset accordion defaults on tab switch
+  const handleTypeDetected = useCallback((hasType: boolean) => {
+    setPropsExpanded(hasType);
+    setBacklinksExpanded(!hasType);
+  }, []);
+
+  // Fetch backlinks
   useEffect(() => {
     if (!activeTab?.path) {
       setBacklinks([]);
       setBacklinksExpanded(false);
+      setPropsExpanded(false);
       return;
     }
 
@@ -32,17 +345,17 @@ export function ContextPanel() {
       .then((results) => {
         if (stale) return;
         setBacklinks(results);
-        setBacklinksExpanded(results.length > 0);
       })
       .catch(() => {
         if (stale) return;
         setBacklinks([]);
-        setBacklinksExpanded(false);
       });
-    return () => { stale = true; };
+    return () => {
+      stale = true;
+    };
   }, [activeTabId]);
 
-  // Check bookmark state for current file
+  // Check bookmark state
   useEffect(() => {
     if (!activeTab?.path) {
       setIsBookmarked(false);
@@ -96,6 +409,16 @@ export function ContextPanel() {
         </div>
       )}
 
+      {/* Properties section */}
+      {activeTab?.path && (
+        <PropertiesSection
+          path={activeTab.path}
+          expanded={propsExpanded}
+          onToggle={() => setPropsExpanded((v) => !v)}
+          onTypeDetected={handleTypeDetected}
+        />
+      )}
+
       {/* Backlinks section */}
       <div className="context-panel-section">
         <div
@@ -135,14 +458,6 @@ export function ContextPanel() {
             )}
           </div>
         )}
-      </div>
-
-      {/* Properties — placeholder */}
-      <div className="context-panel-section">
-        <div className="context-panel-section-title">Properties</div>
-        <p style={{ color: "var(--text-tertiary)", fontSize: "12px", margin: 0 }}>
-          Coming soon.
-        </p>
       </div>
 
       {/* Outline — placeholder */}
