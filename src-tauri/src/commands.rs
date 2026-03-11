@@ -184,7 +184,7 @@ pub fn unregister_directory(
 pub fn search_files(
     query: String,
     state: State<AppState>,
-) -> Result<Vec<crate::db::FileRecord>, String> {
+) -> Result<Vec<crate::db::SearchResult>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.search_files(&query)
 }

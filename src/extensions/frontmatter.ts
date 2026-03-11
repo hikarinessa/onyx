@@ -72,18 +72,28 @@ const frontmatterDecorations = ViewPlugin.fromClass(
 
 /**
  * Auto-fold frontmatter on first load only.
- * Tracks which docs have already been auto-folded so tab switching
+ * Tracks tab IDs that have already been auto-folded so tab switching
  * (which calls view.setState and re-creates plugins) doesn't re-fold
  * frontmatter the user manually unfolded.
  */
-const autoFoldedDocs = new Set<string>();
+const autoFoldedTabs = new Set<string>();
+
+/** Call when a tab is closed to prevent memory leaks */
+export function clearAutoFoldForTab(tabId: string) {
+  autoFoldedTabs.delete(tabId);
+}
+
+/**
+ * The active tab ID is injected here by the Editor so the plugin knows
+ * which tab is being shown. Updated before each setState call.
+ */
+export const frontmatterTabRef = { current: null as string | null };
 
 const frontmatterAutoFold = ViewPlugin.fromClass(
   class {
     constructor(view: EditorView) {
-      // Use first ~100 chars as a doc identity key (cheap, unique enough per tab)
-      const docKey = view.state.doc.sliceString(0, 100);
-      if (autoFoldedDocs.has(docKey)) return;
+      const tabId = frontmatterTabRef.current;
+      if (!tabId || autoFoldedTabs.has(tabId)) return;
 
       requestAnimationFrame(() => {
         const fm = findFrontmatter(view.state.doc);
@@ -92,7 +102,7 @@ const frontmatterAutoFold = ViewPlugin.fromClass(
         view.dispatch({
           effects: foldEffect.of({ from: firstLine.to, to: fm.to }),
         });
-        autoFoldedDocs.add(docKey);
+        if (tabId) autoFoldedTabs.add(tabId);
       });
     }
   }

@@ -14,7 +14,7 @@ import {
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
-import { frontmatterExtension } from "../extensions/frontmatter";
+import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab } from "../extensions/frontmatter";
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -208,12 +208,6 @@ export function Editor() {
   const tabs = useAppStore((s) => s.tabs);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  // Keep the mutable ref in sync so the updateListener reads the right tab.
-  // Using useEffect so it only runs on committed renders (safe for concurrent mode).
-  useEffect(() => {
-    activeTabIdBox.current = activeTabId;
-  }, [activeTabId]);
-
   // Initialize shared extensions once
   if (!sharedExtensions) {
     sharedExtensions = buildExtensions();
@@ -236,6 +230,10 @@ export function Editor() {
 
   // Create or swap the EditorView when the active tab changes
   useEffect(() => {
+    // Update the mutable ref immediately so the updateListener knows which tab is active.
+    // Must happen before any editor operations in this effect.
+    activeTabIdBox.current = activeTabId;
+
     if (!containerRef.current || !activeTab) return;
 
     // --- Save current tab state before switching ---
@@ -266,6 +264,10 @@ export function Editor() {
       state = createStateWithExtensions("");
       editorStateCache.set(activeTab.id, state);
     }
+
+    // Tell the frontmatter plugin which tab is being shown so it can
+    // track auto-fold state per tab instead of per document content.
+    frontmatterTabRef.current = activeTab.id;
 
     if (viewRef.current) {
       // View exists — swap state (preserves the DOM element)
@@ -329,6 +331,7 @@ export function Editor() {
         editorStateCache.delete(key);
         scrollCache.delete(key);
         lastSavedContent.delete(key);
+        clearAutoFoldForTab(key);
       }
     }
   }, [tabs]);
