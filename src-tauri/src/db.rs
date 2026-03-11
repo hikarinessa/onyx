@@ -291,7 +291,7 @@ impl Database {
 
     pub fn resolve_by_title(&self, title: &str) -> Result<Option<String>, String> {
         let result = self.conn.query_row(
-            "SELECT path FROM files WHERE title = ?1 COLLATE NOCASE OR path LIKE '%/' || ?1 || '.md' LIMIT 1",
+            "SELECT path FROM files WHERE title = ?1 COLLATE NOCASE OR path LIKE '%/' || ?1 || '.md' ORDER BY (title = ?1 COLLATE NOCASE) DESC, path ASC LIMIT 1",
             params![title],
             |row| row.get(0),
         ).optional().map_err(|e| format!("Failed to resolve wikilink: {}", e))?;

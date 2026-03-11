@@ -953,3 +953,9 @@ Items identified during Phase 1 review. Fix before or during the indicated phase
 8. **Watcher debounce thread never exits.** The `DebouncedProcessor` thread in `watcher.rs` runs `loop { thread::sleep(...) }` with no shutdown signal. If the `FileWatcher` is dropped and recreated (e.g. re-registering directories), the old thread leaks. Add an `AtomicBool` or channel-based shutdown.
 
 9. **`unchecked_transaction` in db.rs.** Using `unchecked_transaction()` instead of `transaction()` skips the borrow checker's enforcement that only one transaction exists at a time. Safe in practice since all DB access is behind a Mutex, but worth noting. Consider using `transaction()` if the Mutex is ever replaced with finer-grained locking.
+
+10. **Bookmark desync on reindex.** If a file is deleted and re-created, `ON DELETE CASCADE` removes old bookmarks. The UI won't update until the user switches tabs. Consider listening for `fs:change` events to refresh bookmark state.
+
+11. **Full-doc decoration scan.** Wikilink and tag extensions iterate every line on every `docChanged`. Fine for <500 line notes, but should switch to viewport-aware iteration before adding live preview decorations.
+
+12. **Bookmark toggle on unindexed file fails silently.** `toggle_bookmark` returns "File not indexed" error which the frontend catches but doesn't surface. Needs a toast/notification system before this can be user-visible.

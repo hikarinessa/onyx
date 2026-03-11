@@ -219,16 +219,18 @@ pub fn resolve_wikilink(
     if link.contains('/') {
         let candidate = context_dir.join(format!("{}.md", link));
         if candidate.exists() {
-            validate_path(&candidate, &state)?;
-            return Ok(Some(candidate.to_string_lossy().to_string()));
+            let canonical = candidate.canonicalize().map_err(|e| e.to_string())?;
+            validate_path(&canonical, &state)?;
+            return Ok(Some(canonical.to_string_lossy().to_string()));
         }
     }
 
     // Step 2: Same directory as context file
     let same_dir_candidate = context_dir.join(format!("{}.md", link));
     if same_dir_candidate.exists() {
-        validate_path(&same_dir_candidate, &state)?;
-        return Ok(Some(same_dir_candidate.to_string_lossy().to_string()));
+        let canonical = same_dir_candidate.canonicalize().map_err(|e| e.to_string())?;
+        validate_path(&canonical, &state)?;
+        return Ok(Some(canonical.to_string_lossy().to_string()));
     }
 
     // Step 3: Query SQLite by title or filename (already in index = already validated)
