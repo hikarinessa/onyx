@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Titlebar } from "./components/Titlebar";
 import { TabBar } from "./components/TabBar";
 import { Sidebar } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
 import { ContextPanel } from "./components/ContextPanel";
 import { StatusBar } from "./components/StatusBar";
+import { QuickOpen } from "./components/QuickOpen";
 import { useAppStore } from "./stores/app";
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
   const toggleContextPanel = useAppStore((s) => s.toggleContextPanel);
   const closeTab = useAppStore((s) => s.closeTab);
   const activeTabId = useAppStore((s) => s.activeTabId);
+  const [quickOpenVisible, setQuickOpenVisible] = useState(false);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -36,6 +38,12 @@ export default function App() {
         e.preventDefault();
         if (activeTabId) closeTab(activeTabId);
       }
+
+      // Cmd+O — toggle quick open
+      if (meta && !alt && e.key === "o") {
+        e.preventDefault();
+        setQuickOpenVisible((v) => !v);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -52,6 +60,10 @@ export default function App() {
         <ContextPanel />
       </div>
       <StatusBar />
+      <QuickOpen
+        visible={quickOpenVisible}
+        onClose={() => setQuickOpenVisible(false)}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "../stores/app";
@@ -19,14 +19,21 @@ interface RegisteredDirectory {
   position: number;
 }
 
+interface ContextMenuState {
+  x: number;
+  y: number;
+  entry: DirEntry;
+}
+
 interface TreeNodeProps {
   entry: DirEntry;
   depth: number;
   activeFilePath: string | null;
   onFileClick: (path: string, name: string) => void;
+  onContextMenu: (e: React.MouseEvent, entry: DirEntry) => void;
 }
 
-function TreeNode({ entry, depth, activeFilePath, onFileClick }: TreeNodeProps) {
+function TreeNode({ entry, depth, activeFilePath, onFileClick, onContextMenu }: TreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<DirEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -60,6 +67,7 @@ function TreeNode({ entry, depth, activeFilePath, onFileClick }: TreeNodeProps) 
         className={`tree-item ${isActive ? "active" : ""}`}
         style={{ "--indent": depth } as React.CSSProperties}
         onClick={toggle}
+        onContextMenu={(e) => onContextMenu(e, entry)}
       >
         <span className="tree-item-icon">
           {entry.is_dir ? (expanded ? "▾" : "▸") : isMarkdown ? "◇" : "·"}
@@ -75,10 +83,110 @@ function TreeNode({ entry, depth, activeFilePath, onFileClick }: TreeNodeProps) 
               depth={depth + 1}
               activeFilePath={activeFilePath}
               onFileClick={onFileClick}
+              onContextMenu={onContextMenu}
             />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ContextMenu({
+  menu,
+  onClose,
+  onNewNote,
+  onNewFolder,
+  onRename,
+  onDelete,
+  onReveal,
+}: {
+  menu: ContextMenuState;
+  onClose: () => void;
+  onNewNote: (entry: DirEntry) => void;
+  onNewFolder: (entry: DirEntry) => void;
+  onRename: (entry: DirEntry) => void;
+  onDelete: (entry: DirEntry) => void;
+  onReveal: (entry: DirEntry) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [onClose]);
+
+  const isDir = menu.entry.is_dir;
+
+  return (
+    <div
+      ref={ref}
+      className="context-menu"
+      style={{ left: menu.x, top: menu.y }}
+    >
+      <div
+        className="context-menu-item"
+        onClick={() => {
+          onNewNote(menu.entry);
+          onClose();
+        }}
+      >
+        {isDir ? "New Note" : "New Note (sibling)"}
+      </div>
+      {isDir && (
+        <div
+          className="context-menu-item"
+          onClick={() => {
+            onNewFolder(menu.entry);
+            onClose();
+          }}
+        >
+          New Folder
+        </div>
+      )}
+      <div className="context-menu-separator" />
+      <div
+        className="context-menu-item"
+        onClick={() => {
+          onRename(menu.entry);
+          onClose();
+        }}
+      >
+        Rename
+      </div>
+      <div
+        className="context-menu-item"
+        onClick={() => {
+          onReveal(menu.entry);
+          onClose();
+        }}
+      >
+        Reveal in Finder
+      </div>
+      <div className="context-menu-separator" />
+      <div
+        className="context-menu-item destructive"
+        onClick={() => {
+          onDelete(menu.entry);
+          onClose();
+        }}
+      >
+        Delete
+      </div>
     </div>
   );
 }
@@ -91,6 +199,7 @@ export function Sidebar() {
   const [rootEntries, setRootEntries] = useState<Map<string, DirEntry[]>>(
     new Map()
   );
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   const loadDirectories = useCallback(async () => {
     try {
@@ -154,6 +263,63 @@ export function Sidebar() {
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent, entry: DirEntry) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, entry });
+  };
+
+  const handleNewNote = async (entry: DirEntry) => {
+    const dir = entry.is_dir ? entry.path : entry.path.replace(/\/[^/]+$/, "");
+    const path = `${dir}/Untitled.md`;
+    try {
+      await invoke("write_file", { path, content: "" });
+      loadFileIntoCache(path, "");
+      openFile(path, "Untitled.md");
+      loadDirectories();
+    } catch (err) {
+      console.error("Failed to create note:", err);
+    }
+  };
+
+  const handleNewNoteInDir = async (dirPath: string) => {
+    const path = `${dirPath}/Untitled.md`;
+    try {
+      await invoke("write_file", { path, content: "" });
+      loadFileIntoCache(path, "");
+      openFile(path, "Untitled.md");
+      loadDirectories();
+    } catch (err) {
+      console.error("Failed to create note:", err);
+    }
+  };
+
+  const handleNewFolder = async (entry: DirEntry) => {
+    const dir = entry.is_dir ? entry.path : entry.path.replace(/\/[^/]+$/, "");
+    console.log("TODO: create_folder command", `${dir}/New Folder`);
+  };
+
+  const handleRename = async (entry: DirEntry) => {
+    console.log("TODO: rename_file command", entry.path);
+  };
+
+  const handleDelete = async (entry: DirEntry) => {
+    try {
+      await invoke("trash_file", { path: entry.path });
+      loadDirectories();
+    } catch (err) {
+      console.log("TODO: trash_file command not yet implemented", entry.path);
+    }
+  };
+
+  const handleReveal = async (entry: DirEntry) => {
+    try {
+      await invoke("reveal_in_finder", { path: entry.path });
+    } catch (err) {
+      console.log("TODO: reveal_in_finder command not yet implemented", entry.path);
+    }
+  };
+
   return (
     <div className={`sidebar ${sidebarVisible ? "" : "collapsed"}`}>
       {directories.length === 0 ? (
@@ -178,7 +344,29 @@ export function Sidebar() {
               className="sidebar-header"
               style={{ borderLeft: `2px solid ${dir.color}` }}
             >
-              {dir.label}
+              <span className="sidebar-header-label">{dir.label}</span>
+              <div className="sidebar-header-actions">
+                <button
+                  className="sidebar-header-btn"
+                  title="New Note"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleNewNoteInDir(dir.path);
+                  }}
+                >
+                  +
+                </button>
+                <button
+                  className="sidebar-header-btn"
+                  title="Refresh"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    loadDirectories();
+                  }}
+                >
+                  ↻
+                </button>
+              </div>
             </div>
             <div className="sidebar-content">
               {(rootEntries.get(dir.id) || []).map((entry) => (
@@ -188,11 +376,24 @@ export function Sidebar() {
                   depth={0}
                   activeFilePath={activeTabId}
                   onFileClick={handleFileClick}
+                  onContextMenu={handleContextMenu}
                 />
               ))}
             </div>
           </div>
         ))
+      )}
+
+      {contextMenu && (
+        <ContextMenu
+          menu={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onNewNote={handleNewNote}
+          onNewFolder={handleNewFolder}
+          onRename={handleRename}
+          onDelete={handleDelete}
+          onReveal={handleReveal}
+        />
       )}
     </div>
   );
