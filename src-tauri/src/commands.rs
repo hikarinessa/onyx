@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::State;
 
+use crate::object_types::{self, ObjectType};
+
 const IGNORED_NAMES: &[&str] = &[".obsidian", ".git", "node_modules", ".DS_Store", ".trash"];
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -276,4 +278,97 @@ pub fn is_file_bookmarked(
 ) -> Result<bool, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.is_path_bookmarked(&path)
+}
+
+#[tauri::command]
+pub fn get_object_types() -> Result<Vec<ObjectType>, String> {
+    object_types::load_object_types()
+}
+
+#[tauri::command]
+pub fn query_by_type(
+    type_name: String,
+    state: State<AppState>,
+) -> Result<Vec<crate::db::SearchResult>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.query_by_type(&type_name)
+}
+
+#[tauri::command]
+pub fn get_file_frontmatter(
+    path: String,
+    state: State<AppState>,
+) -> Result<Option<String>, String> {
+    let file_path = PathBuf::from(&path);
+    validate_path(&file_path, &state)?;
+
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_frontmatter(&path)
+}
+
+#[tauri::command]
+pub fn update_frontmatter(
+    path: String,
+    frontmatter_json: String,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let target = PathBuf::from(&path);
+    validate_path(&target, &state)?;
+
+    // Parse the JSON into a serde value, then convert to YAML
+    let value: serde_json::Value = serde_json::from_str(&frontmatter_json)
+        .map_err(|e| format!("Invalid frontmatter JSON: {}", e))?;
+    let yaml_str = serde_yaml_ng::to_string(&value)
+        .map_err(|e| format!("Failed to convert frontmatter to YAML: {}", e))?;
+
+    // Read existing file content
+    let content = std::fs::read_to_string(&target)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // Build new content: replace or prepend frontmatter
+    let new_content = if content.trim_start().starts_with("---") {
+        // Find the closing ---
+        let trimmed = content.trim_start();
+        let leading_whitespace = &content[..content.len() - trimmed.len()];
+        let after_first = &trimmed[3..];
+        if let Some(end) = after_first.find("\n---") {
+            // Replace existing frontmatter
+            let after_frontmatter = &after_first[end + 4..]; // skip \n---
+            format!("{}---\n{}---{}", leading_whitespace, yaml_str, after_frontmatter)
+        } else {
+            // Malformed frontmatter (no closing ---), prepend new
+            format!("---\n{}---\n\n{}", yaml_str, content)
+        }
+    } else {
+        // No existing frontmatter, prepend
+        format!("---\n{}---\n\n{}", yaml_str, content)
+    };
+
+    // Atomic write: temp file + rename
+    let dir = target.parent().ok_or("Invalid file path")?;
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_path = dir.join(format!(".onyx-tmp-{}-{}", std::process::id(), counter));
+
+    std::fs::write(&temp_path, &new_content)
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    // Mark self-write BEFORE rename so the watcher suppresses the event
+    {
+        let watcher_lock = state.watcher.lock().map_err(|e| e.to_string())?;
+        if let Some(ref fw) = *watcher_lock {
+            fw.mark_self_write(&target);
+        }
+    }
+
+    std::fs::rename(&temp_path, &target)
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            format!("Failed to rename temp file: {}", e)
+        })?;
+
+    // Sync the index — watcher event is suppressed, so update DB directly
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.update_frontmatter(&path, &frontmatter_json)?;
+
+    Ok(())
 }

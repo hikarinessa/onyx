@@ -362,6 +362,50 @@ impl Database {
         Ok(count > 0)
     }
 
+    pub fn query_by_type(&self, type_name: &str) -> Result<Vec<SearchResult>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT path, title FROM files
+             WHERE json_extract(frontmatter, '$.type') = ?1 COLLATE NOCASE
+             ORDER BY title ASC"
+        ).map_err(|e| format!("Failed to prepare query_by_type: {}", e))?;
+
+        let rows = stmt.query_map(params![type_name], |row| {
+            Ok(SearchResult {
+                path: row.get(0)?,
+                title: row.get(1)?,
+            })
+        }).map_err(|e| format!("Failed to execute query_by_type: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read row: {}", e))?);
+        }
+        Ok(results)
+    }
+
+    pub fn update_frontmatter(&self, path: &str, frontmatter_json: &str) -> Result<(), String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        self.conn.execute(
+            "UPDATE files SET frontmatter = ?1, indexed_at = ?2 WHERE path = ?3",
+            params![frontmatter_json, now, path],
+        ).map_err(|e| format!("Failed to update frontmatter: {}", e))?;
+        Ok(())
+    }
+
+    pub fn get_frontmatter(&self, path: &str) -> Result<Option<String>, String> {
+        let result = self.conn.query_row(
+            "SELECT frontmatter FROM files WHERE path = ?1",
+            params![path],
+            |row| row.get(0),
+        ).optional().map_err(|e| format!("Failed to get frontmatter: {}", e))?;
+
+        Ok(result)
+    }
+
     pub fn get_stats(&self) -> Result<IndexStats, String> {
         let total_files: u32 = self.conn.query_row(
             "SELECT COUNT(*) FROM files", [], |row| row.get(0),
