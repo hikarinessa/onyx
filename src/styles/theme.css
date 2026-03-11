@@ -1,0 +1,63 @@
+:root {
+  /* Fonts */
+  --font-ui: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-editor: "Literata", Georgia, serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", monospace;
+
+  /* Background layers */
+  --bg-base: #0e0e12;
+  --bg-surface: #141418;
+  --bg-elevated: #1a1a20;
+  --bg-hover: #222228;
+  --bg-active: #2a2a32;
+
+  /* Text */
+  --text-primary: #e8e8ec;
+  --text-secondary: #9898a4;
+  --text-tertiary: #5c5c68;
+  --text-accent: #8b7cf6;
+
+  /* Borders */
+  --border-subtle: #1e1e26;
+  --border-default: #2a2a34;
+  --border-strong: #3a3a46;
+
+  /* Accent */
+  --accent: #8b7cf6;
+  --accent-hover: #9d90f8;
+  --accent-muted: rgba(139, 124, 246, 0.15);
+
+  /* Status */
+  --status-modified: #e8a44a;
+  --status-error: #e85454;
+  --status-success: #4ae88a;
+
+  /* Semantic */
+  --tag-bg: rgba(139, 124, 246, 0.12);
+  --tag-text: #a89cf8;
+  --link-color: #7ca8f6;
+  --link-broken: #e87474;
+
+  /* Layout dimensions */
+  --titlebar-height: 38px;
+  --tabbar-height: 36px;
+  --statusbar-height: 24px;
+  --sidebar-width: 240px;
+  --context-panel-width: 280px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Directory accent colors */
+  --dir-color-1: #8b7cf6;
+  --dir-color-2: #f67c7c;
+  --dir-color-3: #7cf6b8;
+  --dir-color-4: #f6d47c;
+  --dir-color-5: #7cb8f6;
+}
