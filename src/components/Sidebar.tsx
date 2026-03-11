@@ -242,8 +242,8 @@ export function Sidebar() {
   }, []);
 
   useEffect(() => {
-    loadBookmarks();
-  }, [loadBookmarks, bookmarkVersion]);
+    if (sidebarVisible) loadBookmarks();
+  }, [loadBookmarks, bookmarkVersion, sidebarVisible]);
 
   const addDirectory = async () => {
     const selected = await open({ directory: true, multiple: false });

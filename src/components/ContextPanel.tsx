@@ -27,15 +27,19 @@ export function ContextPanel() {
       return;
     }
 
+    let stale = false;
     invoke<BacklinkRecord[]>("get_backlinks", { path: activeTab.path })
       .then((results) => {
+        if (stale) return;
         setBacklinks(results);
         setBacklinksExpanded(results.length > 0);
       })
       .catch(() => {
+        if (stale) return;
         setBacklinks([]);
         setBacklinksExpanded(false);
       });
+    return () => { stale = true; };
   }, [activeTabId]);
 
   // Check bookmark state for current file
