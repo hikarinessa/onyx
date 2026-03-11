@@ -45,13 +45,9 @@ export function ContextPanel() {
       return;
     }
 
-    invoke<{ path: string; title: string | null; label: string | null }[]>("get_bookmarks")
-      .then((bookmarks) => {
-        setIsBookmarked(bookmarks.some((b) => b.path === activeTab.path));
-      })
-      .catch(() => {
-        setIsBookmarked(false);
-      });
+    invoke<boolean>("is_file_bookmarked", { path: activeTab.path })
+      .then((result) => setIsBookmarked(result))
+      .catch(() => setIsBookmarked(false));
   }, [activeTabId]);
 
   const handleBacklinkClick = async (record: BacklinkRecord) => {

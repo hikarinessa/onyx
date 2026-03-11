@@ -353,6 +353,15 @@ impl Database {
         Ok(count > 0)
     }
 
+    pub fn is_path_bookmarked(&self, path: &str) -> Result<bool, String> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM bookmarks b JOIN files f ON f.id = b.file_id WHERE f.path = ?1",
+            params![path],
+            |row| row.get(0),
+        ).map_err(|e| format!("Failed to check bookmark by path: {}", e))?;
+        Ok(count > 0)
+    }
+
     pub fn get_stats(&self) -> Result<IndexStats, String> {
         let total_files: u32 = self.conn.query_row(
             "SELECT COUNT(*) FROM files", [], |row| row.get(0),
