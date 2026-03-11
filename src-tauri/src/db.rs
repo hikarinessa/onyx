@@ -16,6 +16,13 @@ pub struct FileRecord {
     pub frontmatter: Option<String>,
 }
 
+/// Lightweight result for quick-open search — no frontmatter payload
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchResult {
+    pub path: String,
+    pub title: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct LinkRecord {
     pub target: String,
@@ -203,7 +210,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn search_files(&self, query: &str) -> Result<Vec<FileRecord>, String> {
+    pub fn search_files(&self, query: &str) -> Result<Vec<SearchResult>, String> {
         // Escape LIKE metacharacters so %, _, and \ are treated as literals
         let escaped = query
             .replace('\\', "\\\\")
@@ -211,7 +218,7 @@ impl Database {
             .replace('_', "\\_");
         let pattern = format!("%{}%", escaped);
         let mut stmt = self.conn.prepare(
-            "SELECT id, path, dir_id, title, modified_at, frontmatter
+            "SELECT path, title
              FROM files
              WHERE title LIKE ?1 ESCAPE '\\' OR path LIKE ?1 ESCAPE '\\'
              ORDER BY title ASC
@@ -219,13 +226,9 @@ impl Database {
         ).map_err(|e| format!("Failed to prepare search: {}", e))?;
 
         let rows = stmt.query_map(params![pattern], |row| {
-            Ok(FileRecord {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                dir_id: row.get(2)?,
-                title: row.get(3)?,
-                modified_at: row.get(4)?,
-                frontmatter: row.get(5)?,
+            Ok(SearchResult {
+                path: row.get(0)?,
+                title: row.get(1)?,
             })
         }).map_err(|e| format!("Failed to execute search: {}", e))?;
 

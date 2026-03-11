@@ -925,3 +925,15 @@ Items identified during Phase 1 review. Fix before or during the indicated phase
 ### Phase 2+ considerations
 
 3. **External edit conflict detection.** If a file is modified externally while Onyx has it open with unsaved changes, the stale editor cache can overwrite the external edit on the next auto-save. **Fix:** On `fs:change` events for open files, compare the on-disk content with `lastSavedContent`. If they differ and the editor also has unsaved changes, show a conflict notification (reload / keep mine / diff). Reference Otterly's pattern (watcher → diff → notify).
+
+4. **`findAvailablePath` TOCTOU race.** `Sidebar.tsx` checks file existence via `read_file` then creates with `write_file` — another process could create the file in between. Low risk for a single-user desktop app, but a Rust-side `create_file_unique` command would be correct.
+
+5. **Delete action has no user feedback.** `trash_file` command is stubbed; the delete context menu item silently catches errors. When implementing, add a toast or undo notification.
+
+6. **Context menu lacks keyboard navigation.** Currently mouse-only. Add arrow key navigation and Enter to select for accessibility.
+
+7. **QuickOpen missing ARIA attributes.** Add `role="listbox"`, `role="option"`, `aria-activedescendant` for screen reader support.
+
+8. **Watcher debounce thread never exits.** The `DebouncedProcessor` thread in `watcher.rs` runs `loop { thread::sleep(...) }` with no shutdown signal. If the `FileWatcher` is dropped and recreated (e.g. re-registering directories), the old thread leaks. Add an `AtomicBool` or channel-based shutdown.
+
+9. **`unchecked_transaction` in db.rs.** Using `unchecked_transaction()` instead of `transaction()` skips the borrow checker's enforcement that only one transaction exists at a time. Safe in practice since all DB access is behind a Mutex, but worth noting. Consider using `transaction()` if the Mutex is ever replaced with finer-grained locking.

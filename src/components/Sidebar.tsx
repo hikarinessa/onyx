@@ -111,6 +111,7 @@ function ContextMenu({
   onReveal: (entry: DirEntry) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ x: menu.x, y: menu.y });
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -131,13 +132,31 @@ function ContextMenu({
     };
   }, [onClose]);
 
+  // Clamp to viewport after the menu renders and we know its dimensions
+  useEffect(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const pad = 8;
+    let x = menu.x;
+    let y = menu.y;
+    if (x + rect.width > window.innerWidth - pad) {
+      x = window.innerWidth - rect.width - pad;
+    }
+    if (y + rect.height > window.innerHeight - pad) {
+      y = window.innerHeight - rect.height - pad;
+    }
+    if (x !== position.x || y !== position.y) {
+      setPosition({ x, y });
+    }
+  }, [menu.x, menu.y]);
+
   const isDir = menu.entry.is_dir;
 
   return (
     <div
       ref={ref}
       className="context-menu"
-      style={{ left: menu.x, top: menu.y }}
+      style={{ left: position.x, top: position.y }}
     >
       <div
         className="context-menu-item"

@@ -2,13 +2,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openFileInEditor } from "../lib/openFile";
 
-interface FileRecord {
-  id: number;
+interface RustSearchResult {
   path: string;
-  dir_id: string;
   title: string | null;
-  modified_at: number | null;
-  frontmatter: string | null;
 }
 
 interface SearchResult {
@@ -38,7 +34,7 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
     }
   }, [visible]);
 
-  // Search when query changes
+  // Search when query changes (debounced to avoid hammering IPC on every keystroke)
   useEffect(() => {
     if (!visible || query.trim() === "") {
       setResults([]);
@@ -48,9 +44,9 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
 
     let cancelled = false;
 
-    const doSearch = async () => {
+    const timer = setTimeout(async () => {
       try {
-        const hits = await invoke<FileRecord[]>("search_files", {
+        const hits = await invoke<RustSearchResult[]>("search_files", {
           query: query.trim(),
         });
         if (!cancelled) {
@@ -63,17 +59,16 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
           setSelectedIndex(0);
         }
       } catch {
-        // Command doesn't exist yet — no fallback available without file tree data
         if (!cancelled) {
           setResults([]);
           setSelectedIndex(0);
         }
       }
-    };
+    }, 150);
 
-    doSearch();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [query, visible]);
 
