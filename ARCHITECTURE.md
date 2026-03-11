@@ -477,6 +477,22 @@ Auto-fix on save (configurable). Lint status in status bar. No separate lint pan
 - Each pane has its own tab bar and navigation stack
 - `Cmd+W` closes the active pane's tab; if it's the last tab in a pane, the pane collapses
 
+### Native Menu Bar
+
+Every user-facing action must be accessible from the macOS menu bar, even if it also has a button or keyboard shortcut. The menu bar is the canonical registry of all actions.
+
+| Menu | Items |
+|------|-------|
+| **File** | New Note, New Note from Template, Open (Quick Open), Add Folder…, Close Tab, Close All Tabs, Save, Save All |
+| **Edit** | Undo, Redo, Cut, Copy, Paste, Select All, Find, Find & Replace, Find in Files |
+| **View** | Toggle Sidebar, Toggle Context Panel, Toggle Source/Preview, Command Palette, Zoom In/Out/Reset |
+| **Go** | Back, Forward, Today's Daily Note, Go to Line |
+| **Format** | Bold, Italic, Code, Heading 1-6, Blockquote, Bullet List, Numbered List, Task List, Insert Link, Insert Wikilink, Horizontal Rule |
+| **Window** | Minimize, Zoom, Split Pane |
+| **Help** | About Onyx, Keyboard Shortcuts Reference |
+
+**Implementation:** Use Tauri 2's `Menu` + `MenuItem` API (Rust-side `tauri::menu`). Each menu item maps to a command ID that the frontend handles via `app.on_menu_event()`. Custom accelerators mirror the keyboard shortcuts table in §11.
+
 ### Status Bar
 
 - Cursor position (Ln/Col)

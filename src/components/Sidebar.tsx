@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import { loadFileIntoCache } from "./Editor";
@@ -221,6 +222,22 @@ export function Sidebar() {
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
+  const addDirectory = async () => {
+    const selected = await open({ directory: true, multiple: false });
+    if (!selected) return;
+    const dirPath = typeof selected === "string" ? selected : selected[0];
+    if (!dirPath) return;
+    const label = dirPath.split("/").pop() || dirPath;
+    const colors = ["#6b9eff", "#ff6b9e", "#9eff6b", "#ffc46b", "#c46bff", "#6bffc4"];
+    const color = colors[directories.length % colors.length];
+    try {
+      await invoke("register_directory", { path: dirPath, label, color });
+      loadDirectories();
+    } catch (err) {
+      console.error("Failed to register directory:", err);
+    }
+  };
+
   const loadDirectories = useCallback(async () => {
     try {
       const dirs = await invoke<RegisteredDirectory[]>(
@@ -367,9 +384,24 @@ export function Sidebar() {
             }}
           >
             No directories registered.
-            <br />
-            Use the command palette or drag a folder here.
           </p>
+          <button
+            className="sidebar-add-folder-btn"
+            onClick={addDirectory}
+            style={{
+              margin: "0 12px",
+              padding: "8px 12px",
+              background: "var(--bg-elevated)",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: "4px",
+              fontSize: "12px",
+              cursor: "pointer",
+              width: "calc(100% - 24px)",
+            }}
+          >
+            Add Folder
+          </button>
         </div>
       ) : (
         directories.map((dir) => (
