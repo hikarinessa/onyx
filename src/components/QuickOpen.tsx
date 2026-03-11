@@ -7,9 +7,25 @@ interface RustSearchResult {
   title: string | null;
 }
 
+interface ObjectType {
+  name: string;
+  properties: unknown[];
+}
+
 interface SearchResult {
   name: string;
   path: string;
+}
+
+interface TypeSuggestion {
+  kind: "type-suggestion";
+  name: string;
+}
+
+type QuickOpenItem = SearchResult | TypeSuggestion;
+
+function isTypeSuggestion(item: QuickOpenItem): item is TypeSuggestion {
+  return "kind" in item && item.kind === "type-suggestion";
 }
 
 interface QuickOpenProps {
@@ -17,9 +33,17 @@ interface QuickOpenProps {
   onClose: () => void;
 }
 
+/** Parse `type:foo` prefix. Returns null if no prefix, or { typeName } (possibly empty). */
+function parseTypePrefix(q: string): { typeName: string } | null {
+  const trimmed = q.trimStart();
+  if (!trimmed.toLowerCase().startsWith("type:")) return null;
+  const typeName = trimmed.slice(5).trim();
+  return { typeName };
+}
+
 export function QuickOpen({ visible, onClose }: QuickOpenProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<QuickOpenItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -29,14 +53,22 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
       setQuery("");
       setResults([]);
       setSelectedIndex(0);
-      // Small delay to ensure the element is rendered
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [visible]);
 
-  // Search when query changes (debounced to avoid hammering IPC on every keystroke)
+  // Search when query changes
   useEffect(() => {
-    if (!visible || query.trim() === "") {
+    if (!visible) {
+      setResults([]);
+      setSelectedIndex(0);
+      return;
+    }
+
+    const parsed = parseTypePrefix(query);
+
+    // Empty query, no prefix → clear
+    if (!parsed && query.trim() === "") {
       setResults([]);
       setSelectedIndex(0);
       return;
@@ -46,17 +78,45 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
 
     const timer = setTimeout(async () => {
       try {
-        const hits = await invoke<RustSearchResult[]>("search_files", {
-          query: query.trim(),
-        });
-        if (!cancelled) {
-          setResults(
-            hits.slice(0, 10).map((f) => ({
-              name: f.title ? f.title + ".md" : f.path.split("/").pop() || f.path,
-              path: f.path,
-            }))
-          );
-          setSelectedIndex(0);
+        if (parsed) {
+          if (parsed.typeName === "") {
+            // Show available object types as suggestions
+            const types = await invoke<ObjectType[]>("get_object_types");
+            if (!cancelled) {
+              setResults(
+                types.map((t) => ({ kind: "type-suggestion" as const, name: t.name }))
+              );
+              setSelectedIndex(0);
+            }
+          } else {
+            // Query by type
+            const hits = await invoke<RustSearchResult[]>("query_by_type", {
+              typeName: parsed.typeName,
+            });
+            if (!cancelled) {
+              setResults(
+                hits.slice(0, 10).map((f) => ({
+                  name: f.title ? f.title + ".md" : f.path.split("/").pop() || f.path,
+                  path: f.path,
+                }))
+              );
+              setSelectedIndex(0);
+            }
+          }
+        } else {
+          // Normal file search
+          const hits = await invoke<RustSearchResult[]>("search_files", {
+            query: query.trim(),
+          });
+          if (!cancelled) {
+            setResults(
+              hits.slice(0, 10).map((f) => ({
+                name: f.title ? f.title + ".md" : f.path.split("/").pop() || f.path,
+                path: f.path,
+              }))
+            );
+            setSelectedIndex(0);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -72,10 +132,16 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
     };
   }, [query, visible]);
 
-  const selectResult = useCallback(
-    (result: SearchResult) => {
-      onClose();
-      openFileInEditor(result.path, result.name);
+  const selectItem = useCallback(
+    (item: QuickOpenItem) => {
+      if (isTypeSuggestion(item)) {
+        // Fill in the type: prefix and trigger query
+        setQuery(`type:${item.name}`);
+        inputRef.current?.focus();
+      } else {
+        onClose();
+        openFileInEditor(item.path, item.name);
+      }
     },
     [onClose]
   );
@@ -103,12 +169,12 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
       if (e.key === "Enter") {
         e.preventDefault();
         if (results[selectedIndex]) {
-          selectResult(results[selectedIndex]);
+          selectItem(results[selectedIndex]);
         }
         return;
       }
     },
-    [results, selectedIndex, selectResult, onClose]
+    [results, selectedIndex, selectItem, onClose]
   );
 
   if (!visible) return null;
@@ -116,10 +182,14 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
   // Extract relative path (everything after the filename)
   const getRelativePath = (fullPath: string, name: string): string => {
     const dir = fullPath.slice(0, fullPath.length - name.length);
-    // Trim trailing slash and show last few segments
     const parts = dir.replace(/\/$/, "").split("/");
     return parts.slice(-3).join("/");
   };
+
+  const parsed = parseTypePrefix(query);
+  const showingTypeSuggestions = parsed !== null && parsed.typeName === "" && results.length > 0;
+  const noResults =
+    query.trim() !== "" && results.length === 0 && !(parsed && parsed.typeName === "");
 
   return (
     <div className="quick-open-overlay" onClick={onClose}>
@@ -128,26 +198,47 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
           ref={inputRef}
           className="quick-open-input"
           type="text"
-          placeholder="Open a file..."
+          placeholder="Open a file... (type: to filter by type)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
         />
         <div className="quick-open-results">
-          {results.map((result, i) => (
-            <div
-              key={result.path}
-              className={`quick-open-item ${i === selectedIndex ? "selected" : ""}`}
-              onClick={() => selectResult(result)}
-              onMouseEnter={() => setSelectedIndex(i)}
-            >
-              <span className="quick-open-item-name">{result.name}</span>
-              <span className="quick-open-item-path">
-                {getRelativePath(result.path, result.name)}
-              </span>
-            </div>
-          ))}
-          {query.trim() !== "" && results.length === 0 && (
+          {showingTypeSuggestions &&
+            results.map((item, i) => {
+              if (!isTypeSuggestion(item)) return null;
+              return (
+                <div
+                  key={item.name}
+                  className={`quick-open-item ${i === selectedIndex ? "selected" : ""}`}
+                  onClick={() => selectItem(item)}
+                  onMouseEnter={() => setSelectedIndex(i)}
+                >
+                  <span className="quick-open-item-name quick-open-type-hint">
+                    {item.name}
+                  </span>
+                  <span className="quick-open-item-path">Object type</span>
+                </div>
+              );
+            })}
+          {!showingTypeSuggestions &&
+            results.map((item, i) => {
+              if (isTypeSuggestion(item)) return null;
+              return (
+                <div
+                  key={item.path}
+                  className={`quick-open-item ${i === selectedIndex ? "selected" : ""}`}
+                  onClick={() => selectItem(item)}
+                  onMouseEnter={() => setSelectedIndex(i)}
+                >
+                  <span className="quick-open-item-name">{item.name}</span>
+                  <span className="quick-open-item-path">
+                    {getRelativePath(item.path, item.name)}
+                  </span>
+                </div>
+              );
+            })}
+          {noResults && (
             <div
               style={{
                 padding: "12px 16px",

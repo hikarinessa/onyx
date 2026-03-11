@@ -475,6 +475,11 @@
   color: var(--text-tertiary);
 }
 
+.quick-open-type-hint {
+  color: var(--text-accent, var(--accent));
+  font-weight: 500;
+}
+
 /* ── Sidebar layout: directories grow, bookmarks pinned at bottom ── */
 .sidebar {
   display: flex;
@@ -607,4 +612,135 @@
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   margin-top: 2px;
+}
+
+/* ── Context panel: property editor ── */
+.properties-list {
+  margin-top: 6px;
+}
+
+.properties-empty {
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.prop-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.prop-row + .prop-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.prop-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.prop-required {
+  color: var(--status-error);
+  margin-left: 2px;
+  font-size: 10px;
+}
+
+.prop-value {
+  min-width: 0;
+}
+
+.prop-input {
+  width: 100%;
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.prop-input:focus {
+  border-color: var(--accent);
+}
+
+.prop-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.prop-input-date,
+.prop-input-number {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* date input dark theme color-scheme */
+.prop-input-date::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+
+.prop-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235c5c68'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 20px;
+  cursor: pointer;
+}
+
+.prop-select option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.prop-checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.prop-checkbox {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.prop-multiselect {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prop-multiselect-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 1px 0;
+}
+
+.prop-multiselect-option input {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.prop-multiselect-option span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
