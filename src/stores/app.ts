@@ -42,6 +42,10 @@ interface AppState {
   wordCount: number;
   setCursorInfo: (line: number, col: number) => void;
   setWordCount: (count: number) => void;
+
+  // Bookmark refresh signal — bump to trigger re-fetch in Sidebar
+  bookmarkVersion: number;
+  bumpBookmarkVersion: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -104,4 +108,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   wordCount: 0,
   setCursorInfo: (line, col) => set({ cursorLine: line, cursorCol: col }),
   setWordCount: (count) => set({ wordCount: count }),
+
+  bookmarkVersion: 0,
+  bumpBookmarkVersion: () => set((s) => ({ bookmarkVersion: s.bookmarkVersion + 1 })),
 }));
