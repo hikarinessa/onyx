@@ -46,6 +46,15 @@ impl DirectoryManager {
         &self.directories
     }
 
+    /// Check if a path is under any registered directory
+    pub fn is_path_allowed(&self, path: &PathBuf) -> bool {
+        let canonical = match path.canonicalize() {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+        self.directories.iter().any(|d| canonical.starts_with(&d.path))
+    }
+
     pub fn register(&mut self, path: PathBuf, label: String, color: String) -> Result<RegisteredDirectory, String> {
         let canonical = path.canonicalize()
             .map_err(|e| format!("Invalid path: {}", e))?;
@@ -59,7 +68,7 @@ impl DirectoryManager {
             return Err("Directory already registered".into());
         }
 
-        let id = format!("{:x}", md5_hash(canonical.to_string_lossy().as_bytes()));
+        let id = format!("{:x}", fnv_hash(canonical.to_string_lossy().as_bytes()));
         let position = self.directories.len() as u32;
 
         let dir = RegisteredDirectory {
@@ -100,8 +109,8 @@ impl DirectoryManager {
     }
 }
 
-/// Simple hash for generating directory IDs
-fn md5_hash(data: &[u8]) -> u64 {
+/// FNV-1a hash for generating directory IDs
+fn fnv_hash(data: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325;
     for &byte in data {
         hash ^= byte as u64;
