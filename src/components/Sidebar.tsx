@@ -6,6 +6,12 @@ import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import { loadFileIntoCache } from "./Editor";
 
+interface BookmarkRecord {
+  path: string;
+  title: string | null;
+  label: string | null;
+}
+
 interface DirEntry {
   name: string;
   path: string;
@@ -215,12 +221,28 @@ function ContextMenu({
 export function Sidebar() {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const activeTabId = useAppStore((s) => s.activeTabId);
+  const tabs = useAppStore((s) => s.tabs);
   const openFile = useAppStore((s) => s.openFile);
   const [directories, setDirectories] = useState<RegisteredDirectory[]>([]);
   const [rootEntries, setRootEntries] = useState<Map<string, DirEntry[]>>(
     new Map()
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [bookmarks, setBookmarks] = useState<BookmarkRecord[]>([]);
+
+  const loadBookmarks = useCallback(async () => {
+    try {
+      const results = await invoke<BookmarkRecord[]>("get_bookmarks");
+      setBookmarks(results);
+    } catch {
+      // Command may not be registered yet during development
+      setBookmarks([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBookmarks();
+  }, [loadBookmarks, activeTabId]);
 
   const addDirectory = async () => {
     const selected = await open({ directory: true, multiple: false });
@@ -371,8 +393,19 @@ export function Sidebar() {
     }
   };
 
+  const handleBookmarkClick = async (bookmark: BookmarkRecord) => {
+    const name =
+      bookmark.title || bookmark.path.split("/").pop() || bookmark.path;
+    try {
+      await openFileInEditor(bookmark.path, name);
+    } catch (err) {
+      console.error("Failed to open bookmark:", err);
+    }
+  };
+
   return (
     <div className={`sidebar ${sidebarVisible ? "" : "collapsed"}`}>
+      <div className="sidebar-directories">
       {directories.length === 0 ? (
         <div className="sidebar-empty">
           <p
@@ -449,6 +482,47 @@ export function Sidebar() {
           </div>
         ))
       )}
+
+      </div>
+
+      {/* Bookmarks — pinned at bottom */}
+      <div className="sidebar-bookmarks">
+        <div className="sidebar-bookmarks-header">
+          <span>☆ Bookmarks</span>
+        </div>
+        {bookmarks.length === 0 ? (
+          <div
+            style={{
+              padding: "8px 12px",
+              color: "var(--text-tertiary)",
+              fontSize: "12px",
+            }}
+          >
+            No bookmarks yet
+          </div>
+        ) : (
+          bookmarks.map((bookmark) => {
+            const label =
+              bookmark.label ||
+              bookmark.title ||
+              bookmark.path.split("/").pop() ||
+              bookmark.path;
+            const activeTab = tabs.find((t) => t.id === activeTabId);
+            const isActive = activeTab?.path === bookmark.path;
+            return (
+              <div
+                key={bookmark.path}
+                className={`tree-item bookmark-item ${isActive ? "active" : ""}`}
+                style={{ "--indent": 0 } as React.CSSProperties}
+                onClick={() => handleBookmarkClick(bookmark)}
+              >
+                <span className="tree-item-icon">★</span>
+                <span className="tree-item-label">{label}</span>
+              </div>
+            );
+          })
+        )}
+      </div>
 
       {contextMenu && (
         <ContextMenu

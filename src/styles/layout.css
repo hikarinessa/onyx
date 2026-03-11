@@ -474,3 +474,137 @@
   font-size: 11px;
   color: var(--text-tertiary);
 }
+
+/* ── Sidebar layout: directories grow, bookmarks pinned at bottom ── */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-directories {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Bookmarks section */
+.sidebar-bookmarks {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sidebar-bookmarks-header {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bookmark-item {
+  /* inherits .tree-item styles */
+}
+
+/* ── Context panel: backlinks ── */
+.context-panel-bookmark-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.context-panel-bookmark-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-tertiary);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.context-panel-bookmark-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.context-panel-bookmark-btn.active {
+  color: var(--accent);
+}
+
+.context-panel-bookmark-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.context-panel-section-title.collapsible {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  margin-bottom: 0;
+}
+
+.context-panel-section-title.collapsible:hover {
+  color: var(--text-secondary);
+}
+
+.collapse-arrow {
+  font-size: 10px;
+  width: 12px;
+  display: inline-block;
+}
+
+.backlinks-list {
+  margin-top: 6px;
+}
+
+.backlinks-empty {
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.backlink-item {
+  padding: 8px 12px;
+  margin: 0 -12px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.backlink-item:hover {
+  background: var(--bg-hover);
+}
+
+.backlink-title {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.backlink-context {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.backlink-line {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}

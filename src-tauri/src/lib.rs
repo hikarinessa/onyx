@@ -89,6 +89,9 @@ pub fn run() {
             commands::search_files,
             commands::get_backlinks,
             commands::get_index_stats,
+            commands::resolve_wikilink,
+            commands::toggle_bookmark,
+            commands::get_bookmarks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -205,3 +205,67 @@ pub fn get_index_stats(
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.get_stats()
 }
+
+#[tauri::command]
+pub fn resolve_wikilink(
+    link: String,
+    context_path: String,
+    state: State<AppState>,
+) -> Result<Option<String>, String> {
+    let context = PathBuf::from(&context_path);
+    let context_dir = context.parent().map(PathBuf::from).unwrap_or_default();
+
+    // Step 1: Exact path match — link contains '/', treat as relative path
+    if link.contains('/') {
+        let candidate = context_dir.join(format!("{}.md", link));
+        if candidate.exists() {
+            return Ok(Some(candidate.to_string_lossy().to_string()));
+        }
+    }
+
+    // Step 2: Same directory as context file
+    let same_dir_candidate = context_dir.join(format!("{}.md", link));
+    if same_dir_candidate.exists() {
+        return Ok(Some(same_dir_candidate.to_string_lossy().to_string()));
+    }
+
+    // Step 3: Query SQLite by title or filename
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.resolve_by_title(&link)
+}
+
+#[tauri::command]
+pub fn toggle_bookmark(
+    path: String,
+    state: State<AppState>,
+) -> Result<bool, String> {
+    let file_path = PathBuf::from(&path);
+    validate_path(&file_path, &state)?;
+
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+
+    // Look up the file id
+    let file_id: Option<i64> = {
+        let conn_result = db.get_file_id(&path)?;
+        conn_result
+    };
+
+    let file_id = file_id.ok_or_else(|| format!("File not indexed: {}", path))?;
+
+    let currently_bookmarked = db.is_bookmarked(file_id)?;
+    if currently_bookmarked {
+        db.remove_bookmark(file_id)?;
+        Ok(false)
+    } else {
+        db.add_bookmark(file_id, None, None)?;
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+pub fn get_bookmarks(
+    state: State<AppState>,
+) -> Result<Vec<crate::db::BookmarkRecord>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_bookmarks()
+}

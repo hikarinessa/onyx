@@ -15,6 +15,9 @@ import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
 import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab } from "../extensions/frontmatter";
+import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
+import { tagExtension } from "../extensions/tags";
+import { openFileInEditor } from "../lib/openFile";
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -147,6 +150,8 @@ function buildExtensions(): Extension[] {
     EditorView.lineWrapping,
     updateListener,
     frontmatterExtension(),
+    wikilinkExtension(),
+    tagExtension(),
   ];
 }
 
@@ -222,9 +227,31 @@ export function Editor() {
       }
     });
     setFlushSaveHook(flushSaveForTab);
+
+    // Wire wikilink follow: resolve via Rust, then open the target file
+    wikilinkFollowRef.current = async (link: string) => {
+      const currentTab = useAppStore.getState().tabs.find(
+        (t) => t.id === activeTabIdBox.current
+      );
+      if (!currentTab) return;
+      try {
+        const resolved = await invoke<string | null>("resolve_wikilink", {
+          link,
+          contextPath: currentTab.path,
+        });
+        if (resolved) {
+          const name = resolved.split("/").pop() || resolved;
+          await openFileInEditor(resolved, name);
+        }
+      } catch (err) {
+        console.error("Failed to resolve wikilink:", err);
+      }
+    };
+
     return () => {
       setSnapshotEditorHook(() => {});
       setFlushSaveHook(async () => {});
+      wikilinkFollowRef.current = null;
     };
   }, []);
 
