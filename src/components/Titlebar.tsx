@@ -4,27 +4,18 @@ export function Titlebar() {
   const appWindow = getCurrentWindow();
 
   return (
-    <div className="titlebar">
+    <div className="titlebar" data-tauri-drag-region>
       <div className="titlebar-traffic-lights" />
-      <div className="titlebar-title">Onyx</div>
+      <div className="titlebar-title" data-tauri-drag-region>Onyx</div>
       <div className="titlebar-actions">
-        <button
-          onClick={() => appWindow.minimize()}
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
-          −
+        <button className="titlebar-btn" onClick={() => appWindow.minimize()}>
+          <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
         </button>
-        <button
-          onClick={() => appWindow.toggleMaximize()}
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
-          □
+        <button className="titlebar-btn" onClick={() => appWindow.toggleMaximize()}>
+          <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1"/></svg>
         </button>
-        <button
-          onClick={() => appWindow.close()}
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
-          ✕
+        <button className="titlebar-btn titlebar-btn-close" onClick={() => appWindow.close()}>
+          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.2"/></svg>
         </button>
       </div>
     </div>
