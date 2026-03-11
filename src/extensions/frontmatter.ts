@@ -70,19 +70,29 @@ const frontmatterDecorations = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations }
 );
 
-/** Auto-fold frontmatter on first load */
+/**
+ * Auto-fold frontmatter on first load only.
+ * Tracks which docs have already been auto-folded so tab switching
+ * (which calls view.setState and re-creates plugins) doesn't re-fold
+ * frontmatter the user manually unfolded.
+ */
+const autoFoldedDocs = new Set<string>();
+
 const frontmatterAutoFold = ViewPlugin.fromClass(
   class {
     constructor(view: EditorView) {
-      // Defer to next frame so the fold state is ready
+      // Use first ~100 chars as a doc identity key (cheap, unique enough per tab)
+      const docKey = view.state.doc.sliceString(0, 100);
+      if (autoFoldedDocs.has(docKey)) return;
+
       requestAnimationFrame(() => {
         const fm = findFrontmatter(view.state.doc);
         if (!fm) return;
-        // Fold from end of first line to end of closing delimiter
         const firstLine = view.state.doc.line(1);
         view.dispatch({
           effects: foldEffect.of({ from: firstLine.to, to: fm.to }),
         });
+        autoFoldedDocs.add(docKey);
       });
     }
   }

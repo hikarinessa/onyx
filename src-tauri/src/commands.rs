@@ -168,24 +168,14 @@ pub fn register_directory(
 pub fn unregister_directory(
     id: String,
     state: State<AppState>,
-    app: tauri::AppHandle,
 ) -> Result<(), String> {
     let mut dirs = state.directories.lock().map_err(|e| e.to_string())?;
     dirs.unregister(&id)?;
-
-    // Re-index after directory removal: spawn a full scan with remaining dirs
-    let dir_list: Vec<(String, PathBuf)> = dirs
-        .list()
-        .iter()
-        .map(|d| (d.id.clone(), d.path.clone()))
-        .collect();
     drop(dirs);
 
-    let db_ref = state.db.clone();
-    let app_ref = app.clone();
-    std::thread::spawn(move || {
-        crate::indexer::Indexer::full_scan(&dir_list, &db_ref, &app_ref);
-    });
+    // Remove indexed files for this directory (cascading deletes handle links/tags)
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.delete_by_dir(&id)?;
 
     Ok(())
 }

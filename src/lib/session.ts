@@ -48,14 +48,14 @@ export async function restoreSession(): Promise<void> {
     state.toggleContextPanel();
   }
 
-  // Open tabs in order
-  for (const tab of data.tabs) {
-    try {
-      await openFileInEditor(tab.path, tab.name);
-    } catch (err) {
-      console.error(`Failed to restore tab ${tab.path}:`, err);
-    }
-  }
+  // Open all tabs concurrently (each does one IPC read call)
+  await Promise.all(
+    data.tabs.map((tab) =>
+      openFileInEditor(tab.path, tab.name).catch((err) =>
+        console.error(`Failed to restore tab ${tab.path}:`, err)
+      )
+    )
+  );
 
   // Switch to the previously active tab
   if (data.activeTabPath) {
