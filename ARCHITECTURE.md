@@ -564,6 +564,54 @@ Pseudo-immediate saving, like Obsidian. No explicit save action needed for exist
 - Warns if other notes link to the file being deleted
 - Updates index immediately
 
+### File mutation coordination (`fileOps.ts`)
+
+A file's identity (its path) is cached in multiple locations simultaneously:
+
+| # | Location | Keyed by |
+|---|----------|----------|
+| 1 | Disk (filesystem) | Path |
+| 2 | SQLite index (`files` table) | `path` column |
+| 3 | Zustand tabs (`useAppStore`) | `tab.id` = `tab.path` |
+| 4 | CM6 `editorStateCache` | Map key = tab ID (path) |
+| 5 | CM6 `lastSavedContent` | Map key = tab ID (path) |
+| 6 | CM6 `scrollCache` | Map key = tab ID (path) |
+| 7 | Sidebar root entries | `loadDirectories()` result |
+| 8 | Sidebar subtree children | `TreeNode` local `useState` |
+
+Any file mutation (rename, move, delete) must update **all** of these atomically. A missed location causes stale references — clicking an old sidebar entry opens nothing, the tab shows the old name, or the editor serves cached content from a dead path.
+
+**Solution:** A centralized `src/lib/fileOps.ts` module that owns the full mutation sequence for each operation. Components call `fileOps.rename()`, never `invoke("rename_file")` directly.
+
+**Mutation sequence (rename example):**
+
+```
+1. Pre-flight     → validate (file exists, no name collision)
+2. Disk op        → invoke("rename_file", { oldPath, newPath })
+3. Index sync     → Rust command handles DB update internally
+4. Tab sync       → useAppStore.getState().updateTabPath(oldId, newPath, newName)
+5. Editor sync    → migrateEditorCache(oldPath, newPath)
+6. Tree refresh   → useAppStore.getState().bumpFileTreeVersion()
+```
+
+**Required infrastructure:**
+
+- `fileTreeVersion` counter in Zustand — sidebar subscribes and re-fetches children when bumped
+- `migrateEditorCache(oldPath, newPath)` — moves entries in `editorStateCache`, `lastSavedContent`, `scrollCache` from old key to new key
+- `clearEditorCache(path)` — removes all cached state for a deleted file
+- Sidebar `TreeNode` watches `fileTreeVersion` and re-expands when it changes
+
+**Tier 1 operations (must work before anything else):**
+
+| Op | Disk | DB | Tabs | Editor | Tree |
+|----|------|----|------|--------|------|
+| Create note | `write_file` | auto (watcher→indexer) | `openFile` | seed cache | bump version |
+| Rename file | `rename_file` | `db.rename_file` | `updateTabPath` | migrate cache | bump version |
+| Delete file | `trash_file` | `db.delete_file` | `closeTab` | clear cache | bump version |
+| Create folder | `create_folder` | — | — | — | bump version |
+| Rename folder | `rename_file` | bulk path update | migrate all affected | migrate all affected | bump version |
+| Delete folder | `trash_file` | bulk delete | close all affected | clear all affected | bump version |
+
 ---
 
 ## 9. Theming

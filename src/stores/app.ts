@@ -33,8 +33,10 @@ interface AppState {
   activeTabId: string | null;
   openFile: (path: string, name: string) => void;
   closeTab: (id: string) => Promise<void>;
+  removeTabs: (ids: string[]) => void;
   setActiveTab: (id: string) => void;
   setModified: (id: string, modified: boolean) => void;
+  updateTabPath: (id: string, newPath: string, newName: string) => void;
 
   // Status bar
   cursorLine: number;
@@ -46,6 +48,10 @@ interface AppState {
   // Bookmark refresh signal — bump to trigger re-fetch in Sidebar
   bookmarkVersion: number;
   bumpBookmarkVersion: () => void;
+
+  // File tree refresh signal — bump after any file mutation to refresh sidebar
+  fileTreeVersion: number;
+  bumpFileTreeVersion: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -95,11 +101,38 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ tabs: newTabs, activeTabId: newActive });
   },
 
+  /** Remove tabs without snapshot/flush — used when files are already gone (e.g. trash) */
+  removeTabs: (ids) => {
+    const idSet = new Set(ids);
+    const { tabs, activeTabId } = get();
+    const newTabs = tabs.filter((t) => !idSet.has(t.id));
+    let newActive = activeTabId;
+    if (newActive && idSet.has(newActive)) {
+      if (newTabs.length === 0) {
+        newActive = null;
+      } else {
+        const firstIdx = tabs.findIndex((t) => idSet.has(t.id));
+        newActive = newTabs[Math.min(firstIdx, newTabs.length - 1)].id;
+      }
+    }
+    set({ tabs: newTabs, activeTabId: newActive });
+  },
+
   setActiveTab: (id) => set({ activeTabId: id }),
 
   setModified: (id, modified) => {
     set((s) => ({
       tabs: s.tabs.map((t) => (t.id === id ? { ...t, modified } : t)),
+    }));
+  },
+
+  updateTabPath: (id, newPath, newName) => {
+    const { activeTabId } = get();
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === id ? { ...t, id: newPath, path: newPath, name: newName } : t
+      ),
+      activeTabId: activeTabId === id ? newPath : activeTabId,
     }));
   },
 
@@ -111,4 +144,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   bookmarkVersion: 0,
   bumpBookmarkVersion: () => set((s) => ({ bookmarkVersion: s.bookmarkVersion + 1 })),
+
+  fileTreeVersion: 0,
+  bumpFileTreeVersion: () => set((s) => ({ fileTreeVersion: s.fileTreeVersion + 1 })),
 }));

@@ -161,10 +161,72 @@ impl Database {
         Ok(file_id)
     }
 
+    pub fn rename_file(&self, old_path: &str, new_path: &str) -> Result<(), String> {
+        let new_title = std::path::Path::new(new_path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string());
+
+        self.conn.execute(
+            "UPDATE files SET path = ?1, title = ?2 WHERE path = ?3",
+            params![new_path, new_title, old_path],
+        ).map_err(|e| format!("Failed to rename file in index: {}", e))?;
+        Ok(())
+    }
+
+    /// Rename all files under a directory prefix (used for folder renames).
+    /// Updates paths and recalculates titles for all affected files.
+    pub fn rename_dir_prefix(&self, old_prefix: &str, new_prefix: &str) -> Result<u32, String> {
+        let old_p = if old_prefix.ends_with('/') { old_prefix.to_string() } else { format!("{}/", old_prefix) };
+        let new_p = if new_prefix.ends_with('/') { new_prefix.to_string() } else { format!("{}/", new_prefix) };
+
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+
+        let count = tx.execute(
+            "UPDATE files SET path = ?1 || substr(path, ?2), title = NULL WHERE path LIKE ?3",
+            params![new_p, old_p.len() as i64 + 1, format!("{}%", old_p)],
+        ).map_err(|e| format!("Failed to rename directory prefix: {}", e))?;
+
+        // Recalculate titles for affected files
+        let mut stmt = tx.prepare(
+            "SELECT id, path FROM files WHERE path LIKE ?1"
+        ).map_err(|e| format!("Failed to prepare title update: {}", e))?;
+
+        let rows: Vec<(i64, String)> = stmt.query_map(params![format!("{}%", new_p)], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        }).map_err(|e| format!("Failed to query files: {}", e))?
+          .filter_map(|r| r.ok())
+          .collect();
+        drop(stmt);
+
+        for (id, path) in &rows {
+            let title = std::path::Path::new(path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string());
+            tx.execute(
+                "UPDATE files SET title = ?1 WHERE id = ?2",
+                params![title, id],
+            ).map_err(|e| format!("Failed to update title: {}", e))?;
+        }
+
+        tx.commit().map_err(|e| format!("Failed to commit dir rename: {}", e))?;
+        Ok(count as u32)
+    }
+
     pub fn delete_file(&self, path: &str) -> Result<(), String> {
         self.conn.execute("DELETE FROM files WHERE path = ?1", params![path])
             .map_err(|e| format!("Failed to delete file: {}", e))?;
         Ok(())
+    }
+
+    /// Delete all files whose path starts with a given prefix (used for folder deletes).
+    pub fn delete_by_prefix(&self, prefix: &str) -> Result<u32, String> {
+        let pattern = if prefix.ends_with('/') { format!("{}%", prefix) } else { format!("{}/%", prefix) };
+        let count = self.conn.execute(
+            "DELETE FROM files WHERE path LIKE ?1",
+            params![pattern],
+        ).map_err(|e| format!("Failed to delete files by prefix: {}", e))?;
+        Ok(count as u32)
     }
 
     pub fn delete_by_dir(&self, dir_id: &str) -> Result<u32, String> {
