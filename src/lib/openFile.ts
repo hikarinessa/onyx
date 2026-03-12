@@ -6,15 +6,21 @@ import { recordRecentDoc } from "./recentDocs";
 /**
  * Open a file in the editor. If the tab already exists, switch to it.
  * Otherwise, read the file content, cache it, and open a new tab.
- * Pushes current location to navigation back stack.
+ * Pushes current location to navigation back stack unless skipNav is true.
  */
-export async function openFileInEditor(path: string, name: string): Promise<void> {
+export async function openFileInEditor(
+  path: string,
+  name: string,
+  opts?: { skipNav?: boolean },
+): Promise<void> {
   recordRecentDoc(path, name);
 
   // Push current tab to nav back stack before navigating
-  const { activeTabId, pushNav } = useAppStore.getState();
-  if (activeTabId && activeTabId !== path) {
-    pushNav(activeTabId, { path: activeTabId, cursor: 0 });
+  if (!opts?.skipNav) {
+    const { activeTabId, pushNav } = useAppStore.getState();
+    if (activeTabId && activeTabId !== path) {
+      pushNav(activeTabId, { path: activeTabId, cursor: 0 });
+    }
   }
 
   // Already open? Just switch.

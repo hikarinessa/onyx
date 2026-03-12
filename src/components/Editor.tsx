@@ -135,6 +135,12 @@ function buildExtensions(): Extension[] {
               const fixed = autoFixOnSave(content);
               await invoke("write_file", { path: tab.path, content: fixed });
               lastSavedContent.set(tabId, fixed);
+              // If autofix changed content, sync the editor state
+              if (fixed !== content && _liveViewRef && activeTabIdBox.current === tabId) {
+                _liveViewRef.dispatch({
+                  changes: { from: 0, to: _liveViewRef.state.doc.length, insert: fixed },
+                });
+              }
               setModified(tabId, false);
               useAppStore.getState().bumpSaveVersion();
             } catch (err) {
@@ -276,8 +282,9 @@ export async function flushSaveForTab(id: string): Promise<void> {
     const tab = useAppStore.getState().tabs.find((t) => t.id === id);
     if (tab) {
       try {
-        await invoke("write_file", { path: tab.path, content });
-        lastSavedContent.set(id, content);
+        const fixed = autoFixOnSave(content);
+        await invoke("write_file", { path: tab.path, content: fixed });
+        lastSavedContent.set(id, fixed);
         useAppStore.getState().setModified(id, false);
       } catch (err) {
         console.error("Failed to flush save for tab:", err);

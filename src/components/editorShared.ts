@@ -2,7 +2,7 @@ import { EditorState, type Extension } from "@codemirror/state";
 
 /**
  * Shared editor state: caches and extension builder reference.
- * Split out so both Editor.tsx and EditorPane.tsx can access them.
+ * Split out from Editor.tsx for use by external consumers (e.g. openFile).
  */
 
 /** Full EditorState snapshots — preserves undo history, selections, etc. */

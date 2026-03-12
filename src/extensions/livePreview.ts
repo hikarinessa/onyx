@@ -88,9 +88,26 @@ function buildPreviewDecorations(view: EditorView): DecorationSet {
   // Find the cursor line (focus line shows raw markdown)
   const cursorLine = doc.lineAt(view.state.selection.main.head).number;
 
+  // Determine frontmatter end line (scan from top)
+  let fmEnd = 0;
+  if (doc.lines >= 2 && doc.line(1).text.trim() === "---") {
+    for (let j = 2; j <= doc.lines; j++) {
+      if (doc.line(j).text.trim() === "---") { fmEnd = j; break; }
+    }
+  }
+
   for (const { from, to } of view.visibleRanges) {
     const startLine = doc.lineAt(from).number;
     const endLine = doc.lineAt(to).number;
+
+    // Pre-scan from line 1 to first visible line for code block state
+    let inCodeBlock = false;
+    for (let j = 1; j < startLine; j++) {
+      if (j <= fmEnd) continue; // skip frontmatter lines
+      if (doc.line(j).text.trimStart().startsWith("```")) {
+        inCodeBlock = !inCodeBlock;
+      }
+    }
 
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
@@ -101,19 +118,14 @@ function buildPreviewDecorations(view: EditorView): DecorationSet {
       const text = line.text;
 
       // Skip frontmatter
-      if (i === 1 && text.trim() === "---") {
-        // Skip until closing ---
-        let j = i + 1;
-        while (j <= endLine) {
-          if (doc.line(j).text.trim() === "---") break;
-          j++;
-        }
-        i = j;
+      if (fmEnd > 0 && i <= fmEnd) continue;
+
+      // Track code blocks
+      if (text.trimStart().startsWith("```")) {
+        inCodeBlock = !inCodeBlock;
         continue;
       }
-
-      // Skip code blocks
-      if (text.trimStart().startsWith("```")) continue;
+      if (inCodeBlock) continue;
 
       // ── Headings ──
       const headingMatch = text.match(HEADING_RE);
@@ -132,7 +144,7 @@ function buildPreviewDecorations(view: EditorView): DecorationSet {
           Decoration.line({ class: `cm-preview-heading cm-preview-h${level}` })
         );
         // Still process inline formatting on heading lines
-        addInlineDecorations(builder, line, text, headingMatch[0].length);
+        addInlineDecorations(builder, line, text);
         continue;
       }
 
@@ -160,7 +172,7 @@ function buildPreviewDecorations(view: EditorView): DecorationSet {
       }
 
       // ── Inline decorations ──
-      addInlineDecorations(builder, line, text, 0);
+      addInlineDecorations(builder, line, text);
     }
   }
 
@@ -172,7 +184,6 @@ function addInlineDecorations(
   builder: RangeSetBuilder<Decoration>,
   line: { from: number; to: number },
   text: string,
-  _offset: number,
 ): void {
   // Collect all inline ranges to avoid overlapping decorations
   const ranges: { from: number; to: number; deco: Decoration }[] = [];

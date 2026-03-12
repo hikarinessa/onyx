@@ -134,7 +134,7 @@ function registerCommands() {
       if (!activeTabId) return;
       const entry = navigateBack(activeTabId);
       if (entry) {
-        await openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path);
+        await openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true });
       }
     },
   });
@@ -148,7 +148,7 @@ function registerCommands() {
       if (!activeTabId) return;
       const entry = navigateForward(activeTabId);
       if (entry) {
-        await openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path);
+        await openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true });
       }
     },
   });
@@ -229,7 +229,7 @@ export default function App() {
           const { activeTabId: id, navigateBack } = store();
           if (id) {
             const entry = navigateBack(id);
-            if (entry) openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path);
+            if (entry) openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true });
           }
           break;
         }
@@ -237,7 +237,7 @@ export default function App() {
           const { activeTabId: id2, navigateForward } = store();
           if (id2) {
             const entry = navigateForward(id2);
-            if (entry) openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path);
+            if (entry) openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true });
           }
           break;
         }
