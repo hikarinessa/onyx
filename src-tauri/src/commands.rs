@@ -63,6 +63,11 @@ pub fn list_directory(path: String, state: State<AppState>) -> Result<Vec<DirEnt
 
             let path = entry.path();
             let is_dir = path.is_dir();
+
+            // Only show directories and .md files
+            if !is_dir && path.extension().and_then(|e| e.to_str()) != Some("md") {
+                return None;
+            }
             let extension = if is_dir {
                 None
             } else {
