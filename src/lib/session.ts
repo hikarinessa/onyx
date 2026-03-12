@@ -13,6 +13,7 @@ interface SessionData {
   activeTabPath: string | null;
   sidebarVisible: boolean;
   contextPanelVisible: boolean;
+  collapsedDirs?: string[];
   themeId?: string;
   timestamp: number;
 }
@@ -24,6 +25,7 @@ function getSessionData(): SessionData {
     activeTabPath: state.activeTabId,
     sidebarVisible: state.sidebarVisible,
     contextPanelVisible: state.contextPanelVisible,
+    collapsedDirs: state.collapsedDirs,
     themeId: getActiveThemeId(),
     timestamp: Date.now(),
   };
@@ -102,6 +104,13 @@ export async function restoreSession(): Promise<void> {
   }
   if (data.contextPanelVisible !== state.contextPanelVisible) {
     state.toggleContextPanel();
+  }
+
+  // Restore collapsed directories
+  if (data.collapsedDirs && data.collapsedDirs.length > 0) {
+    for (const dirId of data.collapsedDirs) {
+      state.toggleDirCollapsed(dirId);
+    }
   }
 
   // Open all tabs concurrently (each does one IPC read call)
