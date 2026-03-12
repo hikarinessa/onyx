@@ -9,6 +9,8 @@ import { QuickOpen } from "./components/QuickOpen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useAppStore } from "./stores/app";
 import { restoreSession, initSessionPersistence } from "./lib/session";
+import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
+import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
 
 export default function App() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
@@ -23,6 +25,12 @@ export default function App() {
       console.error("Failed to restore session:", err)
     );
     const cleanup = initSessionPersistence();
+
+    // macOS: enable native rounded corners + traffic lights
+    enableModernWindowStyle({ cornerRadius: 10, offsetX: -6, offsetY: -6 }).catch(
+      (err) => console.error("Failed to enable rounded corners:", err)
+    );
+
     return cleanup;
   }, []);
 
@@ -54,6 +62,22 @@ export default function App() {
       if (meta && !alt && e.key === "o") {
         e.preventDefault();
         setQuickOpenVisible((v) => !v);
+      }
+
+      // Cmd+Shift+D — open today's daily note
+      if (meta && e.shiftKey && (e.key === "D" || e.key === "d")) {
+        e.preventDefault();
+        const todayISO = new Date().toISOString().split("T")[0];
+        createOrOpenPeriodicNote("daily", todayISO).catch((err) => {
+          const msg = String(err);
+          if (msg.includes("not configured") || msg.includes("not enabled")) {
+            window.alert(
+              "Daily notes are not configured.\n\nCreate ~/.onyx/periodic-notes.json with your settings.\nSee ARCHITECTURE.md for the config format."
+            );
+          } else {
+            console.error("Failed to open today's note:", err);
+          }
+        });
       }
     };
 

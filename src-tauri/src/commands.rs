@@ -1,10 +1,12 @@
 use crate::AppState;
+use chrono::{Datelike, NaiveDate};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::State;
 
 use crate::object_types::{self, ObjectType};
+use crate::periodic;
 
 const IGNORED_NAMES: &[&str] = &[".obsidian", ".git", "node_modules", ".DS_Store", ".trash"];
 
@@ -607,4 +609,183 @@ pub fn toggle_global_bookmark(path: String, label: String) -> Result<bool, Strin
 pub fn is_global_bookmarked(path: String) -> Result<bool, String> {
     let bookmarks = read_global_bookmarks_file()?;
     Ok(bookmarks.iter().any(|b| b.path == path))
+}
+
+fn days_in_month_count(year: i32, month: u32) -> u32 {
+    if month == 12 {
+        NaiveDate::from_ymd_opt(year + 1, 1, 1)
+    } else {
+        NaiveDate::from_ymd_opt(year, month + 1, 1)
+    }
+    .and_then(|d| d.pred_opt())
+    .map(|d| d.day())
+    .unwrap_or(30)
+}
+
+// ── Periodic Notes ──
+
+#[derive(Debug, Serialize)]
+pub struct CreatePeriodicNoteResult {
+    pub path: String,
+    pub created: bool,
+    pub cursor_offset: Option<usize>,
+}
+
+#[tauri::command]
+pub fn get_periodic_config() -> Result<periodic::PeriodicConfig, String> {
+    periodic::load_config()
+}
+
+#[tauri::command]
+pub fn save_periodic_config(config: periodic::PeriodicConfig) -> Result<(), String> {
+    periodic::save_config(&config)
+}
+
+#[tauri::command]
+pub fn create_periodic_note(
+    period_type: String,
+    date: String,
+    state: State<AppState>,
+) -> Result<CreatePeriodicNoteResult, String> {
+    let parsed_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d")
+        .map_err(|e| format!("Invalid date '{}': {}", date, e))?;
+
+    let config = periodic::load_config()?;
+
+    let period_config = match period_type.as_str() {
+        "daily" => config.daily,
+        "weekly" => config.weekly,
+        "monthly" => config.monthly,
+        _ => return Err(format!("Unknown period type: {}", period_type)),
+    }
+    .ok_or_else(|| format!("{} notes not configured", period_type))?;
+
+    if !period_config.enabled {
+        return Err(format!("{} notes are not enabled", period_type));
+    }
+
+    if period_config.directory_id.is_empty() {
+        return Err("Periodic notes not configured — please set a directory".to_string());
+    }
+
+    // Look up the registered directory
+    let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+    let dir = dirs
+        .list()
+        .iter()
+        .find(|d| d.id == period_config.directory_id)
+        .ok_or_else(|| "Configured directory not found — it may have been removed".to_string())?;
+
+    let dir_id = dir.id.clone();
+    let dir_path = dir.path.clone();
+    drop(dirs);
+
+    let (relative_path, title) = periodic::generate_note_path(&period_config.format, parsed_date);
+    let full_path = dir_path.join(&relative_path);
+
+    // If file already exists, just return the path
+    if full_path.exists() {
+        return Ok(CreatePeriodicNoteResult {
+            path: full_path.to_string_lossy().to_string(),
+            created: false,
+            cursor_offset: None,
+        });
+    }
+
+    // Create parent directories
+    if let Some(parent) = full_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directories: {}", e))?;
+    }
+
+    // Read template if configured
+    let (content, cursor_offset) = if let Some(ref template_path) = period_config.template {
+        let template_full_path = dir_path.join(template_path);
+        if template_full_path.exists() {
+            let template_content = std::fs::read_to_string(&template_full_path)
+                .map_err(|e| format!("Failed to read template: {}", e))?;
+            periodic::render_template(&template_content, parsed_date, &title)?
+        } else {
+            // Template doesn't exist — create with minimal default
+            (format!("# {}\n\n", title), None)
+        }
+    } else {
+        (format!("# {}\n\n", title), None)
+    };
+
+    // Atomic write
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_path = full_path
+        .parent()
+        .unwrap()
+        .join(format!(".onyx-tmp-{}-{}", std::process::id(), counter));
+
+    std::fs::write(&temp_path, &content)
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    // Mark self-write before rename
+    {
+        let watcher_lock = state.watcher.lock().map_err(|e| e.to_string())?;
+        if let Some(ref fw) = *watcher_lock {
+            fw.mark_self_write(&full_path);
+        }
+    }
+
+    std::fs::rename(&temp_path, &full_path).map_err(|e| {
+        let _ = std::fs::remove_file(&temp_path);
+        format!("Failed to create periodic note: {}", e)
+    })?;
+
+    // Index the new file immediately so it shows up in search/backlinks
+    let path_str = full_path.to_string_lossy().to_string();
+    {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let _ = db.upsert_file(&path_str, &dir_id, Some(&title), None, None);
+    }
+
+    Ok(CreatePeriodicNoteResult {
+        path: path_str,
+        created: true,
+        cursor_offset,
+    })
+}
+
+#[tauri::command]
+pub fn get_dates_with_notes(
+    year: i32,
+    month: u32,
+    state: State<AppState>,
+) -> Result<Vec<u32>, String> {
+    let config = periodic::load_config()?;
+
+    let daily_config = match &config.daily {
+        Some(c) if c.enabled && !c.directory_id.is_empty() => c,
+        _ => return Ok(Vec::new()),
+    };
+
+    // Look up the directory path
+    let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+    let dir = match dirs.list().iter().find(|d| d.id == daily_config.directory_id) {
+        Some(d) => d,
+        None => return Ok(Vec::new()),
+    };
+
+    let dir_path = dir.path.to_string_lossy().to_string();
+    drop(dirs);
+
+    // Generate expected paths for each day and check against indexed files
+    let days_in_month = days_in_month_count(year, month);
+    let mut days = Vec::new();
+
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    for day in 1..=days_in_month {
+        if let Some(date) = NaiveDate::from_ymd_opt(year, month, day) {
+            let (relative, _) = periodic::generate_note_path(&daily_config.format, date);
+            let full_path = format!("{}/{}", dir_path, relative);
+            if let Ok(Some(_)) = db.get_file_id(&full_path) {
+                days.push(day);
+            }
+        }
+    }
+    Ok(days)
 }

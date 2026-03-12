@@ -3,6 +3,8 @@ mod db;
 mod dirs;
 mod indexer;
 mod object_types;
+mod periodic;
+mod plugins;
 mod watcher;
 
 use std::sync::{Arc, Mutex};
@@ -108,6 +110,13 @@ pub fn run() {
             commands::get_global_bookmarks,
             commands::toggle_global_bookmark,
             commands::is_global_bookmarked,
+            commands::get_periodic_config,
+            commands::save_periodic_config,
+            commands::create_periodic_note,
+            commands::get_dates_with_notes,
+            plugins::mac_rounded_corners::enable_rounded_corners,
+            plugins::mac_rounded_corners::enable_modern_window_style,
+            plugins::mac_rounded_corners::reposition_traffic_lights,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

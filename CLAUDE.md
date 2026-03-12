@@ -17,7 +17,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 4 (Typed Objects & Properties):** Complete
 - **Phase 4.5 (File Operations & Cache Integrity):** Complete
 - **Phase 4.6 (Hardening):** Complete
-- **Phase 5 (Periodic Notes & Calendar):** Upcoming
+- **Phase 5 (Periodic Notes & Calendar):** Complete
 - **Phase 6 (Command Palette, Theming & Editor Polish):** Planned
 - **Phase 7 (Live Preview & Split Panes):** Planned
 - **Phase 8 (Blocks, Tables & Power Editing):** Planned
@@ -40,7 +40,8 @@ src/                          # Frontend (React + TypeScript)
 │   ├── SidebarContextMenu.tsx#  130 lines — Right-click context menu for file tree
 │   ├── ErrorBoundary.tsx     #   35 lines — React error boundary (wraps sidebar, editor, context panel)
 │   ├── Editor.tsx            #  456 lines — CM6 editor with state caching, cache migration exports
-│   ├── ContextPanel.tsx      #  493 lines — Backlinks, property editor (typed + untyped)
+│   ├── ContextPanel.tsx      #  560 lines — Calendar, backlinks, properties, recent docs
+│   ├── Calendar.tsx          #  130 lines — Month-grid calendar widget
 │   ├── StatusBar.tsx         #   27 lines — Cursor position, word count
 │   └── QuickOpen.tsx         #  256 lines — Cmd+O fuzzy search + type: prefix queries
 ├── extensions/
@@ -49,7 +50,9 @@ src/                          # Frontend (React + TypeScript)
 │   └── tags.ts               #   98 lines — CM6: #tag syntax highlighting
 ├── lib/
 │   ├── fileOps.ts            #  118 lines — Centralized file mutations (create/rename/delete)
-│   ├── openFile.ts           #   20 lines — Shared open-file-in-editor utility
+│   ├── openFile.ts           #   22 lines — Shared open-file-in-editor utility
+│   ├── periodicNotes.ts      #   32 lines — Create/open periodic notes utility
+│   ├── recentDocs.ts         #   50 lines — Recent documents tracking (localStorage ring buffer)
 │   └── session.ts            #   85 lines — Tab/panel state persistence (~/.onyx/session.json via Rust)
 └── styles/
     ├── reset.css             #   56 lines — CSS reset
@@ -67,7 +70,8 @@ src-tauri/                    # Backend (Rust)
     ├── dirs.rs               #  117 lines — Directory registration (~/.onyx/directories.json)
     ├── indexer.rs            #  224 lines — Background indexer (frontmatter, wikilinks, tags)
     ├── watcher.rs            #  173 lines — File watcher with debounced reindex
-    └── object_types.rs       #  135 lines — Type registry (~/.onyx/object-types.json)
+    ├── object_types.rs       #  135 lines — Type registry (~/.onyx/object-types.json)
+    └── periodic.rs           #  320 lines — Periodic notes config, template engine, date formatting
 ```
 
 **Total:** ~5,700 lines (2,850 TS/TSX + 1,800 Rust + 930 CSS)
@@ -133,6 +137,14 @@ src-tauri/                    # Backend (Rust)
 | `get_file_frontmatter` | `(path: String) → Option<String>` (JSON) |
 | `update_frontmatter` | `(path: String, frontmatterJson: String) → ()` |
 
+### Periodic Notes
+| Command | Signature |
+|---------|-----------|
+| `get_periodic_config` | `() → PeriodicConfig` |
+| `save_periodic_config` | `(config: PeriodicConfig) → ()` |
+| `create_periodic_note` | `(periodType: String, date: String) → CreatePeriodicNoteResult` |
+| `get_dates_with_notes` | `(year: i32, month: u32) → Vec<u32>` — day numbers with notes |
+
 ### Session
 | Command | Signature |
 |---------|-----------|
@@ -150,6 +162,7 @@ npx tsc --noEmit         # TypeScript type check
 
 ## Gotchas
 
+- **Kill `cargo tauri dev` before making Rust changes.** The dev server watches Rust files and auto-rebuilds + relaunches the app on every save, causing repeated open/close cycles during multi-file edits. Stop the dev process first, make all backend changes, verify with `cargo check`, then relaunch once when ready to test.
 - `getCurrentWindow()` must be called lazily (in handlers), not at module/component level
 - `sharedExtensions` initialized once on first Editor mount — `loadFileIntoCache` before mount creates bare states (auto-detected and rebuilt)
 - File watcher has `Drop` impl that signals shutdown and joins the debounce thread

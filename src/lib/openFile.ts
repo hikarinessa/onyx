@@ -1,12 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { loadFileIntoCache } from "../components/Editor";
+import { recordRecentDoc } from "./recentDocs";
 
 /**
  * Open a file in the editor. If the tab already exists, switch to it.
  * Otherwise, read the file content, cache it, and open a new tab.
  */
 export async function openFileInEditor(path: string, name: string): Promise<void> {
+  recordRecentDoc(path, name);
+
   // Already open? Just switch.
   const existing = useAppStore.getState().tabs.find((t) => t.path === path);
   if (existing) {

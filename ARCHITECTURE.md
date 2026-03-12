@@ -1017,6 +1017,14 @@ Decisions made during the design phase:
 
 17. ~~**Session persistence uses localStorage.**~~ (See Resolved above)
 
+25. **`periodicNotes.ts` bypasses `fileOps.ts`.** Periodic note creation goes through a dedicated Rust command; the frontend manually calls `loadFileIntoCache` + `openFile` + `bumpFileTreeVersion` instead of routing through `fileOps.ts`. Add an `openCreatedFile(path)` helper to `fileOps.ts` and route `periodicNotes.ts` through it.
+
+26. **Recent docs use localStorage, not Rust persistence.** `recentDocs.ts` stores 20 paths in localStorage. This is a third persistence layer alongside Rust IPC and the session localStorage backup. If recent docs grow in importance, migrate to `~/.onyx/state.json` via Rust.
+
+27. **`useToday` timer drift on sleep/wake.** The midnight timer in Calendar uses `setTimeout` which can drift if the machine sleeps before midnight. Consequence is a stale "today" highlight until next month navigation. Low impact.
+
+28. **`get_dates_with_notes` runs 31 individual queries.** Each is O(1) via unique index on `files.path`. If this becomes a bottleneck, rewrite as a single `WHERE path IN (...)` query.
+
 18. **Module-level mutable refs not cleared on session reload.** `activeTabIdBox`, `_liveViewRef`, `editorStateCache`, `scrollCache`, `lastSavedContent` in Editor.tsx are module-level maps that persist across React hot-reloads in dev mode. Not a problem in production (full page reload clears them), but could cause stale state during development.
 
 19. **QuickOpen results capped at 10 with no pagination.** `QuickOpen.tsx` hardcodes a 10-result limit. For vaults with many similarly-named files, the desired result may not appear. Add a "show more" mechanism or increase the limit.

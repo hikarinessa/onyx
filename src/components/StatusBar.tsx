@@ -9,7 +9,7 @@ export function StatusBar() {
   return (
     <div className="statusbar">
       <div className="statusbar-left">
-        <span>Onyx v0.1.0</span>
+        <span>Onyx v{__APP_VERSION__}</span>
       </div>
       <div className="statusbar-right">
         {activeTabId && (
