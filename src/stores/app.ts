@@ -42,8 +42,27 @@ interface AppState {
   cursorLine: number;
   cursorCol: number;
   wordCount: number;
+  charCount: number;
   setCursorInfo: (line: number, col: number) => void;
   setWordCount: (count: number) => void;
+  setCharCount: (count: number) => void;
+
+  // Tab reorder
+  reorderTabs: (fromIndex: number, toIndex: number) => void;
+
+  // Collapsed directories
+  collapsedDirs: string[];
+  toggleDirCollapsed: (dirId: string) => void;
+
+  // Quick open
+  quickOpenVisible: boolean;
+  quickOpenMode: "open" | "insert-wikilink";
+  setQuickOpenVisible: (v: boolean) => void;
+  setQuickOpenMode: (mode: "open" | "insert-wikilink") => void;
+
+  // Command palette
+  commandPaletteVisible: boolean;
+  setCommandPaletteVisible: (v: boolean) => void;
 
   // Bookmark refresh signal — bump to trigger re-fetch in Sidebar
   bookmarkVersion: number;
@@ -139,8 +158,35 @@ export const useAppStore = create<AppState>((set, get) => ({
   cursorLine: 1,
   cursorCol: 1,
   wordCount: 0,
+  charCount: 0,
   setCursorInfo: (line, col) => set({ cursorLine: line, cursorCol: col }),
   setWordCount: (count) => set({ wordCount: count }),
+  setCharCount: (count) => set({ charCount: count }),
+
+  reorderTabs: (fromIndex, toIndex) => {
+    const { tabs } = get();
+    const newTabs = [...tabs];
+    const [moved] = newTabs.splice(fromIndex, 1);
+    newTabs.splice(toIndex, 0, moved);
+    set({ tabs: newTabs });
+  },
+
+  collapsedDirs: [],
+  toggleDirCollapsed: (dirId) => set((s) => {
+    const idx = s.collapsedDirs.indexOf(dirId);
+    if (idx >= 0) {
+      return { collapsedDirs: s.collapsedDirs.filter((d) => d !== dirId) };
+    }
+    return { collapsedDirs: [...s.collapsedDirs, dirId] };
+  }),
+
+  quickOpenVisible: false,
+  quickOpenMode: "open",
+  setQuickOpenVisible: (v) => set({ quickOpenVisible: v }),
+  setQuickOpenMode: (mode) => set({ quickOpenMode: mode }),
+
+  commandPaletteVisible: false,
+  setCommandPaletteVisible: (v) => set({ commandPaletteVisible: v }),
 
   bookmarkVersion: 0,
   bumpBookmarkVersion: () => set((s) => ({ bookmarkVersion: s.bookmarkVersion + 1 })),

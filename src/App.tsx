@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Titlebar } from "./components/Titlebar";
 import { TabBar } from "./components/TabBar";
 import { Sidebar } from "./components/Sidebar";
@@ -6,27 +6,173 @@ import { Editor } from "./components/Editor";
 import { ContextPanel } from "./components/ContextPanel";
 import { StatusBar } from "./components/StatusBar";
 import { QuickOpen } from "./components/QuickOpen";
+import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useAppStore } from "./stores/app";
 import { restoreSession, initSessionPersistence } from "./lib/session";
 import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
+import { registerCommand } from "./lib/commands";
+import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
+import { createNewNote } from "./lib/fileOps";
+import { listen } from "@tauri-apps/api/event";
 import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
 
-export default function App() {
-  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
-  const toggleContextPanel = useAppStore((s) => s.toggleContextPanel);
-  const closeTab = useAppStore((s) => s.closeTab);
-  const activeTabId = useAppStore((s) => s.activeTabId);
-  const [quickOpenVisible, setQuickOpenVisible] = useState(false);
+// ---------------------------------------------------------------------------
+// Shared action functions — called by commands, menu events, and shortcuts
+// ---------------------------------------------------------------------------
 
-  // Restore session on mount + start periodic saving
+function toggleQuickOpen() {
+  const s = useAppStore.getState();
+  s.setQuickOpenVisible(!s.quickOpenVisible);
+}
+
+function openQuickOpenForWikilink() {
+  const s = useAppStore.getState();
+  s.setQuickOpenMode("insert-wikilink");
+  s.setQuickOpenVisible(true);
+}
+
+function openTodayNote() {
+  const todayISO = new Date().toISOString().split("T")[0];
+  createOrOpenPeriodicNote("daily", todayISO).catch((err) => {
+    const msg = String(err);
+    if (msg.includes("not configured") || msg.includes("not enabled")) {
+      window.alert(
+        "Daily notes are not configured.\n\nCreate ~/.onyx/periodic-notes.json with your settings.\nSee ARCHITECTURE.md for the config format."
+      );
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Command registration — single source of truth for all app actions
+// ---------------------------------------------------------------------------
+
+function registerCommands() {
+  const store = useAppStore.getState;
+
+  registerCommand({
+    id: "view.toggleSidebar",
+    label: "Toggle Sidebar",
+    shortcut: "Cmd+Opt+[",
+    category: "View",
+    execute: () => store().toggleSidebar(),
+  });
+  registerCommand({
+    id: "view.toggleContextPanel",
+    label: "Toggle Context Panel",
+    shortcut: "Cmd+Opt+]",
+    category: "View",
+    execute: () => store().toggleContextPanel(),
+  });
+  registerCommand({
+    id: "file.quickOpen",
+    label: "Quick Open",
+    shortcut: "Cmd+O",
+    category: "File",
+    execute: toggleQuickOpen,
+  });
+  registerCommand({
+    id: "file.newNote",
+    label: "New Note",
+    shortcut: "Cmd+N",
+    category: "File",
+    execute: () => createNewNote(),
+  });
+  registerCommand({
+    id: "file.closeTab",
+    label: "Close Tab",
+    shortcut: "Cmd+W",
+    category: "File",
+    execute: () => {
+      const { activeTabId, closeTab } = store();
+      if (activeTabId) closeTab(activeTabId);
+    },
+  });
+  registerCommand({
+    id: "edit.insertWikilink",
+    label: "Insert Wikilink",
+    shortcut: "Cmd+K",
+    category: "Edit",
+    execute: openQuickOpenForWikilink,
+  });
+  registerCommand({
+    id: "navigate.today",
+    label: "Open Today's Note",
+    shortcut: "Cmd+Shift+D",
+    category: "Navigate",
+    execute: openTodayNote,
+  });
+
+  for (const theme of getAvailableThemes()) {
+    registerCommand({
+      id: `theme.${theme.id}`,
+      label: `Theme: ${theme.name}`,
+      category: "Appearance",
+      execute: () => applyTheme(theme.id),
+    });
+  }
+
+  registerCommand({
+    id: "view.commandPalette",
+    label: "Command Palette",
+    shortcut: "Cmd+P",
+    category: "View",
+    execute: () => store().setCommandPaletteVisible(true),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// App component
+// ---------------------------------------------------------------------------
+
+export default function App() {
+  // Register commands, restore theme, listen for native menu events
+  useEffect(() => {
+    registerCommands();
+    restoreTheme();
+
+    const unlisten = listen<string>("menu:action", (event) => {
+      const store = useAppStore.getState;
+      switch (event.payload) {
+        case "new_note":
+          createNewNote();
+          break;
+        case "quick_open":
+          toggleQuickOpen();
+          break;
+        case "close_tab": {
+          const { activeTabId, closeTab } = store();
+          if (activeTabId) closeTab(activeTabId);
+          break;
+        }
+        case "toggle_sidebar":
+          store().toggleSidebar();
+          break;
+        case "toggle_context":
+          store().toggleContextPanel();
+          break;
+        case "command_palette":
+          store().setCommandPaletteVisible(true);
+          break;
+        case "today_note":
+          openTodayNote();
+          break;
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Restore session + start periodic saving
   useEffect(() => {
     restoreSession().catch((err) =>
       console.error("Failed to restore session:", err)
     );
     const cleanup = initSessionPersistence();
 
-    // macOS: enable native rounded corners + traffic lights
     enableModernWindowStyle({ cornerRadius: 10, offsetX: -6, offsetY: -6 }).catch(
       (err) => console.error("Failed to enable rounded corners:", err)
     );
@@ -34,56 +180,59 @@ export default function App() {
     return cleanup;
   }, []);
 
-  // Global keyboard shortcuts
+  // Global keyboard shortcuts — single source of truth for non-editor shortcuts.
+  // Editor-specific shortcuts (formatting, outliner, search) live in CM6 keymaps.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
       const alt = e.altKey;
+      const store = useAppStore.getState;
 
-      // Cmd+Option+[ — toggle sidebar
       if (meta && alt && e.key === "[") {
         e.preventDefault();
-        toggleSidebar();
+        store().toggleSidebar();
       }
 
-      // Cmd+Option+] — toggle context panel
       if (meta && alt && e.key === "]") {
         e.preventDefault();
-        toggleContextPanel();
+        store().toggleContextPanel();
       }
 
-      // Cmd+W — close active tab
-      if (meta && e.key === "w") {
+      if (meta && !alt && !e.shiftKey && e.key === "w") {
         e.preventDefault();
+        const { activeTabId, closeTab } = store();
         if (activeTabId) closeTab(activeTabId);
       }
 
-      // Cmd+O — toggle quick open
-      if (meta && !alt && e.key === "o") {
+      if (meta && !alt && !e.shiftKey && e.key === "o") {
         e.preventDefault();
-        setQuickOpenVisible((v) => !v);
+        toggleQuickOpen();
       }
 
-      // Cmd+Shift+D — open today's daily note
+      if (meta && !alt && !e.shiftKey && e.key === "p") {
+        e.preventDefault();
+        store().setCommandPaletteVisible(true);
+      }
+
+      if (meta && !alt && !e.shiftKey && e.key === "n") {
+        e.preventDefault();
+        createNewNote();
+      }
+
+      if (meta && !alt && !e.shiftKey && e.key === "k") {
+        e.preventDefault();
+        openQuickOpenForWikilink();
+      }
+
       if (meta && e.shiftKey && (e.key === "D" || e.key === "d")) {
         e.preventDefault();
-        const todayISO = new Date().toISOString().split("T")[0];
-        createOrOpenPeriodicNote("daily", todayISO).catch((err) => {
-          const msg = String(err);
-          if (msg.includes("not configured") || msg.includes("not enabled")) {
-            window.alert(
-              "Daily notes are not configured.\n\nCreate ~/.onyx/periodic-notes.json with your settings.\nSee ARCHITECTURE.md for the config format."
-            );
-          } else {
-            console.error("Failed to open today's note:", err);
-          }
-        });
+        openTodayNote();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleSidebar, toggleContextPanel, closeTab, activeTabId]);
+  }, []);
 
   return (
     <div className="app">
@@ -101,10 +250,8 @@ export default function App() {
         </ErrorBoundary>
       </div>
       <StatusBar />
-      <QuickOpen
-        visible={quickOpenVisible}
-        onClose={() => setQuickOpenVisible(false)}
-      />
+      <QuickOpen />
+      <CommandPalette />
     </div>
   );
 }

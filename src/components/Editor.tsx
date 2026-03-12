@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
-import { EditorState, type Extension } from "@codemirror/state";
+import { EditorState, EditorSelection, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
-import { defaultKeymap, historyKeymap, indentWithTab, history } from "@codemirror/commands";
+import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
+import { openSearchPanel, closeSearchPanel, searchKeymap } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import {
@@ -17,6 +18,10 @@ import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/
 import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab } from "../extensions/frontmatter";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
+import { formattingKeymap } from "../extensions/formatting";
+import { outlinerKeymap } from "../extensions/outliner";
+import { urlPasteExtension } from "../extensions/urlPaste";
+import { autocompleteExtension } from "../extensions/autocomplete";
 import { openFileInEditor } from "../lib/openFile";
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -106,7 +111,7 @@ function buildExtensions(): Extension[] {
     const tabId = activeTabIdBox.current;
     if (!tabId) return;
 
-    const { setCursorInfo, setModified, setWordCount } = useAppStore.getState();
+    const { setCursorInfo, setModified, setWordCount, setCharCount } = useAppStore.getState();
 
     // Cursor position — always update (cheap)
     const pos = update.state.selection.main.head;
@@ -119,9 +124,10 @@ function buildExtensions(): Extension[] {
       const isModified = content !== saved;
       setModified(tabId, isModified);
 
-      // Word count
+      // Word count + char count
       const words = content.trim() ? content.trim().split(/\s+/).length : 0;
       setWordCount(words);
+      setCharCount(content.length);
 
       // Debounced auto-save
       clearTimeout(saveTimer);
@@ -144,27 +150,12 @@ function buildExtensions(): Extension[] {
 
   return [
     keymap.of([
-      // Global shortcuts that must work even when editor is focused
-      {
-        key: "Mod-Alt-[",
-        run: () => { useAppStore.getState().toggleSidebar(); return true; },
-      },
-      {
-        key: "Mod-Alt-]",
-        run: () => { useAppStore.getState().toggleContextPanel(); return true; },
-      },
-      {
-        key: "Mod-w",
-        run: () => {
-          const { activeTabId, closeTab } = useAppStore.getState();
-          if (activeTabId) closeTab(activeTabId);
-          return true;
-        },
-      },
       ...defaultKeymap,
       ...historyKeymap,
       ...foldKeymap,
-      indentWithTab,
+      ...searchKeymap,
+      ...formattingKeymap,
+      ...outlinerKeymap,
     ]),
     history(),
     markdown({ base: markdownLanguage, codeLanguages: languages }),
@@ -177,6 +168,8 @@ function buildExtensions(): Extension[] {
     frontmatterExtension(),
     wikilinkExtension(),
     tagExtension(),
+    urlPasteExtension,
+    autocompleteExtension(),
   ];
 }
 
@@ -252,6 +245,17 @@ export function clearEditorCache(path: string) {
   lastSavedContent.delete(path);
   scrollCache.delete(path);
   clearAutoFoldForTab(path);
+}
+
+/** Insert text at the current cursor position in the live editor */
+export function insertAtCursor(text: string) {
+  if (!_liveViewRef) return;
+  const pos = _liveViewRef.state.selection.main.head;
+  _liveViewRef.dispatch({
+    changes: { from: pos, to: pos, insert: text },
+    selection: EditorSelection.cursor(pos + text.length),
+  });
+  _liveViewRef.focus();
 }
 
 /** Flush any pending save for a tab (called before closing) */
@@ -403,6 +407,7 @@ export function Editor() {
     const content = doc.toString();
     const words = content.trim() ? content.trim().split(/\s+/).length : 0;
     useAppStore.getState().setWordCount(words);
+    useAppStore.getState().setCharCount(content.length);
 
     const pos = viewRef.current.state.selection.main.head;
     const line = doc.lineAt(pos);

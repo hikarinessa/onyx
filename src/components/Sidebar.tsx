@@ -161,6 +161,8 @@ export function Sidebar() {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const fileTreeVersion = useAppStore((s) => s.fileTreeVersion);
+  const collapsedDirs = useAppStore((s) => s.collapsedDirs);
+  const toggleDirCollapsed = useAppStore((s) => s.toggleDirCollapsed);
   const [directories, setDirectories] = useState<RegisteredDirectory[]>([]);
   const [rootEntries, setRootEntries] = useState<Map<string, DirEntry[]>>(
     new Map()
@@ -360,64 +362,73 @@ export function Sidebar() {
           </p>
         </div>
       ) : (
-        directories.map((dir) => (
-          <div key={dir.id} className="sidebar-directory">
-            <div
-              className="sidebar-header"
-              style={{ borderLeft: `2px solid ${dir.color}` }}
-            >
-              <span className="sidebar-header-label">{dir.label}</span>
-              <div className="sidebar-header-actions">
-                <button
-                  className="sidebar-header-btn"
-                  title="New Note"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleNewNoteInDir(dir.path);
-                  }}
-                >
-                  +
-                </button>
-                <button
-                  className="sidebar-header-btn"
-                  title="Refresh"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    loadDirectories();
-                  }}
-                >
-                  ↻
-                </button>
-                <button
-                  className="sidebar-header-btn"
-                  title="Remove Directory"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeDirectory(dir.id);
-                  }}
-                >
-                  ×
-                </button>
+        directories.map((dir) => {
+          const isCollapsed = collapsedDirs.includes(dir.id);
+          return (
+            <div key={dir.id} className="sidebar-directory">
+              <div
+                className="sidebar-header"
+                style={{ borderLeft: `2px solid ${dir.color}` }}
+                onClick={() => toggleDirCollapsed(dir.id)}
+              >
+                <span className="sidebar-header-chevron">
+                  {isCollapsed ? "▸" : "▾"}
+                </span>
+                <span className="sidebar-header-label">{dir.label}</span>
+                <div className="sidebar-header-actions">
+                  <button
+                    className="sidebar-header-btn"
+                    title="New Note"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleNewNoteInDir(dir.path);
+                    }}
+                  >
+                    +
+                  </button>
+                  <button
+                    className="sidebar-header-btn"
+                    title="Refresh"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      loadDirectories();
+                    }}
+                  >
+                    ↻
+                  </button>
+                  <button
+                    className="sidebar-header-btn"
+                    title="Remove Directory"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeDirectory(dir.id);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
+              {!isCollapsed && (
+                <div className="sidebar-content">
+                  {(rootEntries.get(dir.id) || []).map((entry) => (
+                    <TreeNode
+                      key={entry.path}
+                      entry={entry}
+                      depth={0}
+                      activeFilePath={activeTabId}
+                      renamingPath={renamingPath}
+                      fileTreeVersion={fileTreeVersion}
+                      onFileClick={handleFileClick}
+                      onContextMenu={handleContextMenu}
+                      onRenameSubmit={handleRenameSubmit}
+                      onRenameCancel={handleRenameCancel}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="sidebar-content">
-              {(rootEntries.get(dir.id) || []).map((entry) => (
-                <TreeNode
-                  key={entry.path}
-                  entry={entry}
-                  depth={0}
-                  activeFilePath={activeTabId}
-                  renamingPath={renamingPath}
-                  fileTreeVersion={fileTreeVersion}
-                  onFileClick={handleFileClick}
-                  onContextMenu={handleContextMenu}
-                  onRenameSubmit={handleRenameSubmit}
-                  onRenameCancel={handleRenameCancel}
-                />
-              ))}
-            </div>
-          </div>
-        ))
+          );
+        }))
       )}
       <button
         className="sidebar-add-folder-btn"

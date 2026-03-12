@@ -39,6 +39,12 @@ pub struct BacklinkRecord {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct TagInfo {
+    pub tag: String,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct IndexStats {
     pub total_files: u32,
     pub total_links: u32,
@@ -466,6 +472,65 @@ impl Database {
         ).optional().map_err(|e| format!("Failed to get frontmatter: {}", e))?;
 
         Ok(result)
+    }
+
+    /// Get all unique tags with usage counts (for autocomplete)
+    pub fn get_all_tags(&self) -> Result<Vec<TagInfo>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tag, COUNT(*) as cnt FROM tags GROUP BY tag ORDER BY cnt DESC, tag ASC"
+        ).map_err(|e| format!("Failed to prepare tags query: {}", e))?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(TagInfo {
+                tag: row.get(0)?,
+                count: row.get(1)?,
+            })
+        }).map_err(|e| format!("Failed to execute tags query: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read tag row: {}", e))?);
+        }
+        Ok(results)
+    }
+
+    /// Get all file titles for wikilink autocomplete
+    pub fn get_all_titles(&self) -> Result<Vec<SearchResult>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT path, title FROM files ORDER BY title ASC"
+        ).map_err(|e| format!("Failed to prepare titles query: {}", e))?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(SearchResult {
+                path: row.get(0)?,
+                title: row.get(1)?,
+            })
+        }).map_err(|e| format!("Failed to execute titles query: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read title row: {}", e))?);
+        }
+        Ok(results)
+    }
+
+    /// Count incoming links to a file (for delete confirmation)
+    pub fn count_incoming_links(&self, path: &str) -> Result<u32, String> {
+        let filename = Path::new(path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        let count: u32 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT l.source_id)
+             FROM links l
+             JOIN files f ON f.id = l.source_id
+             WHERE (l.target = ?1 OR l.target = ?2) AND f.path != ?2",
+            params![filename, path],
+            |row| row.get(0),
+        ).map_err(|e| format!("Failed to count incoming links: {}", e))?;
+
+        Ok(count)
     }
 
     pub fn get_stats(&self) -> Result<IndexStats, String> {

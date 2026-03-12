@@ -18,7 +18,8 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 4.5 (File Operations & Cache Integrity):** Complete
 - **Phase 4.6 (Hardening):** Complete
 - **Phase 5 (Periodic Notes & Calendar):** Complete
-- **Phase 6 (Command Palette, Theming & Editor Polish):** Planned
+- **Phase 5.X (Backfill):** Complete
+- **Phase 6 (Command Palette, Theming & Editor Polish):** Complete
 - **Phase 7 (Live Preview & Split Panes):** Planned
 - **Phase 8 (Blocks, Tables & Power Editing):** Planned
 - **Phase 9 (MCP Server):** Planned
@@ -29,31 +30,38 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 ```
 src/                          # Frontend (React + TypeScript)
 ├── main.tsx                  #   12 lines — React entry point
-├── App.tsx                   #   79 lines — Root component, keyboard shortcuts, session restore
+├── App.tsx                   #  210 lines — Root component, shortcuts, command registration, menu events
 ├── stores/
-│   └── app.ts                #  150 lines — Zustand store (tabs, panels, cursor, fileTreeVersion)
+│   └── app.ts                #  200 lines — Zustand store (tabs, panels, cursor, themes, commands)
 ├── components/
-│   ├── Titlebar.tsx          #   25 lines — Custom titlebar with window controls
-│   ├── TabBar.tsx            #   41 lines — Tab strip with close/modified indicator
-│   ├── Sidebar.tsx           #  330 lines — File tree, inline rename, add/remove dir
+│   ├── Titlebar.tsx          #   25 lines — Custom titlebar with traffic lights spacer
+│   ├── TabBar.tsx            #   80 lines — Tab strip with drag-to-reorder
+│   ├── Sidebar.tsx           #  460 lines — File tree, collapsible dirs, inline rename
 │   ├── BookmarkStrip.tsx     #   80 lines — Bookmarks section pinned at sidebar bottom
 │   ├── SidebarContextMenu.tsx#  130 lines — Right-click context menu for file tree
-│   ├── ErrorBoundary.tsx     #   35 lines — React error boundary (wraps sidebar, editor, context panel)
-│   ├── Editor.tsx            #  456 lines — CM6 editor with state caching, cache migration exports
-│   ├── ContextPanel.tsx      #  560 lines — Calendar, backlinks, properties, recent docs
+│   ├── ErrorBoundary.tsx     #   35 lines — React error boundary
+│   ├── Editor.tsx            #  460 lines — CM6 editor with all extensions
+│   ├── ContextPanel.tsx      #  590 lines — Calendar, backlinks, properties, recent docs
 │   ├── Calendar.tsx          #  130 lines — Month-grid calendar widget
-│   ├── StatusBar.tsx         #   27 lines — Cursor position, word count
-│   └── QuickOpen.tsx         #  256 lines — Cmd+O fuzzy search + type: prefix queries
+│   ├── StatusBar.tsx         #   40 lines — Cursor, word count, char count, file path
+│   ├── QuickOpen.tsx         #  256 lines — Cmd+O fuzzy search + type: prefix queries
+│   └── CommandPalette.tsx    #  120 lines — Cmd+P fuzzy command search
 ├── extensions/
 │   ├── frontmatter.ts        #  136 lines — CM6: frontmatter detection, styling, auto-fold
 │   ├── wikilinks.ts          #  136 lines — CM6: wikilink syntax highlighting, Cmd+Enter follow
-│   └── tags.ts               #   98 lines — CM6: #tag syntax highlighting
+│   ├── tags.ts               #   98 lines — CM6: #tag syntax highlighting
+│   ├── formatting.ts         #   70 lines — CM6: Cmd+B/I/Shift+C toggle wrap
+│   ├── outliner.ts           #  130 lines — CM6: list item indent/outdent/move/enter
+│   ├── urlPaste.ts           #   30 lines — CM6: URL paste → markdown link
+│   └── autocomplete.ts       #   95 lines — CM6: wikilink + tag autocomplete
 ├── lib/
-│   ├── fileOps.ts            #  118 lines — Centralized file mutations (create/rename/delete)
+│   ├── fileOps.ts            #  130 lines — Centralized file mutations (with link warnings)
 │   ├── openFile.ts           #   22 lines — Shared open-file-in-editor utility
 │   ├── periodicNotes.ts      #   32 lines — Create/open periodic notes utility
 │   ├── recentDocs.ts         #   50 lines — Recent documents tracking (localStorage ring buffer)
-│   └── session.ts            #   85 lines — Tab/panel state persistence (~/.onyx/session.json via Rust)
+│   ├── session.ts            #   85 lines — Tab/panel state persistence (~/.onyx/session.json via Rust)
+│   ├── commands.ts           #   45 lines — Command registry for palette + menu bar
+│   └── themes.ts             #  120 lines — Theme system (dark/light/warm)
 └── styles/
     ├── reset.css             #   56 lines — CSS reset
     ├── theme.css             #   63 lines — CSS custom properties (dark theme)
@@ -64,9 +72,9 @@ src-tauri/                    # Backend (Rust)
 ├── tauri.conf.json           # Window config, dev URL, CSP
 └── src/
     ├── main.rs               #    6 lines — Entry point
-    ├── lib.rs                #  109 lines — Tauri setup, AppState, plugin registration
-    ├── commands.rs           #  493 lines — Tauri commands (file ops, search, bookmarks, types)
-    ├── db.rs                 #  490 lines — SQLite (WAL, files/links/tags/bookmarks/object_types)
+    ├── lib.rs                #  170 lines — Tauri setup, native menu bar, AppState, plugins
+    ├── commands.rs           #  540 lines — Tauri commands (file ops, search, bookmarks, autocomplete)
+    ├── db.rs                 #  550 lines — SQLite (WAL, files/links/tags/bookmarks + tag/title queries)
     ├── dirs.rs               #  117 lines — Directory registration (~/.onyx/directories.json)
     ├── indexer.rs            #  224 lines — Background indexer (frontmatter, wikilinks, tags)
     ├── watcher.rs            #  173 lines — File watcher with debounced reindex
@@ -74,7 +82,7 @@ src-tauri/                    # Backend (Rust)
     └── periodic.rs           #  320 lines — Periodic notes config, template engine, date formatting
 ```
 
-**Total:** ~5,700 lines (2,850 TS/TSX + 1,800 Rust + 930 CSS)
+**Total:** ~7,200 lines (3,700 TS/TSX + 2,100 Rust + 1,100 CSS)
 
 ## Architecture Essentials
 
@@ -144,6 +152,13 @@ src-tauri/                    # Backend (Rust)
 | `save_periodic_config` | `(config: PeriodicConfig) → ()` |
 | `create_periodic_note` | `(periodType: String, date: String) → CreatePeriodicNoteResult` |
 | `get_dates_with_notes` | `(year: i32, month: u32) → Vec<u32>` — day numbers with notes |
+
+### Autocomplete & Metadata
+| Command | Signature |
+|---------|-----------|
+| `get_all_tags` | `() → Vec<TagInfo>` — all tags with usage counts |
+| `get_all_titles` | `() → Vec<SearchResult>` — all file titles for autocomplete |
+| `count_incoming_links` | `(path: String) → u32` — count notes linking to this file |
 
 ### Session
 | Command | Signature |
