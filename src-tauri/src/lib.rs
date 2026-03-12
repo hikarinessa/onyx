@@ -36,13 +36,25 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Build native menu bar
+            // macOS: first submenu becomes the app menu. Add explicit one
+            // so "File" doesn't get absorbed into it.
+            let app_menu = SubmenuBuilder::new(app, "Onyx")
+                .about(None)
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+
             let file_menu = SubmenuBuilder::new(app, "File")
                 .item(&MenuItemBuilder::with_id("new_note", "New Note").accelerator("CmdOrCtrl+N").build(app)?)
                 .item(&MenuItemBuilder::with_id("quick_open", "Quick Open").accelerator("CmdOrCtrl+O").build(app)?)
                 .separator()
                 .item(&MenuItemBuilder::with_id("close_tab", "Close Tab").accelerator("CmdOrCtrl+W").build(app)?)
-                .separator()
-                .quit()
                 .build()?;
 
             let edit_menu = SubmenuBuilder::new(app, "Edit")
@@ -88,6 +100,7 @@ pub fn run() {
                 .build()?;
 
             let menu = MenuBuilder::new(app)
+                .item(&app_menu)
                 .item(&file_menu)
                 .item(&edit_menu)
                 .item(&view_menu)
