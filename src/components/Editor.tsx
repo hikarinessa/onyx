@@ -226,6 +226,33 @@ export function replaceTabContent(tabId: string, newContent: string) {
   useAppStore.getState().setModified(tabId, false);
 }
 
+/** Migrate editor caches from one path key to another (used by rename) */
+export function migrateEditorCache(oldPath: string, newPath: string) {
+  const state = editorStateCache.get(oldPath);
+  if (state) {
+    editorStateCache.set(newPath, state);
+    editorStateCache.delete(oldPath);
+  }
+  const saved = lastSavedContent.get(oldPath);
+  if (saved !== undefined) {
+    lastSavedContent.set(newPath, saved);
+    lastSavedContent.delete(oldPath);
+  }
+  const scroll = scrollCache.get(oldPath);
+  if (scroll !== undefined) {
+    scrollCache.set(newPath, scroll);
+    scrollCache.delete(oldPath);
+  }
+}
+
+/** Remove all editor caches for a path (used by delete) */
+export function clearEditorCache(path: string) {
+  editorStateCache.delete(path);
+  lastSavedContent.delete(path);
+  scrollCache.delete(path);
+  clearAutoFoldForTab(path);
+}
+
 /** Flush any pending save for a tab (called before closing) */
 export async function flushSaveForTab(id: string): Promise<void> {
   const state = editorStateCache.get(id);

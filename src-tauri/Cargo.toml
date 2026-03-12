@@ -40,6 +40,7 @@ regex = "1"
 
 # Platform
 dirs-next = "2.0"
+trash = "5"
 
 # Async/concurrency
 tokio = { version = "1", features = ["sync", "time"] }

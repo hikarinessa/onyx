@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
-import { loadFileIntoCache } from "./Editor";
+import * as fileOps from "../lib/fileOps";
 
 interface BookmarkRecord {
   path: string;
@@ -33,18 +33,78 @@ interface ContextMenuState {
   entry: DirEntry;
 }
 
+function RenameInput({
+  initialName,
+  onSubmit,
+  onCancel,
+}: {
+  initialName: string;
+  onSubmit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initialName);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+      // Select the name without the extension
+      const dot = initialName.lastIndexOf(".");
+      inputRef.current.setSelectionRange(0, dot > 0 ? dot : initialName.length);
+    }
+  }, [initialName]);
+
+  const submit = () => {
+    const trimmed = value.trim();
+    if (trimmed && trimmed !== initialName) {
+      onSubmit(trimmed);
+    } else {
+      onCancel();
+    }
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      className="tree-rename-input"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); submit(); }
+        if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+        e.stopPropagation();
+      }}
+      onBlur={submit}
+      onClick={(e) => e.stopPropagation()}
+    />
+  );
+}
+
 interface TreeNodeProps {
   entry: DirEntry;
   depth: number;
   activeFilePath: string | null;
+  renamingPath: string | null;
+  fileTreeVersion: number;
   onFileClick: (path: string, name: string) => void;
   onContextMenu: (e: React.MouseEvent, entry: DirEntry) => void;
+  onRenameSubmit: (entry: DirEntry, newName: string) => void;
+  onRenameCancel: () => void;
 }
 
-function TreeNode({ entry, depth, activeFilePath, onFileClick, onContextMenu }: TreeNodeProps) {
+function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion, onFileClick, onContextMenu, onRenameSubmit, onRenameCancel }: TreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<DirEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
+
+  // Re-fetch children when fileTreeVersion bumps (file was created/renamed/deleted)
+  useEffect(() => {
+    if (expanded && loaded && entry.is_dir) {
+      invoke<DirEntry[]>("list_directory", { path: entry.path })
+        .then(setChildren)
+        .catch(() => { setChildren([]); setLoaded(false); });
+    }
+  }, [fileTreeVersion]); // eslint-disable-line -- only re-fetch on version bump
 
   const toggle = async () => {
     if (!entry.is_dir) {
@@ -68,19 +128,28 @@ function TreeNode({ entry, depth, activeFilePath, onFileClick, onContextMenu }: 
 
   const isActive = entry.path === activeFilePath;
   const isMarkdown = entry.extension === "md";
+  const isRenaming = renamingPath === entry.path;
 
   return (
     <div className={entry.is_dir ? "tree-directory" : "tree-file"}>
       <div
         className={`tree-item ${isActive ? "active" : ""}`}
         style={{ "--indent": depth } as React.CSSProperties}
-        onClick={toggle}
+        onClick={isRenaming ? undefined : toggle}
         onContextMenu={(e) => onContextMenu(e, entry)}
       >
         <span className="tree-item-icon">
           {entry.is_dir ? (expanded ? "▾" : "▸") : isMarkdown ? "◇" : "·"}
         </span>
-        <span className="tree-item-label">{entry.name}</span>
+        {isRenaming ? (
+          <RenameInput
+            initialName={entry.name}
+            onSubmit={(newName) => onRenameSubmit(entry, newName)}
+            onCancel={onRenameCancel}
+          />
+        ) : (
+          <span className="tree-item-label">{entry.name}</span>
+        )}
       </div>
       {entry.is_dir && expanded && (
         <div className="tree-children">
@@ -90,8 +159,12 @@ function TreeNode({ entry, depth, activeFilePath, onFileClick, onContextMenu }: 
               entry={child}
               depth={depth + 1}
               activeFilePath={activeFilePath}
+              renamingPath={renamingPath}
+              fileTreeVersion={fileTreeVersion}
               onFileClick={onFileClick}
               onContextMenu={onContextMenu}
+              onRenameSubmit={onRenameSubmit}
+              onRenameCancel={onRenameCancel}
             />
           ))}
         </div>
@@ -222,12 +295,13 @@ export function Sidebar() {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const tabs = useAppStore((s) => s.tabs);
-  const openFile = useAppStore((s) => s.openFile);
+  const fileTreeVersion = useAppStore((s) => s.fileTreeVersion);
   const [directories, setDirectories] = useState<RegisteredDirectory[]>([]);
   const [rootEntries, setRootEntries] = useState<Map<string, DirEntry[]>>(
     new Map()
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [bookmarks, setBookmarks] = useState<BookmarkRecord[]>([]);
   const bookmarkVersion = useAppStore((s) => s.bookmarkVersion);
 
@@ -261,6 +335,15 @@ export function Sidebar() {
     }
   };
 
+  const removeDirectory = async (id: string) => {
+    try {
+      await invoke("unregister_directory", { id });
+      loadDirectories();
+    } catch (err) {
+      console.error("Failed to unregister directory:", err);
+    }
+  };
+
   const loadDirectories = useCallback(async () => {
     try {
       const dirs = await invoke<RegisteredDirectory[]>(
@@ -289,6 +372,11 @@ export function Sidebar() {
   useEffect(() => {
     loadDirectories();
   }, [loadDirectories]);
+
+  // Refresh root entries when fileTreeVersion bumps (file mutation happened)
+  useEffect(() => {
+    if (fileTreeVersion > 0) loadDirectories();
+  }, [fileTreeVersion]); // eslint-disable-line -- intentionally only react to version bumps
 
   // Listen for file system changes to refresh
   useEffect(() => {
@@ -320,37 +408,11 @@ export function Sidebar() {
     setContextMenu({ x: e.clientX, y: e.clientY, entry });
   };
 
-  const findAvailablePath = async (dir: string): Promise<{ path: string; name: string }> => {
-    const baseName = "Untitled";
-    let name = `${baseName}.md`;
-    let path = `${dir}/${name}`;
-    let counter = 1;
-
-    // Check existence via read_file — if it succeeds, the file exists
-    while (true) {
-      try {
-        await invoke("read_file", { path });
-        // File exists, try next number
-        counter++;
-        name = `${baseName} ${counter}.md`;
-        path = `${dir}/${name}`;
-      } catch {
-        // File doesn't exist — path is available
-        break;
-      }
-    }
-
-    return { path, name };
-  };
-
   const handleNewNote = async (entry: DirEntry) => {
     const dir = entry.is_dir ? entry.path : entry.path.replace(/\/[^/]+$/, "");
     try {
-      const { path, name } = await findAvailablePath(dir);
-      await invoke("write_file", { path, content: "" });
-      loadFileIntoCache(path, "");
-      openFile(path, name);
-      loadDirectories();
+      const newPath = await fileOps.createNote(dir);
+      setRenamingPath(newPath);
     } catch (err) {
       console.error("Failed to create note:", err);
     }
@@ -358,11 +420,8 @@ export function Sidebar() {
 
   const handleNewNoteInDir = async (dirPath: string) => {
     try {
-      const { path, name } = await findAvailablePath(dirPath);
-      await invoke("write_file", { path, content: "" });
-      loadFileIntoCache(path, "");
-      openFile(path, name);
-      loadDirectories();
+      const newPath = await fileOps.createNote(dirPath);
+      setRenamingPath(newPath);
     } catch (err) {
       console.error("Failed to create note:", err);
     }
@@ -370,27 +429,50 @@ export function Sidebar() {
 
   const handleNewFolder = async (entry: DirEntry) => {
     const dir = entry.is_dir ? entry.path : entry.path.replace(/\/[^/]+$/, "");
-    console.log("TODO: create_folder command", `${dir}/New Folder`);
+    try {
+      const folderPath = await fileOps.createFolder(dir);
+      setRenamingPath(folderPath);
+    } catch (err) {
+      console.error("Failed to create folder:", err);
+    }
   };
 
-  const handleRename = async (entry: DirEntry) => {
-    console.log("TODO: rename_file command", entry.path);
+  const handleRename = (entry: DirEntry) => {
+    setRenamingPath(entry.path);
+  };
+
+  const handleRenameSubmit = async (entry: DirEntry, newName: string) => {
+    const dir = entry.path.replace(/\/[^/]+$/, "");
+    const newPath = `${dir}/${newName}`;
+    try {
+      if (entry.is_dir) {
+        await fileOps.renameFolder(entry.path, newPath);
+      } else {
+        await fileOps.renameFile(entry.path, newPath);
+      }
+    } catch (err) {
+      console.error("Failed to rename:", err);
+    }
+    setRenamingPath(null);
+  };
+
+  const handleRenameCancel = () => {
+    setRenamingPath(null);
   };
 
   const handleDelete = async (entry: DirEntry) => {
     try {
-      await invoke("trash_file", { path: entry.path });
-      loadDirectories();
+      await fileOps.deleteFile(entry.path);
     } catch (err) {
-      console.log("TODO: trash_file command not yet implemented", entry.path);
+      console.error("Failed to trash file:", err);
     }
   };
 
   const handleReveal = async (entry: DirEntry) => {
     try {
-      await invoke("reveal_in_finder", { path: entry.path });
+      await fileOps.revealInFinder(entry.path);
     } catch (err) {
-      console.log("TODO: reveal_in_finder command not yet implemented", entry.path);
+      console.error("Failed to reveal in Finder:", err);
     }
   };
 
@@ -419,23 +501,6 @@ export function Sidebar() {
           >
             No directories registered.
           </p>
-          <button
-            className="sidebar-add-folder-btn"
-            onClick={addDirectory}
-            style={{
-              margin: "0 12px",
-              padding: "8px 12px",
-              background: "var(--bg-elevated)",
-              color: "var(--text-secondary)",
-              border: "1px solid var(--border)",
-              borderRadius: "4px",
-              fontSize: "12px",
-              cursor: "pointer",
-              width: "calc(100% - 24px)",
-            }}
-          >
-            Add Folder
-          </button>
         </div>
       ) : (
         directories.map((dir) => (
@@ -466,6 +531,16 @@ export function Sidebar() {
                 >
                   ↻
                 </button>
+                <button
+                  className="sidebar-header-btn"
+                  title="Remove Directory"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeDirectory(dir.id);
+                  }}
+                >
+                  ×
+                </button>
               </div>
             </div>
             <div className="sidebar-content">
@@ -475,14 +550,25 @@ export function Sidebar() {
                   entry={entry}
                   depth={0}
                   activeFilePath={activeTabId}
+                  renamingPath={renamingPath}
+                  fileTreeVersion={fileTreeVersion}
                   onFileClick={handleFileClick}
                   onContextMenu={handleContextMenu}
+                  onRenameSubmit={handleRenameSubmit}
+                  onRenameCancel={handleRenameCancel}
                 />
               ))}
             </div>
           </div>
         ))
       )}
+      <button
+        className="sidebar-add-folder-btn"
+        onClick={addDirectory}
+        title="Add Folder"
+      >
+        + Add Folder
+      </button>
 
       </div>
 

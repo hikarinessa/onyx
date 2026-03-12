@@ -372,3 +372,122 @@ pub fn update_frontmatter(
 
     Ok(())
 }
+
+#[tauri::command]
+pub fn path_exists(path: String, state: State<AppState>) -> Result<bool, String> {
+    let file_path = PathBuf::from(&path);
+    validate_path(&file_path, &state).or_else(|_| {
+        // For new paths, validate the parent instead
+        let parent = file_path.parent().ok_or("Invalid path".to_string())?;
+        validate_path(&parent.to_path_buf(), &state)
+    })?;
+    Ok(file_path.exists())
+}
+
+#[tauri::command]
+pub fn create_folder(path: String, state: State<AppState>) -> Result<(), String> {
+    let dir_path = PathBuf::from(&path);
+    // Validate parent is under a registered directory
+    let parent = dir_path.parent().ok_or("Invalid path")?;
+    validate_path(&parent.to_path_buf(), &state)?;
+
+    std::fs::create_dir_all(&dir_path)
+        .map_err(|e| format!("Failed to create folder: {}", e))
+}
+
+#[tauri::command]
+pub fn rename_file(
+    old_path: String,
+    new_path: String,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let old = PathBuf::from(&old_path);
+    let new = PathBuf::from(&new_path);
+    validate_path(&old, &state)?;
+    validate_path(&new, &state)?;
+
+    if new.exists() {
+        return Err(format!("A file already exists at: {}", new_path));
+    }
+
+    // Mark self-write so watcher doesn't double-trigger
+    {
+        let watcher_lock = state.watcher.lock().map_err(|e| e.to_string())?;
+        if let Some(ref fw) = *watcher_lock {
+            fw.mark_self_write(&old);
+            fw.mark_self_write(&new);
+        }
+    }
+
+    let is_dir = old.is_dir();
+
+    std::fs::rename(&old, &new)
+        .map_err(|e| format!("Failed to rename: {}", e))?;
+
+    // Update the index
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    if is_dir {
+        db.rename_dir_prefix(&old_path, &new_path)?;
+    } else {
+        db.rename_file(&old_path, &new_path)?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn trash_file(path: String, state: State<AppState>) -> Result<(), String> {
+    let file_path = PathBuf::from(&path);
+    validate_path(&file_path, &state)?;
+
+    let is_dir = file_path.is_dir();
+
+    trash::delete(&file_path)
+        .map_err(|e| format!("Failed to move to trash: {}", e))?;
+
+    // Remove from index
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    if is_dir {
+        db.delete_by_prefix(&path)?;
+    } else {
+        db.delete_file(&path)?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reveal_in_finder(path: String, state: State<AppState>) -> Result<(), String> {
+    let file_path = PathBuf::from(&path);
+    validate_path(&file_path, &state)?;
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to reveal in Finder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Open the parent directory
+        let parent = file_path.parent().unwrap_or(&file_path);
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("Failed to open file manager: {}", e))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg("/select,")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to reveal in Explorer: {}", e))?;
+    }
+
+    Ok(())
+}

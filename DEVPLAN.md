@@ -173,6 +173,61 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 
 ---
 
+## Phase 4.5 — File Operations & Cache Integrity
+
+**Goal:** Every basic file operation (create, rename, delete, reveal) works end-to-end without stale state. The foundation is solid before building higher-level features.
+
+**Context:** Phase 4 added Rust commands for file operations and sidebar UI, but mutations don't propagate to all cached locations (editor state, tabs, sidebar subtree). Renaming a file updates the tab but leaves the sidebar stale and editor caches keyed to the old path.
+
+### Steps
+
+4.5.1 **`fileOps.ts` — centralized mutation module**
+- Create `src/lib/fileOps.ts` with functions: `createNote`, `renameFile`, `deleteFile`, `createFolder`, `revealInFinder`
+- Each function owns the full sequence: disk → DB → tabs → editor caches → tree refresh
+- Components call `fileOps.*`, never `invoke("rename_file")` etc. directly
+- Export from a single module so the mutation contract is obvious
+
+4.5.2 **`fileTreeVersion` in Zustand**
+- Add `fileTreeVersion: number` and `bumpFileTreeVersion()` to app store
+- Sidebar `TreeNode` subscribes to `fileTreeVersion` — when it bumps, re-fetch children for expanded nodes
+- `loadDirectories()` already refreshes roots; this handles subtree staleness
+- All `fileOps.*` functions call `bumpFileTreeVersion()` as their last step
+
+4.5.3 **Editor cache migration**
+- Export `migrateEditorCache(oldPath, newPath)` from `Editor.tsx` — moves entries in `editorStateCache`, `lastSavedContent`, `scrollCache` from old key to new key
+- Export `clearEditorCache(path)` — deletes all cached state for a path (used by delete)
+- `fileOps.renameFile` calls `migrateEditorCache` after `updateTabPath`
+- `fileOps.deleteFile` calls `clearEditorCache` then `closeTab`
+
+4.5.4 **Wire Sidebar to fileOps**
+- Replace all direct `invoke()` calls in Sidebar context menu handlers with `fileOps.*`
+- `handleRenameSubmit` → `fileOps.renameFile(oldPath, newPath)`
+- `handleDelete` → `fileOps.deleteFile(path)`
+- `handleNewFolder` → `fileOps.createFolder(path)`
+- `handleReveal` → `fileOps.revealInFinder(path)`
+- New note creation → `fileOps.createNote(dirPath)` which creates, indexes, opens tab, and enters rename mode
+
+4.5.5 **Create-note-with-rename flow**
+- `fileOps.createNote` creates `Untitled.md` (or `Untitled 1.md` etc.) via Rust
+- Opens the new file in a tab
+- Returns the path; Sidebar enters inline rename mode for that path
+- On rename submit → `fileOps.renameFile` handles the full cascade
+- On rename cancel (Escape/blur with no change) → file keeps "Untitled" name (no delete)
+
+4.5.6 **Folder operations**
+- `fileOps.renameFolder(oldPath, newPath)` — renames on disk, bulk-updates all `files` rows with matching path prefix in DB, migrates all affected editor caches and tabs
+- `fileOps.deleteFolder(path)` — trashes on disk, bulk-deletes DB entries, closes all affected tabs, clears all affected editor caches
+- Wire to sidebar context menu
+
+4.5.7 **Verify & test**
+- Manual test matrix: create note → rename → verify tab/sidebar/editor all reflect new name → delete → verify tab closes, sidebar removes entry, editor cache cleared
+- Test rename of file that has backlinks (DB paths update, backlinks still resolve)
+- Test delete of bookmarked file (cascade removes bookmark, sidebar bookmarks section updates)
+
+**Milestone:** All basic file operations work reliably. No stale sidebar entries, no broken tabs after rename, no orphaned editor caches. The app handles files as well as a native file manager.
+
+---
+
 ## Phase 5 — Periodic Notes & Calendar
 
 **Goal:** Daily journaling workflow works. Calendar widget navigates and creates notes.

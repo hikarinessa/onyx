@@ -492,6 +492,39 @@
   min-height: 0;
 }
 
+.tree-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 4px;
+  font-size: 13px;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  outline: none;
+}
+
+.sidebar-add-folder-btn {
+  display: block;
+  width: calc(100% - 24px);
+  margin: 8px 12px;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-tertiary);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.sidebar-add-folder-btn:hover {
+  color: var(--text-secondary);
+  border-color: var(--text-tertiary);
+}
+
 /* Bookmarks section */
 .sidebar-bookmarks {
   flex-shrink: 0;
