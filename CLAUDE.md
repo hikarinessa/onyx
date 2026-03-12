@@ -175,6 +175,15 @@ cargo test               # Rust unit tests
 npx tsc --noEmit         # TypeScript type check
 ```
 
+## Known Debt (from Phase 5.X + 6 review)
+
+- **Editor↔QuickOpen coupling:** `QuickOpen` imports `insertAtCursor` from `Editor.tsx`. Extract into `lib/editorBridge.ts` when adding more consumers.
+- **Focus trapping:** Command palette and QuickOpen overlays don't trap Tab focus. Keyboard-only users can Tab behind the overlay.
+- **Tab reorder accessibility:** Drag-to-reorder is mouse-only. Add Cmd+Shift+Left/Right for keyboard users.
+- **ARIA on command palette:** Category headers need `role="separator"` or group wrapping for screen readers.
+- **Autocomplete scaling:** `get_all_titles` fetches all indexed files on `[[` with empty prefix. Cache with short TTL for vaults >5k files.
+- **Multi-cursor formatting:** `toggleWrap` in `formatting.ts` has offset drift on multi-cursor unwrap. Single-cursor is correct.
+
 ## Gotchas
 
 - **Kill `cargo tauri dev` before making Rust changes.** The dev server watches Rust files and auto-rebuilds + relaunches the app on every save, causing repeated open/close cycles during multi-file edits. Stop the dev process first, make all backend changes, verify with `cargo check`, then relaunch once when ready to test.
