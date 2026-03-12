@@ -15,7 +15,7 @@ import {
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
-import { setLiveViewRef, getLiveViewRef, flushSaveForTab } from "../lib/editorBridge";
+import { setLiveViewRef, getLiveViewRef, flushSaveForTab, registerViewForTab, unregisterViewForTab } from "../lib/editorBridge";
 import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab } from "../extensions/frontmatter";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
@@ -50,11 +50,11 @@ const activeTabIdBox = { current: null as string | null };
 /** Maps each EditorView to the tab ID it's currently displaying */
 const viewTabIdMap = new WeakMap<EditorView, string>();
 
-/** Module-level save timer */
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
+/** Per-tab save timers — prevents cross-pane cancellation in split mode */
+const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-/** Debounced word/char count timer */
-let wordCountTimer: ReturnType<typeof setTimeout> | undefined;
+/** Per-tab word count timers */
+const wordCountTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 // ---------------------------------------------------------------------------
 // Shared styles and highlight
@@ -125,28 +125,31 @@ function buildExtensions(): Extension[] {
       setModified(tabId, isModified);
 
       // Debounced word count + char count (avoid allocating on every keystroke)
-      clearTimeout(wordCountTimer);
-      wordCountTimer = setTimeout(() => {
+      clearTimeout(wordCountTimers.get(tabId));
+      wordCountTimers.set(tabId, setTimeout(() => {
         const words = content.trim() ? content.trim().split(/\s+/).length : 0;
         setWordCount(words);
         setCharCount(content.length);
-      }, 300);
+        wordCountTimers.delete(tabId);
+      }, 300));
 
-      // Debounced auto-save
-      clearTimeout(saveTimer);
+      // Debounced auto-save (per-tab timer prevents cross-pane cancellation)
+      clearTimeout(saveTimers.get(tabId));
       if (isModified) {
         const tab = useAppStore.getState().tabs.find((t) => t.id === tabId);
         if (tab) {
-          saveTimer = setTimeout(async () => {
+          // Capture the view ref now — don't rely on getLiveViewRef() after await
+          const sourceView = update.view;
+          saveTimers.set(tabId, setTimeout(async () => {
+            saveTimers.delete(tabId);
             try {
               const fixed = autoFixOnSave(content);
               await invoke("write_file", { path: tab.path, content: fixed });
               lastSavedContent.set(tabId, fixed);
-              // If autofix changed content, sync the editor state
-              const liveView = getLiveViewRef();
-              if (fixed !== content && liveView && activeTabIdBox.current === tabId) {
-                liveView.dispatch({
-                  changes: { from: 0, to: liveView.state.doc.length, insert: fixed },
+              // If autofix changed content, sync back to the originating view
+              if (fixed !== content && viewTabIdMap.get(sourceView) === tabId) {
+                sourceView.dispatch({
+                  changes: { from: 0, to: sourceView.state.doc.length, insert: fixed },
                 });
               }
               setModified(tabId, false);
@@ -154,7 +157,7 @@ function buildExtensions(): Extension[] {
             } catch (err) {
               console.error("Failed to save:", err);
             }
-          }, SAVE_DEBOUNCE_MS);
+          }, SAVE_DEBOUNCE_MS));
         }
       }
     }
@@ -212,6 +215,7 @@ function swapViewToTab(view: EditorView, tabId: string, editorMode: string) {
 
   frontmatterTabRef.current = tabId;
   viewTabIdMap.set(view, tabId);
+  registerViewForTab(tabId, view);
   view.setState(state);
 
   // Sync preview mode
@@ -342,7 +346,7 @@ export function Editor() {
     useAppStore.getState().setCursorInfo(line.number, pos - line.from + 1);
 
     return () => {
-      clearTimeout(saveTimer);
+      // Don't clear per-tab timers here — they need to fire even after tab switch
     };
   }, [activeTab?.id, activeTab?.path]); // eslint-disable-line -- CM6 manages its own state
 
@@ -354,6 +358,7 @@ export function Editor() {
         if (rightViewTabIdRef.current) {
           editorStateCache.set(rightViewTabIdRef.current, rightViewRef.current.state);
           scrollCache.set(rightViewTabIdRef.current, rightViewRef.current.scrollDOM.scrollTop);
+          unregisterViewForTab(rightViewTabIdRef.current);
         }
         rightViewRef.current.destroy();
         rightViewRef.current = null;
@@ -413,10 +418,17 @@ export function Editor() {
   // Destroy views on unmount
   useEffect(() => {
     return () => {
+      // Cancel all pending save/word-count timers
+      for (const t of saveTimers.values()) clearTimeout(t);
+      saveTimers.clear();
+      for (const t of wordCountTimers.values()) clearTimeout(t);
+      wordCountTimers.clear();
+
       if (viewRef.current) {
         if (viewTabIdRef.current) {
           editorStateCache.set(viewTabIdRef.current, viewRef.current.state);
           scrollCache.set(viewTabIdRef.current, viewRef.current.scrollDOM.scrollTop);
+          unregisterViewForTab(viewTabIdRef.current);
         }
         viewRef.current.destroy();
         viewRef.current = null;
@@ -426,6 +438,7 @@ export function Editor() {
         if (rightViewTabIdRef.current) {
           editorStateCache.set(rightViewTabIdRef.current, rightViewRef.current.state);
           scrollCache.set(rightViewTabIdRef.current, rightViewRef.current.scrollDOM.scrollTop);
+          unregisterViewForTab(rightViewTabIdRef.current);
         }
         rightViewRef.current.destroy();
         rightViewRef.current = null;

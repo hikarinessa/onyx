@@ -242,19 +242,25 @@ export default function App() {
           break;
         }
         case "nav_back": {
+          if (navigating) break;
+          navigating = true;
           const { activeTabId: id, navigateBack } = store();
           if (id) {
             const entry = navigateBack(id);
-            if (entry) openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true });
-          }
+            if (entry) openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true }).finally(() => { navigating = false; });
+            else navigating = false;
+          } else navigating = false;
           break;
         }
         case "nav_forward": {
+          if (navigating) break;
+          navigating = true;
           const { activeTabId: id2, navigateForward } = store();
           if (id2) {
             const entry = navigateForward(id2);
-            if (entry) openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true });
-          }
+            if (entry) openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true }).finally(() => { navigating = false; });
+            else navigating = false;
+          } else navigating = false;
           break;
         }
         case "today_note":

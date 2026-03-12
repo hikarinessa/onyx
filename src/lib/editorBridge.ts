@@ -22,12 +22,25 @@ import {
 /** The currently active EditorView (left pane, or right if active) */
 let _liveViewRef: EditorView | null = null;
 
+/** All live EditorViews keyed by tab ID — for updating any visible tab */
+const _viewsByTabId = new Map<string, EditorView>();
+
 export function setLiveViewRef(view: EditorView | null) {
   _liveViewRef = view;
 }
 
 export function getLiveViewRef(): EditorView | null {
   return _liveViewRef;
+}
+
+/** Register a view↔tabId mapping (called from Editor.tsx on swap) */
+export function registerViewForTab(tabId: string, view: EditorView) {
+  _viewsByTabId.set(tabId, view);
+}
+
+/** Unregister a view for a tab (called on pane close/destroy) */
+export function unregisterViewForTab(tabId: string) {
+  _viewsByTabId.delete(tabId);
 }
 
 // ---------------------------------------------------------------------------
@@ -54,14 +67,12 @@ export function replaceTabContent(tabId: string, newContent: string) {
   }
   lastSavedContent.set(tabId, newContent);
 
-  // If this tab is currently displayed, update the live view too
-  if (_liveViewRef) {
-    const { activeTabId } = useAppStore.getState();
-    if (activeTabId === tabId) {
-      _liveViewRef.dispatch({
-        changes: { from: 0, to: _liveViewRef.state.doc.length, insert: newContent },
-      });
-    }
+  // If this tab is currently displayed in any pane, update that view
+  const view = _viewsByTabId.get(tabId);
+  if (view) {
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: newContent },
+    });
   }
 
   useAppStore.getState().setModified(tabId, false);

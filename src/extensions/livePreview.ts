@@ -259,7 +259,6 @@ function addInlineDecorations(
   WIKILINK_RE.lastIndex = 0;
   while ((m = WIKILINK_RE.exec(text)) !== null) {
     const from = line.from + m.index;
-    const displayText = m[2] || m[1]; // Use alias if present
     // Hide [[ and ]]
     ranges.push({ from, to: from + 2, deco: Decoration.replace({}) });
     // If there's an alias (|), hide from the | to ]]
