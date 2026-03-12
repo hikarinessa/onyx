@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
-import { defaultKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, historyKeymap, indentWithTab, history } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import {
@@ -61,7 +61,6 @@ const onyxHighlightStyle = HighlightStyle.define([
   { tag: tags.link, color: "var(--link-color)" },
   { tag: tags.url, color: "var(--link-color)" },
   { tag: tags.quote, color: "var(--text-tertiary)", fontStyle: "italic" },
-  { tag: tags.list, color: "var(--text-tertiary)" },
 ]);
 
 const onyxTheme = EditorView.theme({
@@ -163,9 +162,11 @@ function buildExtensions(): Extension[] {
         },
       },
       ...defaultKeymap,
+      ...historyKeymap,
       ...foldKeymap,
       indentWithTab,
     ]),
+    history(),
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     syntaxHighlighting(onyxHighlightStyle),
     codeFolding(),

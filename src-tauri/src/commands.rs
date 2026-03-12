@@ -125,7 +125,22 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
         .map_err(|e| {
             let _ = std::fs::remove_file(&temp_path);
             format!("Failed to rename temp file: {}", e)
-        })
+        })?;
+
+    // Reindex immediately so frontmatter/links/tags stay current
+    // (the self-write guard suppresses the watcher, so we must reindex here)
+    if target.extension().and_then(|e| e.to_str()) == Some("md") {
+        let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+        let dir_id = dirs.list().iter().find_map(|d| {
+            if target.starts_with(&d.path) { Some(d.id.clone()) } else { None }
+        });
+        drop(dirs);
+        if let Some(id) = dir_id {
+            let _ = crate::indexer::Indexer::reindex_file(&target, &id, &state.db);
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

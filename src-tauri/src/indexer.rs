@@ -197,6 +197,17 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_frontmatter_with_type_key() {
+        let content = "---\ntype: person\nFull Name: Marc Kirsch\nBirthday: 2025-12-02\n---\n\nBody";
+        let result = extract_frontmatter(content);
+        assert!(result.is_some(), "frontmatter should be Some");
+        let json: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        println!("JSON output: {}", json);
+        assert_eq!(json["type"], "person", "type field missing from JSON");
+        assert_eq!(json["Full Name"], "Marc Kirsch");
+    }
+
+    #[test]
     fn test_extract_frontmatter_none() {
         let content = "No frontmatter here";
         assert!(extract_frontmatter(content).is_none());

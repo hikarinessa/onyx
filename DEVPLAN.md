@@ -439,13 +439,18 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 - Ship warm-toned theme alongside dark + light
 - Per-element styling overrides: headings, code blocks, blockquotes, links can have individual color/size within a theme
 
-6.7 **Outliner extension**
+6.7 **Collapsible directories in sidebar**
+- Click directory header to collapse/expand its file tree
+- Persist collapsed state per directory in session
+- Collapsed directories still show the header with a chevron indicator
+
+6.8 **Outliner extension**
 - Tab / Shift+Tab to indent/outdent list items
 - Alt+Up / Alt+Down to move list items
 - Enter at end of list item creates new item
 - Backspace on empty list item outdents or removes
 
-6.8 **URL paste extension**
+6.9 **URL paste extension**
 - Detect URL on clipboard + text selected → create `[text](url)` automatically
 
 **Milestone:** The app is keyboard-discoverable and visually customizable. Command palette makes every action findable.
