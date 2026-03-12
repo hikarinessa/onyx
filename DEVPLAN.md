@@ -2,6 +2,27 @@
 
 Each phase produces a usable milestone. Don't start the next phase until the current one is solid.
 
+## Versioning
+
+Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor version.
+
+| Phase | Version |
+|-------|---------|
+| Phase 1 (Skeleton) | 0.1.0 |
+| Phase 2 (Core Editor) | 0.2.0 |
+| Phase 3 (Links & Connections) | 0.3.0 |
+| Phase 4 (Typed Objects) | 0.4.0 |
+| Phase 4.5 (File Ops & Cache) | 0.4.5 |
+| Phase 4.6 (Hardening) | 0.4.6 |
+| Phase 5 (Periodic Notes) | 0.5.0 |
+| Phase 6 (Palette & Theming) | 0.6.0 |
+| Phase 7 (Preview & Panes) | 0.7.0 |
+| Phase 8 (Blocks & Tables) | 0.8.0 |
+| Phase 9 (MCP Server) | 0.9.0 |
+| Phase 10 (Tier 2) | 0.10.0 |
+
+Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
+
 ---
 
 ## Phase 1 — Skeleton
