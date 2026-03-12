@@ -1,6 +1,6 @@
 [package]
 name = "onyx"
-version = "0.4.6"
+version = "0.5.0"
 description = "A lightweight markdown note-taking app"
 authors = ["hikarinessa"]
 license = "MIT"
@@ -38,9 +38,17 @@ serde_yaml_ng = "0.10"
 # Text processing
 regex = "1"
 
+# Templating & dates
+minijinja = "2"
+chrono = "0.4"
+
 # Platform
 dirs-next = "2.0"
 trash = "5"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
+objc = "0.2.7"
 
 # Async/concurrency
 tokio = { version = "1", features = ["sync", "time"] }

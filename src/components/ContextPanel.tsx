@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import { replaceTabContent } from "./Editor";
+import { Calendar } from "./Calendar";
+import { createOrOpenPeriodicNote } from "../lib/periodicNotes";
 
 // ── Types ──
 
@@ -333,6 +335,62 @@ function PropertiesSection({
   );
 }
 
+// ── Recent Documents ──
+
+function RecentDocuments() {
+  const [expanded, setExpanded] = useState(false);
+  const [recents, setRecents] = useState<{ path: string; name: string }[]>([]);
+
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    import("../lib/recentDocs").then((mod) => {
+      setRecents(mod.getRecentDocs());
+      unsub = mod.subscribeRecentDocs(() => {
+        setRecents(mod.getRecentDocs());
+      });
+    });
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
+
+  return (
+    <div className="context-panel-section">
+      <div
+        className="context-panel-section-title collapsible"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span className="collapse-arrow">{expanded ? "▾" : "▸"}</span>
+        Recent ({recents.length})
+      </div>
+      {expanded && (
+        <div className="recent-docs-list">
+          {recents.length === 0 ? (
+            <div className="backlinks-empty">No recent documents</div>
+          ) : (
+            recents.map((doc) => (
+              <div
+                key={doc.path}
+                className="backlink-item"
+                title={doc.path}
+                onClick={async () => {
+                  try {
+                    await openFileInEditor(doc.path, doc.name);
+                  } catch (err) {
+                    console.error("Failed to open recent doc:", err);
+                  }
+                }}
+              >
+                <div className="backlink-title">{doc.name}</div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ──
 
 export function ContextPanel() {
@@ -425,8 +483,35 @@ export function ContextPanel() {
     }
   };
 
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const creatingRef = useRef(false);
+
+  const handleDateClick = async (isoDate: string) => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    setCalendarError(null);
+    try {
+      await createOrOpenPeriodicNote("daily", isoDate);
+    } catch (err) {
+      const msg = String(err);
+      if (msg.includes("not configured") || msg.includes("not enabled")) {
+        setCalendarError("Enable daily notes in ~/.onyx/periodic-notes.json");
+      } else {
+        setCalendarError(msg);
+      }
+    } finally {
+      creatingRef.current = false;
+    }
+  };
+
   return (
     <div className={`context-panel ${visible ? "" : "collapsed"}`}>
+      {/* Calendar */}
+      <Calendar onDateClick={handleDateClick} />
+      {calendarError && (
+        <div className="calendar-error">{calendarError}</div>
+      )}
+
       {/* Bookmark toggle button */}
       {activeTab && (
         <div className="context-panel-bookmark-row">
@@ -494,13 +579,8 @@ export function ContextPanel() {
         )}
       </div>
 
-      {/* Outline — placeholder */}
-      <div className="context-panel-section">
-        <div className="context-panel-section-title">Outline</div>
-        <p style={{ color: "var(--text-tertiary)", fontSize: "12px", margin: 0 }}>
-          Coming soon.
-        </p>
-      </div>
+      {/* Recent Documents */}
+      <RecentDocuments />
     </div>
   );
 }
