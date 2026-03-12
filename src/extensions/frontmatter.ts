@@ -110,14 +110,20 @@ const frontmatterAutoFold = ViewPlugin.fromClass(
 
 /** Theme for frontmatter decorations */
 const frontmatterTheme = EditorView.theme({
-  ".cm-frontmatter-line": {
-    color: "var(--text-tertiary)",
-    fontFamily: "var(--font-mono)",
-    fontSize: "0.85em",
+  ".cm-frontmatter-line, .cm-frontmatter-line *": {
+    color: "var(--text-tertiary) !important",
+    fontFamily: "var(--font-mono) !important",
+    fontSize: "0.85em !important",
+    fontWeight: "normal !important",
+    fontStyle: "normal !important",
     opacity: "0.8",
   },
-  ".cm-frontmatter-delimiter": {
-    color: "var(--text-tertiary)",
+  ".cm-frontmatter-delimiter, .cm-frontmatter-delimiter *": {
+    color: "var(--text-tertiary) !important",
+    fontFamily: "var(--font-mono) !important",
+    fontSize: "0.85em !important",
+    fontWeight: "normal !important",
+    fontStyle: "normal !important",
     opacity: "0.5",
   },
   ".cm-frontmatter-folded": {
