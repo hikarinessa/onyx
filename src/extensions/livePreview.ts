@@ -79,16 +79,18 @@ const ITALIC_RE = /(?<!\*)\*([^*]+)\*(?!\*)/g;
 const CHECKBOX_RE = /^(\s*[-*+]\s)\[([ x])\]\s/;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 
-// ── Decoration builder ──
+// ── Pre-scan cache ──
 
-function buildPreviewDecorations(view: EditorView): DecorationSet {
-  const builder = new RangeSetBuilder<Decoration>();
+interface PreScanResult {
+  fmEnd: number;
+  /** Maps visible range start line → inCodeBlock state at that line */
+  codeBlockStates: Map<number, boolean>;
+}
+
+function preScanDocument(view: EditorView): PreScanResult {
   const doc = view.state.doc;
 
-  // Find the cursor line (focus line shows raw markdown)
-  const cursorLine = doc.lineAt(view.state.selection.main.head).number;
-
-  // Determine frontmatter end line (scan from top)
+  // Determine frontmatter end line
   let fmEnd = 0;
   if (doc.lines >= 2 && doc.line(1).text.trim() === "---") {
     for (let j = 2; j <= doc.lines; j++) {
@@ -96,18 +98,40 @@ function buildPreviewDecorations(view: EditorView): DecorationSet {
     }
   }
 
+  // Pre-scan code block state for each visible range start
+  const codeBlockStates = new Map<number, boolean>();
+  for (const { from } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number;
+    if (!codeBlockStates.has(startLine)) {
+      let inCodeBlock = false;
+      for (let j = 1; j < startLine; j++) {
+        if (j <= fmEnd) continue;
+        if (doc.line(j).text.trimStart().startsWith("```")) {
+          inCodeBlock = !inCodeBlock;
+        }
+      }
+      codeBlockStates.set(startLine, inCodeBlock);
+    }
+  }
+
+  return { fmEnd, codeBlockStates };
+}
+
+// ── Decoration builder ──
+
+function buildPreviewDecorations(view: EditorView, scan: PreScanResult): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  const doc = view.state.doc;
+  const { fmEnd, codeBlockStates } = scan;
+
+  // Find the cursor line (focus line shows raw markdown)
+  const cursorLine = doc.lineAt(view.state.selection.main.head).number;
+
   for (const { from, to } of view.visibleRanges) {
     const startLine = doc.lineAt(from).number;
     const endLine = doc.lineAt(to).number;
 
-    // Pre-scan from line 1 to first visible line for code block state
-    let inCodeBlock = false;
-    for (let j = 1; j < startLine; j++) {
-      if (j <= fmEnd) continue; // skip frontmatter lines
-      if (doc.line(j).text.trimStart().startsWith("```")) {
-        inCodeBlock = !inCodeBlock;
-      }
-    }
+    let inCodeBlock = codeBlockStates.get(startLine) ?? false;
 
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
@@ -277,11 +301,13 @@ function addInlineDecorations(
 const livePreviewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    scan: PreScanResult;
 
     constructor(view: EditorView) {
+      this.scan = preScanDocument(view);
       const active = view.state.field(previewModeField);
       this.decorations = active
-        ? buildPreviewDecorations(view)
+        ? buildPreviewDecorations(view, this.scan)
         : Decoration.none;
     }
 
@@ -297,13 +323,17 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         this.decorations = Decoration.none;
         return;
       }
+      // Only re-scan on doc/viewport change (expensive), not on cursor move
+      if (update.docChanged || update.viewportChanged) {
+        this.scan = preScanDocument(update.view);
+      }
       if (
         update.docChanged ||
         update.viewportChanged ||
         update.selectionSet ||
         update.startState.field(previewModeField) !== active
       ) {
-        this.decorations = buildPreviewDecorations(update.view);
+        this.decorations = buildPreviewDecorations(update.view, this.scan);
       }
     }
   },

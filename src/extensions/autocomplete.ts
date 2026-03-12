@@ -20,6 +20,11 @@ interface TagInfo {
   count: number;
 }
 
+// Cache for all titles (used when prefix is empty) — avoids IPC on every [[
+let allTitlesCache: SearchResult[] | null = null;
+let allTitlesCacheTime = 0;
+const TITLE_CACHE_TTL = 5000; // 5 seconds
+
 async function wikilinkCompletion(
   context: CompletionContext
 ): Promise<CompletionResult | null> {
@@ -34,7 +39,14 @@ async function wikilinkCompletion(
   try {
     let results: SearchResult[];
     if (prefix.trim() === "") {
-      results = await invoke<SearchResult[]>("get_all_titles");
+      const now = Date.now();
+      if (allTitlesCache && now - allTitlesCacheTime < TITLE_CACHE_TTL) {
+        results = allTitlesCache;
+      } else {
+        results = await invoke<SearchResult[]>("get_all_titles");
+        allTitlesCache = results;
+        allTitlesCacheTime = now;
+      }
     } else {
       results = await invoke<SearchResult[]>("search_files", {
         query: prefix,

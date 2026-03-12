@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, type AccordionState } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
-import { replaceTabContent, scrollToLine } from "./Editor";
+import { replaceTabContent, scrollToLine } from "../lib/editorBridge";
 import { editorStateCache } from "./editorShared";
 import { Calendar } from "./Calendar";
 import { createOrOpenPeriodicNote } from "../lib/periodicNotes";
@@ -477,14 +477,14 @@ function OutlineSection({
             <div className="backlinks-empty">No headings</div>
           ) : (
             headings.map((h, i) => (
-              <div
+              <button
                 key={`${h.lineNumber}-${i}`}
                 className="outline-item"
                 style={{ paddingLeft: `${(h.level - 1) * 12}px` }}
                 onClick={() => scrollToLine(h.lineNumber)}
               >
                 {h.text}
-              </div>
+              </button>
             ))
           )}
         </div>

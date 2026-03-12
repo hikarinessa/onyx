@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { Titlebar } from "./components/Titlebar";
 import { TabBar } from "./components/TabBar";
 import { Sidebar } from "./components/Sidebar";
-import { Editor, foldFrontmatter } from "./components/Editor";
+import { Editor } from "./components/Editor";
+import { foldFrontmatter } from "./lib/editorBridge";
 import { ContextPanel } from "./components/ContextPanel";
 import { StatusBar } from "./components/StatusBar";
 import { QuickOpen } from "./components/QuickOpen";
@@ -21,6 +22,9 @@ import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-co
 // ---------------------------------------------------------------------------
 // Shared action functions — called by commands, menu events, and shortcuts
 // ---------------------------------------------------------------------------
+
+/** Guard against rapid nav back/forward — prevents double-pop during async tab switch */
+let navigating = false;
 
 function toggleQuickOpen() {
   const s = useAppStore.getState();
@@ -130,11 +134,17 @@ function registerCommands() {
     shortcut: "Cmd+[",
     category: "Navigate",
     execute: async () => {
-      const { activeTabId, navigateBack } = store();
-      if (!activeTabId) return;
-      const entry = navigateBack(activeTabId);
-      if (entry) {
-        await openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true });
+      if (navigating) return;
+      navigating = true;
+      try {
+        const { activeTabId, navigateBack } = store();
+        if (!activeTabId) return;
+        const entry = navigateBack(activeTabId);
+        if (entry) {
+          await openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true });
+        }
+      } finally {
+        navigating = false;
       }
     },
   });
@@ -144,11 +154,17 @@ function registerCommands() {
     shortcut: "Cmd+]",
     category: "Navigate",
     execute: async () => {
-      const { activeTabId, navigateForward } = store();
-      if (!activeTabId) return;
-      const entry = navigateForward(activeTabId);
-      if (entry) {
-        await openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true });
+      if (navigating) return;
+      navigating = true;
+      try {
+        const { activeTabId, navigateForward } = store();
+        if (!activeTabId) return;
+        const entry = navigateForward(activeTabId);
+        if (entry) {
+          await openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path, { skipNav: true });
+        }
+      } finally {
+        navigating = false;
       }
     },
   });
@@ -319,6 +335,19 @@ export default function App() {
         e.preventDefault();
         const { activeTabId, toggleEditorMode } = store();
         if (activeTabId) toggleEditorMode(activeTabId);
+      }
+
+      // Tab reorder: Cmd+Shift+Left/Right
+      if (meta && e.shiftKey && !alt && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        const { tabs, activeTabId, reorderTabs } = store();
+        if (!activeTabId) return;
+        const idx = tabs.findIndex((t) => t.id === activeTabId);
+        if (idx === -1) return;
+        const target = e.key === "ArrowLeft" ? idx - 1 : idx + 1;
+        if (target >= 0 && target < tabs.length) {
+          reorderTabs(idx, target);
+        }
       }
     };
 

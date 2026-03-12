@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
-import { insertAtCursor } from "./Editor";
+import { insertAtCursor } from "../lib/editorBridge";
 
 interface RustSearchResult {
   path: string;
@@ -200,8 +200,8 @@ export function QuickOpen() {
     query.trim() !== "" && results.length === 0 && !(parsed && parsed.typeName === "");
 
   return (
-    <div className="quick-open-overlay" onClick={onClose}>
-      <div className="quick-open" onClick={(e) => e.stopPropagation()}>
+    <div className="quick-open-overlay" onClick={onClose} onKeyDown={(e) => { if (e.key === "Tab") e.preventDefault(); }}>
+      <div className="quick-open" role="dialog" aria-label="Quick Open" onClick={(e) => e.stopPropagation()}>
         <input
           ref={inputRef}
           className="quick-open-input"

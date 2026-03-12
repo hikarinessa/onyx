@@ -76,8 +76,8 @@ export function CommandPalette() {
   let currentCategory = "";
 
   return (
-    <div className="quick-open-overlay" onClick={close}>
-      <div className="quick-open command-palette" onClick={(e) => e.stopPropagation()}>
+    <div className="quick-open-overlay" onClick={close} onKeyDown={(e) => { if (e.key === "Tab") e.preventDefault(); }}>
+      <div className="quick-open command-palette" role="dialog" aria-label="Command Palette" onClick={(e) => e.stopPropagation()}>
         <input
           ref={inputRef}
           className="quick-open-input"
@@ -97,7 +97,7 @@ export function CommandPalette() {
             return (
               <div key={cmd.id}>
                 {showCategory && (
-                  <div className="command-palette-category">{cmd.category}</div>
+                  <div className="command-palette-category" role="separator" aria-label={cmd.category}>{cmd.category}</div>
                 )}
                 <div
                   className={`quick-open-item command-palette-item ${

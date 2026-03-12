@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "./openFile";
-import { loadFileIntoCache } from "../components/Editor";
+import { loadFileIntoCache } from "./editorBridge";
 
 interface CreatePeriodicNoteResult {
   path: string;

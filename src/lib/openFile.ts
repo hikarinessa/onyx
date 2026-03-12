@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
-import { loadFileIntoCache } from "../components/Editor";
+import { loadFileIntoCache } from "./editorBridge";
 import { editorStateCache } from "../components/editorShared";
 import { recordRecentDoc } from "./recentDocs";
 

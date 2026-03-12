@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
-import { loadFileIntoCache, migrateEditorCache, clearEditorCache } from "../components/Editor";
+import { loadFileIntoCache, migrateEditorCache, clearEditorCache } from "./editorBridge";
 
 /**
  * Centralized file operations module.

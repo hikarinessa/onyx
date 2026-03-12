@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { EditorState, EditorSelection, type Extension } from "@codemirror/state";
+import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
 import { searchKeymap } from "@codemirror/search";
@@ -15,7 +15,8 @@ import {
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
-import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab, foldFrontmatterCommand } from "../extensions/frontmatter";
+import { setLiveViewRef, getLiveViewRef, flushSaveForTab } from "../lib/editorBridge";
+import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab } from "../extensions/frontmatter";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
 import { formattingKeymap } from "../extensions/formatting";
@@ -46,14 +47,14 @@ const SAVE_DEBOUNCE_MS = 500;
  */
 const activeTabIdBox = { current: null as string | null };
 
-/** Module-level reference to the live EditorView for external content updates */
-let _liveViewRef: EditorView | null = null;
-
 /** Maps each EditorView to the tab ID it's currently displaying */
 const viewTabIdMap = new WeakMap<EditorView, string>();
 
 /** Module-level save timer */
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Debounced word/char count timer */
+let wordCountTimer: ReturnType<typeof setTimeout> | undefined;
 
 // ---------------------------------------------------------------------------
 // Shared styles and highlight
@@ -123,10 +124,13 @@ function buildExtensions(): Extension[] {
       const isModified = content !== saved;
       setModified(tabId, isModified);
 
-      // Word count + char count
-      const words = content.trim() ? content.trim().split(/\s+/).length : 0;
-      setWordCount(words);
-      setCharCount(content.length);
+      // Debounced word count + char count (avoid allocating on every keystroke)
+      clearTimeout(wordCountTimer);
+      wordCountTimer = setTimeout(() => {
+        const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+        setWordCount(words);
+        setCharCount(content.length);
+      }, 300);
 
       // Debounced auto-save
       clearTimeout(saveTimer);
@@ -139,9 +143,10 @@ function buildExtensions(): Extension[] {
               await invoke("write_file", { path: tab.path, content: fixed });
               lastSavedContent.set(tabId, fixed);
               // If autofix changed content, sync the editor state
-              if (fixed !== content && _liveViewRef && activeTabIdBox.current === tabId) {
-                _liveViewRef.dispatch({
-                  changes: { from: 0, to: _liveViewRef.state.doc.length, insert: fixed },
+              const liveView = getLiveViewRef();
+              if (fixed !== content && liveView && activeTabIdBox.current === tabId) {
+                liveView.dispatch({
+                  changes: { from: 0, to: liveView.state.doc.length, insert: fixed },
                 });
               }
               setModified(tabId, false);
@@ -181,119 +186,6 @@ function buildExtensions(): Extension[] {
     livePreviewExtension(),
     lintingExtension(),
   ];
-}
-
-// ---------------------------------------------------------------------------
-// Public API — used by openFile / Sidebar
-// ---------------------------------------------------------------------------
-
-/** Seed content into the editor cache before opening a tab */
-export function loadFileIntoCache(id: string, content: string) {
-  editorStateCache.set(id, createStateWithExtensions(content));
-  lastSavedContent.set(id, content);
-}
-
-/**
- * Replace the document content for a tab after an external write (e.g. frontmatter update).
- * Updates the cache, the live view if it's the active tab, and the saved-content tracker.
- */
-export function replaceTabContent(tabId: string, newContent: string) {
-  const cached = editorStateCache.get(tabId);
-  if (cached) {
-    const tr = cached.update({
-      changes: { from: 0, to: cached.doc.length, insert: newContent },
-    });
-    editorStateCache.set(tabId, tr.state);
-  }
-  lastSavedContent.set(tabId, newContent);
-
-  // If this tab is currently displayed, update the live view too
-  if (activeTabIdBox.current === tabId && _liveViewRef) {
-    _liveViewRef.dispatch({
-      changes: { from: 0, to: _liveViewRef.state.doc.length, insert: newContent },
-    });
-  }
-
-  useAppStore.getState().setModified(tabId, false);
-}
-
-/** Migrate editor caches from one path key to another (used by rename) */
-export function migrateEditorCache(oldPath: string, newPath: string) {
-  const state = editorStateCache.get(oldPath);
-  if (state) {
-    editorStateCache.set(newPath, state);
-    editorStateCache.delete(oldPath);
-  }
-  const saved = lastSavedContent.get(oldPath);
-  if (saved !== undefined) {
-    lastSavedContent.set(newPath, saved);
-    lastSavedContent.delete(oldPath);
-  }
-  const scroll = scrollCache.get(oldPath);
-  if (scroll !== undefined) {
-    scrollCache.set(newPath, scroll);
-    scrollCache.delete(oldPath);
-  }
-}
-
-/** Remove all editor caches for a path (used by delete) */
-export function clearEditorCache(path: string) {
-  editorStateCache.delete(path);
-  lastSavedContent.delete(path);
-  scrollCache.delete(path);
-  clearAutoFoldForTab(path);
-}
-
-/** Scroll the live editor to a specific line number */
-export function scrollToLine(lineNumber: number) {
-  if (!_liveViewRef) return;
-  const doc = _liveViewRef.state.doc;
-  if (lineNumber < 1 || lineNumber > doc.lines) return;
-  const line = doc.line(lineNumber);
-  _liveViewRef.dispatch({
-    selection: EditorSelection.cursor(line.from),
-    effects: EditorView.scrollIntoView(line.from, { y: "start", yMargin: 50 }),
-  });
-  _liveViewRef.focus();
-}
-
-/** Fold frontmatter in the live editor (for command palette) */
-export function foldFrontmatter(): boolean {
-  if (!_liveViewRef) return false;
-  return foldFrontmatterCommand(_liveViewRef);
-}
-
-/** Insert text at the current cursor position in the live editor */
-export function insertAtCursor(text: string) {
-  if (!_liveViewRef) return;
-  const pos = _liveViewRef.state.selection.main.head;
-  _liveViewRef.dispatch({
-    changes: { from: pos, to: pos, insert: text },
-    selection: EditorSelection.cursor(pos + text.length),
-  });
-  _liveViewRef.focus();
-}
-
-/** Flush any pending save for a tab (called before closing) */
-export async function flushSaveForTab(id: string): Promise<void> {
-  const state = editorStateCache.get(id);
-  if (!state) return;
-
-  const content = state.doc.toString();
-  const saved = lastSavedContent.get(id);
-  if (content !== saved) {
-    const tab = useAppStore.getState().tabs.find((t) => t.id === id);
-    if (tab) {
-      try {
-        const fixed = autoFixOnSave(content);
-        await invoke("write_file", { path: tab.path, content: fixed });
-        lastSavedContent.set(id, fixed);
-        useAppStore.getState().setModified(id, false);
-      } catch (err) {
-        console.error("Failed to flush save for tab:", err);
-      }
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -433,7 +325,7 @@ export function Editor() {
       swapViewToTab(viewRef.current, activeTab.id, activeTab.editorMode);
     }
 
-    _liveViewRef = viewRef.current;
+    setLiveViewRef(viewRef.current);
     viewTabIdRef.current = activeTab.id;
 
     viewRef.current.focus();
@@ -501,7 +393,7 @@ export function Editor() {
 
     // Update _liveViewRef based on active pane
     if (paneLayout.activePaneId === "right") {
-      _liveViewRef = rightViewRef.current;
+      setLiveViewRef(rightViewRef.current);
       activeTabIdBox.current = rightTabId;
     }
   }, [paneLayout.type, paneLayout.rightActiveTabId, paneLayout.activePaneId]);
@@ -528,7 +420,7 @@ export function Editor() {
         }
         viewRef.current.destroy();
         viewRef.current = null;
-        _liveViewRef = null;
+        setLiveViewRef(null);
       }
       if (rightViewRef.current) {
         if (rightViewTabIdRef.current) {
@@ -554,12 +446,15 @@ export function Editor() {
     }
   }, [tabs]);
 
-  // Draggable divider handlers
+  // Draggable divider handlers — use ref to avoid recreating listeners on ratio change
+  const splitRatioRef = useRef(paneLayout.splitRatio);
+  splitRatioRef.current = paneLayout.splitRatio;
+
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setDragging(true);
     const startX = e.clientX;
-    const startRatio = paneLayout.splitRatio;
+    const startRatio = splitRatioRef.current;
 
     const handleMouseMove = (ev: MouseEvent) => {
       const editorArea = (e.target as HTMLElement).closest(".editor-area");
@@ -578,7 +473,20 @@ export function Editor() {
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  }, [paneLayout.splitRatio]);
+  }, []);
+
+  const handleDividerKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const step = 0.02;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      const newRatio = Math.max(0.2, splitRatioRef.current - step);
+      useAppStore.getState().setSplitRatio(newRatio);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      const newRatio = Math.min(0.8, splitRatioRef.current + step);
+      useAppStore.getState().setSplitRatio(newRatio);
+    }
+  }, []);
 
   // Handle pane activation clicks
   const handleLeftClick = useCallback(() => {
@@ -587,7 +495,7 @@ export function Editor() {
       if (paneLayout.leftActiveTabId) {
         useAppStore.getState().setActiveTab(paneLayout.leftActiveTabId);
         activeTabIdBox.current = paneLayout.leftActiveTabId;
-        _liveViewRef = viewRef.current;
+        setLiveViewRef(viewRef.current);
       }
     }
   }, [paneLayout]);
@@ -598,7 +506,7 @@ export function Editor() {
       if (paneLayout.rightActiveTabId) {
         useAppStore.getState().setActiveTab(paneLayout.rightActiveTabId);
         activeTabIdBox.current = paneLayout.rightActiveTabId;
-        _liveViewRef = rightViewRef.current;
+        setLiveViewRef(rightViewRef.current);
       }
     }
   }, [paneLayout]);
@@ -623,7 +531,12 @@ export function Editor() {
         </div>
         <div
           className="editor-divider"
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuenow={Math.round(paneLayout.splitRatio * 100)}
+          tabIndex={0}
           onMouseDown={handleDividerMouseDown}
+          onKeyDown={handleDividerKeyDown}
         />
         <div
           className={`editor-pane ${paneLayout.activePaneId === "right" ? "active-pane" : ""}`}
