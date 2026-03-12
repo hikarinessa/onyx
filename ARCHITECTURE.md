@@ -331,8 +331,7 @@ Matches the existing Zettelkasten setup exactly.
 - `format` uses moment.js-compatible date tokens
 - Folders are created automatically if they don't exist
 - "Open today's note" command creates from template if it doesn't exist, opens if it does
-- Navigation: previous/next day/week/month buttons in the editor header when viewing a periodic note
-- Calendar widget in the sidebar for quick date jumping
+- Calendar widget in the context panel for quick date jumping (see Section 7)
 
 ### Template Engine
 

@@ -15,6 +15,7 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 4.5 (File Ops & Cache) | 0.4.5 |
 | Phase 4.6 (Hardening) | 0.4.6 |
 | Phase 5 (Periodic Notes) | 0.5.0 |
+| Phase 5.X (Backfill) | 0.5.X |
 | Phase 6 (Palette & Theming) | 0.6.0 |
 | Phase 7 (Preview & Panes) | 0.7.0 |
 | Phase 8 (Blocks & Tables) | 0.8.0 |
@@ -338,6 +339,63 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
 ---
 
+## Phase 5.X — Backfill (Missed from Phases 1–5)
+
+**Goal:** Fill gaps between ARCHITECTURE.md spec and what was actually built. Small, targeted additions.
+
+### Autocomplete
+
+5.7 **Wikilink autocomplete**
+- Typing `[[` triggers autocomplete popup with suggestions from file index
+- Fuzzy match on filename, sorted by relevance
+- Enter/Tab to accept, Escape to dismiss
+
+5.8 **Tag autocomplete**
+- Typing `#` triggers autocomplete popup with suggestions from tag index
+- Shows existing tags with usage counts
+
+### Keyboard shortcuts
+
+5.9 **Cmd+N — New note in current directory**
+- Creates Untitled.md in the directory of the active file (or first registered dir if no file open)
+- Opens in editor, enters rename mode
+
+5.10 **Cmd+K — Insert wikilink**
+- Opens a mini-picker (similar to quick open) at cursor position
+- Select file → inserts `[[filename]]` at cursor
+
+5.11 **Cmd+Shift+N — New note from template**
+- Opens a template picker showing available templates
+- Select template → creates note from template in current directory
+
+5.12 **Formatting shortcuts**
+- Cmd+B → bold (`**selection**`)
+- Cmd+I → italic (`*selection*`)
+- Cmd+Shift+C → inline code (`` `selection` ``)
+- Works on selection; if no selection, wraps word at cursor
+
+### Sidebar & status bar
+
+5.13 **Unresolved link count badges in sidebar**
+- File tree items show a small badge with count of broken outgoing wikilinks
+- Query `links` table for unresolved links per file
+
+5.14 **Delete warns about incoming links**
+- Before deleting a file, check `links` table for notes that link TO this file
+- If any exist, show confirmation: "3 notes link to this file. Delete anyway?"
+
+5.15 **Status bar enhancements**
+- Character count on hover (tooltip over word count)
+- File path display (click to copy to clipboard)
+
+### Tabs
+
+5.16 **Tab drag-to-reorder**
+- Drag tabs to change order in the tab bar
+- Update Zustand tab order on drop
+
+---
+
 ## Phase 6 — Command Palette, Theming & Editor Polish
 
 **Goal:** The app becomes comfortable, customizable, and keyboard-discoverable. Every action is a command.
@@ -358,13 +416,36 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 - CSS custom properties controlled by theme JSON
 - Theme switch via command palette
 
-6.3 **Outliner extension**
+6.3 **Find & Replace**
+- Cmd+F — find in current file (wire CM6's `@codemirror/search`, already a dependency)
+- Cmd+H — find and replace
+- Styled to match Onyx theme
+
+6.4 **Native menu bar**
+- Build via `tauri::menu` — File, Edit, View, Go, Format, Window, Help
+- Menu items map to registered commands (same as command palette)
+- Standard items: New Note, Open, Close Tab, Undo/Redo, Find, Zoom, About Onyx
+- Keyboard shortcuts reference accessible from Help menu
+
+6.5 **Settings UI**
+- Accessible from command palette or menu bar
+- Load/save `~/.onyx/config.json`
+- Editor settings: autoSaveDelay, tabSize, lineNumbers, autoPairs, spellcheck
+- Layout: sidebar.width, contextPanel.width, contextPanel.sections order
+- Files: defaultNoteLocation
+- Periodic notes config (currently requires manual JSON editing)
+
+6.6 **Additional themes**
+- Ship warm-toned theme alongside dark + light
+- Per-element styling overrides: headings, code blocks, blockquotes, links can have individual color/size within a theme
+
+6.7 **Outliner extension**
 - Tab / Shift+Tab to indent/outdent list items
 - Alt+Up / Alt+Down to move list items
 - Enter at end of list item creates new item
 - Backspace on empty list item outdents or removes
 
-6.4 **URL paste extension**
+6.8 **URL paste extension**
 - Detect URL on clipboard + text selected → create `[text](url)` automatically
 
 **Milestone:** The app is keyboard-discoverable and visually customizable. Command palette makes every action findable.
@@ -388,21 +469,30 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 - Render `![[embed]]` as full inline content (read-only, 2 levels deep)
 - **Prerequisite:** Debt item #11 (full-doc decoration scan) should be addressed before or during this step — switch wikilink/tag extensions to viewport-aware iteration, since live preview adds significantly more decorations
 
-7.2 **Split panes**
+7.2 **Cmd+/ — Editor mode toggle**
+- Toggle between Live Preview and Source mode
+- Persist per-tab preference in session
+
+7.3 **Outline section in context panel**
+- Collapsible accordion section showing document headings (H1–H6)
+- Click heading → scroll editor to that position
+- Updates live as user edits
+
+7.4 **Split panes**
 - Cmd+click opens in horizontal split
 - Draggable divider
 - Each pane has own tab bar
 - Cmd+W closes pane if last tab
 
-7.3 **Per-tab navigation stack**
+7.5 **Per-tab navigation stack**
 - Back/forward history per tab (Cmd+[ / Cmd+])
 - Maintained when following wikilinks
 - Capped at 50 entries per tab (drop oldest)
 
-7.4 **Linting**
+7.6 **Linting**
 - Inline lint decorations in CM6
 - Rules from ARCHITECTURE.md
-- Auto-fix on save
+- Auto-fix on save configurable via `config.json` linting section (`enabled`, `fixOnSave`, `rules`)
 - Status bar indicator
 
 **Milestone:** The editor looks and feels great. Live preview makes writing pleasant. The app is genuinely usable as a daily driver.
@@ -475,9 +565,12 @@ Build incrementally as desired:
 - 10.3 Full-text search across files (Cmd+Shift+F) — ripgrep-style in Rust
 - 10.4 Natural language dates (`@today` → `[[2026-03-11]]`)
 - 10.5 Custom sort (drag-to-reorder in sidebar)
-- 10.6 Heatmap calendar (activity visualization)
-- 10.7 Print / PDF export
-- 10.8 Canvas read-only viewer (parse `.canvas` JSON, render visual)
+- 10.6 Sort by modified date (sidebar sort mode toggle)
+- 10.7 Heatmap calendar (activity visualization)
+- 10.8 Tracker widgets (inline charts from frontmatter data)
+- 10.9 Text extraction / OCR (images, PDFs)
+- 10.10 Print / PDF export
+- 10.11 Canvas read-only viewer (parse `.canvas` JSON, render visual)
 
 ---
 
