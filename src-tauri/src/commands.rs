@@ -631,6 +631,33 @@ pub fn is_global_bookmarked(path: String) -> Result<bool, String> {
     Ok(bookmarks.iter().any(|b| b.path == path))
 }
 
+// ── Autocomplete & Metadata ──
+
+#[tauri::command]
+pub fn get_all_tags(
+    state: State<AppState>,
+) -> Result<Vec<crate::db::TagInfo>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_all_tags()
+}
+
+#[tauri::command]
+pub fn get_all_titles(
+    state: State<AppState>,
+) -> Result<Vec<crate::db::SearchResult>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_all_titles()
+}
+
+#[tauri::command]
+pub fn count_incoming_links(
+    path: String,
+    state: State<AppState>,
+) -> Result<u32, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.count_incoming_links(&path)
+}
+
 fn days_in_month_count(year: i32, month: u32) -> u32 {
     if month == 12 {
         NaiveDate::from_ymd_opt(year + 1, 1, 1)

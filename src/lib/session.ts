@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "./openFile";
+import { getActiveThemeId, applyTheme } from "./themes";
 
 const SAVE_INTERVAL_MS = 30_000;
 const SESSION_BACKUP_KEY = "onyx-session-backup";
@@ -12,6 +13,7 @@ interface SessionData {
   activeTabPath: string | null;
   sidebarVisible: boolean;
   contextPanelVisible: boolean;
+  themeId?: string;
   timestamp: number;
 }
 
@@ -22,6 +24,7 @@ function getSessionData(): SessionData {
     activeTabPath: state.activeTabId,
     sidebarVisible: state.sidebarVisible,
     contextPanelVisible: state.contextPanelVisible,
+    themeId: getActiveThemeId(),
     timestamp: Date.now(),
   };
 }
@@ -86,6 +89,11 @@ export async function restoreSession(): Promise<void> {
 
   // Clean up legacy key after successful migration
   localStorage.removeItem(SESSION_LEGACY_KEY);
+
+  // Restore theme (authoritative source — overrides localStorage fast-path)
+  if (data.themeId) {
+    applyTheme(data.themeId);
+  }
 
   // Restore panel visibility
   const state = useAppStore.getState();

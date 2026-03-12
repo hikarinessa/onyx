@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
+import { insertAtCursor } from "./Editor";
 
 interface RustSearchResult {
   path: string;
@@ -28,11 +30,6 @@ function isTypeSuggestion(item: QuickOpenItem): item is TypeSuggestion {
   return "kind" in item && item.kind === "type-suggestion";
 }
 
-interface QuickOpenProps {
-  visible: boolean;
-  onClose: () => void;
-}
-
 /** Parse `type:foo` prefix. Returns null if no prefix, or { typeName } (possibly empty). */
 function parseTypePrefix(q: string): { typeName: string } | null {
   const trimmed = q.trimStart();
@@ -41,7 +38,14 @@ function parseTypePrefix(q: string): { typeName: string } | null {
   return { typeName };
 }
 
-export function QuickOpen({ visible, onClose }: QuickOpenProps) {
+export function QuickOpen() {
+  const visible = useAppStore((s) => s.quickOpenVisible);
+  const mode = useAppStore((s) => s.quickOpenMode);
+
+  const onClose = useCallback(() => {
+    useAppStore.getState().setQuickOpenVisible(false);
+    useAppStore.getState().setQuickOpenMode("open");
+  }, []);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<QuickOpenItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -138,12 +142,16 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
         // Fill in the type: prefix and trigger query
         setQuery(`type:${item.name}`);
         inputRef.current?.focus();
+      } else if (mode === "insert-wikilink") {
+        const title = item.name.replace(/\.md$/, "");
+        insertAtCursor(`[[${title}]]`);
+        onClose();
       } else {
         onClose();
         openFileInEditor(item.path, item.name);
       }
     },
-    [onClose]
+    [onClose, mode]
   );
 
   const handleKeyDown = useCallback(
@@ -198,7 +206,7 @@ export function QuickOpen({ visible, onClose }: QuickOpenProps) {
           ref={inputRef}
           className="quick-open-input"
           type="text"
-          placeholder="Open a file... (type: to filter by type)"
+          placeholder={mode === "insert-wikilink" ? "Insert link to..." : "Open a file... (type: to filter by type)"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}

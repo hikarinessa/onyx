@@ -8,7 +8,8 @@ mod plugins;
 mod watcher;
 
 use std::sync::{Arc, Mutex};
-use tauri::Manager;
+use tauri::{Manager, Emitter};
+use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItemBuilder};
 
 pub struct AppState {
     pub directories: Mutex<dirs::DirectoryManager>,
@@ -34,6 +35,74 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // Build native menu bar
+            let file_menu = SubmenuBuilder::new(app, "File")
+                .item(&MenuItemBuilder::with_id("new_note", "New Note").accelerator("CmdOrCtrl+N").build(app)?)
+                .item(&MenuItemBuilder::with_id("quick_open", "Quick Open").accelerator("CmdOrCtrl+O").build(app)?)
+                .separator()
+                .item(&MenuItemBuilder::with_id("close_tab", "Close Tab").accelerator("CmdOrCtrl+W").build(app)?)
+                .separator()
+                .quit()
+                .build()?;
+
+            let edit_menu = SubmenuBuilder::new(app, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .separator()
+                .item(&MenuItemBuilder::with_id("find", "Find").accelerator("CmdOrCtrl+F").build(app)?)
+                .item(&MenuItemBuilder::with_id("find_replace", "Find and Replace").accelerator("CmdOrCtrl+H").build(app)?)
+                .build()?;
+
+            let view_menu = SubmenuBuilder::new(app, "View")
+                .item(&MenuItemBuilder::with_id("toggle_sidebar", "Toggle Sidebar").accelerator("CmdOrCtrl+Alt+[").build(app)?)
+                .item(&MenuItemBuilder::with_id("toggle_context", "Toggle Context Panel").accelerator("CmdOrCtrl+Alt+]").build(app)?)
+                .separator()
+                .item(&MenuItemBuilder::with_id("command_palette", "Command Palette").accelerator("CmdOrCtrl+P").build(app)?)
+                .build()?;
+
+            let go_menu = SubmenuBuilder::new(app, "Go")
+                .item(&MenuItemBuilder::with_id("today_note", "Today's Note").accelerator("CmdOrCtrl+Shift+D").build(app)?)
+                .build()?;
+
+            let format_menu = SubmenuBuilder::new(app, "Format")
+                .item(&MenuItemBuilder::with_id("bold", "Bold").accelerator("CmdOrCtrl+B").build(app)?)
+                .item(&MenuItemBuilder::with_id("italic", "Italic").accelerator("CmdOrCtrl+I").build(app)?)
+                .item(&MenuItemBuilder::with_id("code", "Inline Code").accelerator("CmdOrCtrl+Shift+C").build(app)?)
+                .build()?;
+
+            let window_menu = SubmenuBuilder::new(app, "Window")
+                .minimize()
+                .maximize()
+                .fullscreen()
+                .separator()
+                .close_window()
+                .build()?;
+
+            let help_menu = SubmenuBuilder::new(app, "Help")
+                .item(&MenuItemBuilder::with_id("about", "About Onyx").build(app)?)
+                .build()?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&file_menu)
+                .item(&edit_menu)
+                .item(&view_menu)
+                .item(&go_menu)
+                .item(&format_menu)
+                .item(&window_menu)
+                .item(&help_menu)
+                .build()?;
+
+            app.set_menu(menu)?;
+
+            // Handle menu events — emit to frontend for JS handling
+            app.on_menu_event(|app_handle, event| {
+                let _ = app_handle.emit("menu:action", event.id().0.as_str());
+            });
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -114,6 +183,9 @@ pub fn run() {
             commands::save_periodic_config,
             commands::create_periodic_note,
             commands::get_dates_with_notes,
+            commands::get_all_tags,
+            commands::get_all_titles,
+            commands::count_incoming_links,
             plugins::mac_rounded_corners::enable_rounded_corners,
             plugins::mac_rounded_corners::enable_modern_window_style,
             plugins::mac_rounded_corners::reposition_traffic_lights,

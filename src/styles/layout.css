@@ -918,3 +918,157 @@
   max-height: 200px;
   overflow-y: auto;
 }
+
+/* ── Command palette ── */
+.command-palette {
+  max-height: 480px;
+}
+
+.command-palette-category {
+  padding: 6px 16px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.command-palette-item {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.command-palette-shortcut {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  background: var(--bg-active);
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.command-palette-empty {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* ── Status bar path ── */
+.statusbar-path {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+
+.statusbar-path:hover {
+  opacity: 1;
+}
+
+/* ── Tab drag-to-reorder ── */
+.tab.dragging {
+  opacity: 0.4;
+}
+
+.tab.drop-target {
+  border-left: 2px solid var(--accent);
+}
+
+/* ── Sidebar directory collapse ── */
+.sidebar-header {
+  cursor: pointer;
+}
+
+.sidebar-header-chevron {
+  font-size: 10px;
+  width: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* ── CM6 search panel theming ── */
+.cm-search {
+  background: var(--bg-elevated) !important;
+  border-bottom: 1px solid var(--border-default) !important;
+}
+
+.cm-search label {
+  color: var(--text-secondary) !important;
+  font-size: 12px !important;
+}
+
+.cm-search input,
+.cm-search button {
+  font-size: 12px !important;
+  font-family: var(--font-ui) !important;
+}
+
+.cm-search input {
+  color: var(--text-primary) !important;
+  background: var(--bg-base) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 2px 6px !important;
+}
+
+.cm-search button {
+  color: var(--text-secondary) !important;
+  background: var(--bg-hover) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: var(--radius-sm) !important;
+  cursor: pointer !important;
+}
+
+.cm-search button:hover {
+  background: var(--bg-active) !important;
+  color: var(--text-primary) !important;
+}
+
+.cm-searchMatch {
+  background: rgba(139, 124, 246, 0.25) !important;
+}
+
+.cm-searchMatch-selected {
+  background: rgba(139, 124, 246, 0.45) !important;
+}
+
+/* ── CM6 autocomplete theming ── */
+.cm-tooltip-autocomplete {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.cm-tooltip-autocomplete > ul {
+  font-family: var(--font-ui) !important;
+  font-size: 13px !important;
+}
+
+.cm-tooltip-autocomplete > ul > li {
+  padding: 4px 8px !important;
+  color: var(--text-secondary) !important;
+}
+
+.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.cm-completionLabel {
+  color: var(--text-primary) !important;
+}
+
+.cm-completionDetail {
+  color: var(--text-tertiary) !important;
+  font-style: normal !important;
+  margin-left: 8px !important;
+}

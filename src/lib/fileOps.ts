@@ -58,6 +58,22 @@ export async function renameFolder(oldPath: string, newPath: string): Promise<vo
 
 /** Delete a file or folder (move to OS trash), cleaning up all caches */
 export async function deleteFile(path: string): Promise<void> {
+  // Check for incoming links and warn the user
+  if (path.endsWith(".md")) {
+    try {
+      const linkCount = await invoke<number>("count_incoming_links", { path });
+      if (linkCount > 0) {
+        const noun = linkCount === 1 ? "note links" : "notes link";
+        const confirmed = window.confirm(
+          `${linkCount} ${noun} to this file. Delete anyway?`
+        );
+        if (!confirmed) return;
+      }
+    } catch {
+      // If the query fails, proceed without warning
+    }
+  }
+
   await invoke("trash_file", { path });
 
   // Find all affected tabs (exact match for files, prefix match for folders)
@@ -91,6 +107,27 @@ export async function createFolder(parentPath: string): Promise<string> {
   await invoke("create_folder", { path: folderPath });
   useAppStore.getState().bumpFileTreeVersion();
   return folderPath;
+}
+
+/**
+ * Create a new note in the active tab's directory, or the first registered directory.
+ * Used by Cmd+N and the command palette.
+ */
+export async function createNewNote(): Promise<void> {
+  const { tabs, activeTabId } = useAppStore.getState();
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const dir = activeTab
+    ? activeTab.path.replace(/\/[^/]+$/, "")
+    : undefined;
+
+  if (!dir) {
+    const dirs = await invoke<{ path: string }[]>("get_registered_directories");
+    if (dirs.length > 0) {
+      await createNote(dirs[0].path);
+    }
+    return;
+  }
+  await createNote(dir);
 }
 
 /** Reveal a file in the OS file manager */
