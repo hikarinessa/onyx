@@ -228,6 +228,48 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 
 ---
 
+## Phase 4.6 — Hardening
+
+**Goal:** Fix known fragilities and close structural gaps before building new features on top. Everything here is low-effort, high-impact.
+
+**Context:** Post-Phase 4.5 review identified several issues that are cheap to fix now but expensive to work around later. None are architectural changes — they're targeted fixes to the existing foundation.
+
+### Steps
+
+4.6.1 **File watcher shutdown signal**
+- Add an `AtomicBool` (or `oneshot::channel`) shutdown flag to the watcher's debounce thread
+- Check the flag each loop iteration; break on signal
+- `FileWatcher::drop()` sets the flag and joins the thread
+- Reference: Otterly's `watcher/service.rs` for the pattern
+- Fixes debt item #8 — without this, unregistering/re-registering directories leaks threads, and app quit may hang
+
+4.6.2 **React error boundary**
+- Add an error boundary component wrapping the editor and sidebar
+- On crash: render a fallback UI with "Something went wrong" + a button to reload the panel
+- Prevents a component-level throw from white-screening the entire app (which would prevent the user from saving)
+- ~15 lines of code, no dependencies
+
+4.6.3 **Move session persistence off localStorage**
+- Replace `localStorage` in `src/lib/session.ts` with a Rust command that reads/writes `~/.onyx/session.json`
+- localStorage is synchronous, size-limited (5-10MB), and doesn't survive WebKit cache clears
+- The DEVPLAN §2.3 already specifies `~/.onyx/session.json` as the target — implementation drifted to localStorage
+- Add Rust commands: `read_session() → Option<String>` and `write_session(json: String) → ()`
+- Keep the 30s auto-save interval and `beforeunload` flush
+
+4.6.4 **Extract Sidebar sub-components**
+- Sidebar.tsx is 627 lines handling: file tree, bookmark strip, context menus, inline rename, directory add/remove
+- Extract `BookmarkStrip` and `SidebarContextMenu` into sibling components in `src/components/`
+- No behavior changes — purely structural, reduces the risk surface for Phase 5+ feature additions
+- Natural seam: bookmarks are already a visually distinct section pinned at the bottom
+
+4.6.5 **Verify & smoke test**
+- `cargo check`, `cargo test`, `npx tsc --noEmit` — all must pass
+- Launch with `cargo tauri dev`, confirm: session restores from `~/.onyx/session.json`, error boundary catches a simulated throw, file watcher thread exits cleanly on directory unregister
+
+**Milestone:** The foundation is hardened. No thread leaks, no white-screen risk, no fragile persistence. Ready to build periodic notes on a solid base.
+
+---
+
 ## Phase 5 — Periodic Notes & Calendar
 
 **Goal:** Daily journaling workflow works. Calendar widget navigates and creates notes.
@@ -236,23 +278,30 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 
 5.1 **Periodic notes config**
 - Load from `~/.onyx/periodic-notes.json`
-- Bind to a registered directory
+- Bind to a registered directory (user picks which one)
+- Consider per-directory config if needed later, but start global — keep it simple for now
 
 5.2 **Template engine**
-- Parse `{{variable}}` syntax in Rust
+- Parse `{{variable}}` syntax in Rust using minijinja
 - Support: `{{date}}`, `{{date:FORMAT}}`, `{{title}}`, `{{time}}`, `{{yesterday}}`, `{{tomorrow}}`, `{{last_year}}`, `{{cursor}}`
+- **Design decision:** `{{yesterday}}` and `{{tomorrow}}` render as wikilinks (`[[2026-03-07]]`), not bare dates — the user navigates between periodic notes via links
+- **Edge case:** If the template references `{{yesterday}}` and yesterday's note doesn't exist, the wikilink is rendered anyway (it's a link to a note that will be created on click). Don't try to create the target note eagerly.
+- **Unit tests:** Write Rust tests for the template engine — date formatting, variable substitution, edge cases (leap years, year boundaries, week numbering). This is pure-function code, easy and valuable to test.
 
 5.3 **Create periodic note**
 - Rust command: `create_periodic_note(type, date) → path`
 - Generates path from format string, creates folders if needed, applies template
+- **Idempotent:** If the note already exists, return its path without overwriting. Frontend opens it either way.
 - Returns path to frontend → open in editor
+- **Unit tests:** Test path generation for daily/weekly/monthly across date boundaries
 
 5.4 **Calendar widget**
-- Month view in context panel (always visible)
+- Month view in context panel (always visible), using `react-day-picker`
 - Today highlighted, `< TODAY >` navigation
 - Click date → open or create daily note
 - Dots on dates that have notes (query index by path pattern)
 - Weekly note indicator on week numbers
+- **Performance:** The "which dates have notes" query runs on every month navigation. Use a path-prefix query against the `files` table (`WHERE path LIKE 'Calendar/2026/2026-03/%'`), not a full table scan. If this becomes a bottleneck at scale, add a dedicated path-pattern index.
 
 5.5 **Cmd+Shift+D → open today's note**
 
@@ -260,9 +309,11 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 
 ---
 
-## Phase 6 — Blocks, Command Palette & Theming
+## Phase 6 — Command Palette, Theming & Editor Polish
 
-**Goal:** Block operations, command palette, and theming. The app becomes comfortable and customizable.
+**Goal:** The app becomes comfortable, customizable, and keyboard-discoverable. Every action is a command.
+
+**Rationale (reordered from original plan):** Command palette and theming are high-value, low-risk features that make the app feel complete. Block operations and table editing are higher complexity and can wait — users will forgive missing block ops but not a source-only editor. Live preview (Phase 7) is the bigger daily-driver unlock; this phase sets the stage.
 
 ### Steps
 
@@ -278,39 +329,24 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 - CSS custom properties controlled by theme JSON
 - Theme switch via command palette
 
-6.3 **Block awareness in CM6**
-- Detect `***` separators
-- Track block boundaries (line ranges)
-- Visual: subtle separator line, block actions on hover (copy icon)
-
-6.4 **Block operations**
-- Copy block as markdown
-- Move block up/down (reorder across separators)
-- Delete block
-- Extract block to new note (create note with block content, replace block with wikilink)
-
-6.5 **Outliner extension**
+6.3 **Outliner extension**
 - Tab / Shift+Tab to indent/outdent list items
 - Alt+Up / Alt+Down to move list items
 - Enter at end of list item creates new item
 - Backspace on empty list item outdents or removes
 
-6.6 **Table editing extension**
-- Tab to move between cells
-- Enter to move to next row
-- Auto-align columns on format
-- Add/remove rows and columns via context menu
-
-6.7 **URL paste extension**
+6.4 **URL paste extension**
 - Detect URL on clipboard + text selected → create `[text](url)` automatically
 
-**Milestone:** The app is customizable and has power-editing features. Command palette makes everything discoverable.
+**Milestone:** The app is keyboard-discoverable and visually customizable. Command palette makes every action findable.
 
 ---
 
 ## Phase 7 — Live Preview & Split Panes
 
-**Goal:** Live preview mode renders markdown inline. Split panes for side-by-side editing.
+**Goal:** Live preview mode renders markdown inline. Split panes for side-by-side editing. The app becomes a genuine daily driver.
+
+**Note:** This is the single biggest "daily driver" feature. Users will tolerate source-only editing for a while, but live preview is what makes the editor feel native and pleasant. Prioritize this over power-editing features (blocks, tables).
 
 ### Steps
 
@@ -321,6 +357,7 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 - Render wikilinks as styled clickable elements
 - Render tags as styled chips
 - Render `![[embed]]` as full inline content (read-only, 2 levels deep)
+- **Prerequisite:** Debt item #11 (full-doc decoration scan) should be addressed before or during this step — switch wikilink/tag extensions to viewport-aware iteration, since live preview adds significantly more decorations
 
 7.2 **Split panes**
 - Cmd+click opens in horizontal split
@@ -343,46 +380,75 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 
 ---
 
-## Phase 8 — MCP Server
+## Phase 8 — Blocks, Tables & Power Editing
+
+**Goal:** Block-level operations and structured editing. The editor becomes a power tool.
+
+**Rationale (reordered from original plan):** Block operations and table editing are high-complexity features that touch every layer (parser, decorations, commands, file mutations). They're valuable but not blocking daily-driver usage. Building them after live preview means the editing foundation is mature and well-tested.
+
+### Steps
+
+8.1 **Block awareness in CM6**
+- Detect `***` separators
+- Track block boundaries (line ranges)
+- Visual: subtle separator line, block actions on hover (copy icon)
+
+8.2 **Block operations**
+- Copy block as markdown
+- Move block up/down (reorder across separators)
+- Delete block
+- Extract block to new note (create note with block content, replace block with wikilink)
+
+8.3 **Table editing extension**
+- Tab to move between cells
+- Enter to move to next row
+- Auto-align columns on format
+- Add/remove rows and columns via context menu
+
+**Milestone:** The editor handles structured content — blocks can be moved, extracted, and tables can be edited inline.
+
+---
+
+## Phase 9 — MCP Server
 
 **Goal:** Claude Code can read, search, and write to your notes through Onyx.
 
 ### Steps
 
-8.1 **HTTP server in Rust**
+9.1 **HTTP server in Rust**
 - Separate thread, localhost:19532
 - MCP protocol over streamable HTTP
 
-8.2 **Read-only tools**
+9.2 **Read-only tools**
 - `onyx_get_active`, `onyx_read_note`, `onyx_search`, `onyx_get_backlinks`, `onyx_get_tags`, `onyx_resolve_link`, `onyx_list_directory`, `onyx_get_properties`, `onyx_query_by_type`, `onyx_get_index_stats`, `onyx_get_object_types`, `onyx_get_periodic_config`
 
-8.3 **Write tools with confirmation**
+9.3 **Write tools with confirmation**
 - `onyx_write_note`, `onyx_insert_at_cursor`, `onyx_insert_after_heading`, `onyx_append_to_note`, `onyx_update_frontmatter`, `onyx_create_note`
 - Toast notification in Onyx UI: "Claude Code wants to write to Mihai.md — Allow / Deny"
 - Cursor position snapshotted at confirmation time
 
-8.4 **State file**
+9.4 **State file**
 - Write `~/.onyx/state.json` on file switch, selection change, window focus (1s debounce)
 
-8.5 **Config**
+9.5 **Config**
 - MCP enable/disable, port, write confirmation toggle in `config.json`
 
 **Milestone:** Claude Code is vault-aware. You can ask it about your notes and it can read/write through Onyx.
 
 ---
 
-## Phase 9 — Tier 2 Features
+## Phase 10 — Tier 2 Features
 
 Build incrementally as desired:
 
-- 9.1 Slash commands (`/h1`, `/table`, `/template`, `/divider`)
-- 9.2 Custom keybindings (`~/.onyx/keybindings.json`)
-- 9.3 Full-text search across files (Cmd+Shift+F) — ripgrep-style in Rust
-- 9.4 Natural language dates (`@today` → `[[2026-03-11]]`)
-- 9.5 Custom sort (drag-to-reorder in sidebar)
-- 9.6 Heatmap calendar (activity visualization)
-- 9.7 Print / PDF export
-- 9.8 Canvas read-only viewer (parse `.canvas` JSON, render visual)
+- 10.1 Slash commands (`/h1`, `/table`, `/template`, `/divider`)
+- 10.2 Custom keybindings (`~/.onyx/keybindings.json`)
+- 10.3 Full-text search across files (Cmd+Shift+F) — ripgrep-style in Rust
+- 10.4 Natural language dates (`@today` → `[[2026-03-11]]`)
+- 10.5 Custom sort (drag-to-reorder in sidebar)
+- 10.6 Heatmap calendar (activity visualization)
+- 10.7 Print / PDF export
+- 10.8 Canvas read-only viewer (parse `.canvas` JSON, render visual)
 
 ---
 
@@ -392,6 +458,7 @@ Build incrementally as desired:
 - **Test with real notes.** Use the Zettelkasten from Phase 1 onward. If something feels wrong, fix it now.
 - **Rust for data, React for pixels.** When in doubt about where logic goes, put it in Rust.
 - **No premature abstraction.** Build the specific thing, refactor later if patterns emerge.
-- **Ship each phase.** Tag a release at each milestone. v0.1 = Phase 1, v0.2 = Phase 2, etc.
+- **Ship each phase.** Tag a release at each milestone.
+- **Test what matters.** Write Rust unit tests for pure-function code (parsers, template engine, date path generation). These are high-ROI — well-defined inputs/outputs, no mocking. Don't backfill tests for everything, but establish the habit for new code.
 - **Background-first for heavy work.** Indexing, scanning, and search always run on background threads. The UI must never block.
 - **Protect user data.** Dirty flags before auto-save, self-write suppression on file watcher, confirmation on destructive link actions.

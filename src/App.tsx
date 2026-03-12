@@ -6,6 +6,7 @@ import { Editor } from "./components/Editor";
 import { ContextPanel } from "./components/ContextPanel";
 import { StatusBar } from "./components/StatusBar";
 import { QuickOpen } from "./components/QuickOpen";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useAppStore } from "./stores/app";
 import { restoreSession, initSessionPersistence } from "./lib/session";
 
@@ -65,9 +66,15 @@ export default function App() {
       <Titlebar />
       <TabBar />
       <div className="main">
-        <Sidebar />
-        <Editor />
-        <ContextPanel />
+        <ErrorBoundary label="sidebar">
+          <Sidebar />
+        </ErrorBoundary>
+        <ErrorBoundary label="editor">
+          <Editor />
+        </ErrorBoundary>
+        <ErrorBoundary label="context panel">
+          <ContextPanel />
+        </ErrorBoundary>
       </div>
       <StatusBar />
       <QuickOpen

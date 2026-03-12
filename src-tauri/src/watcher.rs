@@ -3,7 +3,9 @@ use crate::indexer::Indexer;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use tauri::Emitter;
 
@@ -21,6 +23,10 @@ pub struct FileWatcher {
     _watcher: RecommendedWatcher,
     /// Tracks recently written paths to suppress self-write events
     recent_writes: Arc<Mutex<HashMap<PathBuf, Instant>>>,
+    /// Shutdown flag for the debounce processor thread
+    shutdown: Arc<AtomicBool>,
+    /// Handle to the debounce processor thread (joined on drop)
+    debounce_thread: Option<JoinHandle<()>>,
 }
 
 impl FileWatcher {
@@ -41,11 +47,15 @@ impl FileWatcher {
             Arc::new(Mutex::new(HashMap::new()));
         let pending_ref = pending_reindex.clone();
 
+        // Shutdown flag — set to true when FileWatcher is dropped
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let shutdown_ref = shutdown.clone();
+
         // Spawn a debounce processor thread
         let db_debounce = db.clone();
         let dirs_debounce = dir_pairs.clone();
-        std::thread::spawn(move || {
-            loop {
+        let debounce_thread = std::thread::spawn(move || {
+            while !shutdown_ref.load(Ordering::Relaxed) {
                 std::thread::sleep(Duration::from_millis(500));
 
                 let now = Instant::now();
@@ -86,6 +96,7 @@ impl FileWatcher {
                     }
                 }
             }
+            log::info!("Debounce processor thread exiting");
         });
 
         let mut watcher = RecommendedWatcher::new(
@@ -155,6 +166,8 @@ impl FileWatcher {
         Ok(Self {
             _watcher: watcher,
             recent_writes,
+            shutdown,
+            debounce_thread: Some(debounce_thread),
         })
     }
 
@@ -169,5 +182,14 @@ impl FileWatcher {
         self._watcher
             .watch(path, RecursiveMode::Recursive)
             .map_err(|e| format!("Failed to watch {}: {}", path.display(), e))
+    }
+}
+
+impl Drop for FileWatcher {
+    fn drop(&mut self) {
+        self.shutdown.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.debounce_thread.take() {
+            let _ = handle.join();
+        }
     }
 }

@@ -63,8 +63,8 @@ Never add a button or shortcut for something that isn't also in the menu bar. Wh
 
 ## 9. Testing
 
-- Rust: unit tests for extractors, parsers, and DB operations.
-- Frontend: manual testing via dev server for now. Automated tests are a Tier 2 goal.
+- Rust: unit tests for extractors, parsers, DB operations, and template logic. Write tests for new pure-function code as it's built — especially the template engine, date path generation, and indexer extractors. These are high-ROI tests: well-defined inputs/outputs, no mocking needed.
+- Frontend: manual testing via dev server for now. Automated frontend tests remain a Tier 2 goal, but React error boundaries must be in place to prevent white-screen crashes (see Phase 4.6).
 - Always run `cargo check`, `cargo test`, and `npx tsc --noEmit` before committing.
 
 ## 10. Post-Phase Review Loop

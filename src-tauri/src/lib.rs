@@ -103,6 +103,8 @@ pub fn run() {
             commands::rename_file,
             commands::trash_file,
             commands::reveal_in_finder,
+            commands::read_session,
+            commands::write_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
