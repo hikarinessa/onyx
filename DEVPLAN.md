@@ -305,7 +305,15 @@ Each phase produces a usable milestone. Don't start the next phase until the cur
 
 5.5 **Cmd+Shift+D → open today's note**
 
-**Milestone:** Full daily journaling workflow. Open app → see calendar → click today → write.
+5.6 **Recent documents**
+- Track last 20 opened files in a ring buffer (deduplicated by path, most recent first)
+- Store in `~/.onyx/state.json` (or extend session data) — persists across launches
+- Record on every `openFileInEditor` call
+- Collapsible accordion section in ContextPanel (below calendar, above backlinks)
+- Click entry → open file in editor
+- Clear button to reset history
+
+**Milestone:** Full daily journaling workflow. Open app → see calendar → click today → write. Recent documents provide quick re-access to working files.
 
 ---
 

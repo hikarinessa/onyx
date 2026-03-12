@@ -1,5 +1,5 @@
 use crate::AppState;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::State;
@@ -529,4 +529,82 @@ pub fn write_session(json: String) -> Result<(), String> {
             let _ = std::fs::remove_file(&temp_path);
             format!("Failed to rename session temp file: {}", e)
         })
+}
+
+// ── Global Bookmarks ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlobalBookmark {
+    pub path: String,
+    pub label: String,
+}
+
+fn global_bookmarks_path() -> Result<PathBuf, String> {
+    Ok(dirs_next::home_dir()
+        .ok_or("Could not find home directory")?
+        .join(".onyx")
+        .join("global-bookmarks.json"))
+}
+
+fn read_global_bookmarks_file() -> Result<Vec<GlobalBookmark>, String> {
+    let path = global_bookmarks_path()?;
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read global-bookmarks.json: {}", e))?;
+    serde_json::from_str(&raw)
+        .map_err(|e| format!("Failed to parse global-bookmarks.json: {}", e))
+}
+
+fn write_global_bookmarks_file(bookmarks: &[GlobalBookmark]) -> Result<(), String> {
+    let dir = dirs_next::home_dir()
+        .ok_or("Could not find home directory")?
+        .join(".onyx");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create ~/.onyx: {}", e))?;
+
+    let path = dir.join("global-bookmarks.json");
+    let json = serde_json::to_string_pretty(bookmarks)
+        .map_err(|e| format!("Failed to serialize global bookmarks: {}", e))?;
+
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_path = dir.join(format!(".global-bm-tmp-{}-{}", std::process::id(), counter));
+
+    std::fs::write(&temp_path, &json)
+        .map_err(|e| format!("Failed to write global bookmarks temp file: {}", e))?;
+
+    std::fs::rename(&temp_path, &path).map_err(|e| {
+        let _ = std::fs::remove_file(&temp_path);
+        format!("Failed to rename global bookmarks temp file: {}", e)
+    })
+}
+
+#[tauri::command]
+pub fn get_global_bookmarks() -> Result<Vec<GlobalBookmark>, String> {
+    read_global_bookmarks_file()
+}
+
+#[tauri::command]
+pub fn toggle_global_bookmark(path: String, label: String) -> Result<bool, String> {
+    let mut bookmarks = read_global_bookmarks_file()?;
+
+    if let Some(idx) = bookmarks.iter().position(|b| b.path == path) {
+        bookmarks.remove(idx);
+        write_global_bookmarks_file(&bookmarks)?;
+        Ok(false)
+    } else {
+        bookmarks.push(GlobalBookmark {
+            path,
+            label,
+        });
+        write_global_bookmarks_file(&bookmarks)?;
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+pub fn is_global_bookmarked(path: String) -> Result<bool, String> {
+    let bookmarks = read_global_bookmarks_file()?;
+    Ok(bookmarks.iter().any(|b| b.path == path))
 }
