@@ -491,3 +491,42 @@ pub fn reveal_in_finder(path: String, state: State<AppState>) -> Result<(), Stri
 
     Ok(())
 }
+
+#[tauri::command]
+pub fn read_session() -> Result<Option<String>, String> {
+    let path = dirs_next::home_dir()
+        .ok_or("Could not find home directory")?
+        .join(".onyx")
+        .join("session.json");
+
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    std::fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|e| format!("Failed to read session.json: {}", e))
+}
+
+#[tauri::command]
+pub fn write_session(json: String) -> Result<(), String> {
+    let dir = dirs_next::home_dir()
+        .ok_or("Could not find home directory")?
+        .join(".onyx");
+
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create ~/.onyx: {}", e))?;
+
+    let path = dir.join("session.json");
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_path = dir.join(format!(".session-tmp-{}-{}", std::process::id(), counter));
+
+    std::fs::write(&temp_path, &json)
+        .map_err(|e| format!("Failed to write session temp file: {}", e))?;
+
+    std::fs::rename(&temp_path, &path)
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            format!("Failed to rename session temp file: {}", e)
+        })
+}

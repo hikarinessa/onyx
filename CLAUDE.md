@@ -5,7 +5,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 ## Key Documents
 
 - `ARCHITECTURE.md` — Full design spec (layout, data model, editor, theming, feature tiers)
-- `DEVPLAN.md` — 9-phase implementation plan with step-by-step breakdowns
+- `DEVPLAN.md` — 10-phase implementation plan with step-by-step breakdowns
 - `GUIDELINES.md` — Development rules (surface parity, code style, error handling)
 - `DEPENDENCIES.md` — Crate/package rationale
 
@@ -16,7 +16,13 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 3 (Links & Connections):** Complete
 - **Phase 4 (Typed Objects & Properties):** Complete
 - **Phase 4.5 (File Operations & Cache Integrity):** Complete
-- **Phase 5 (Periodic Notes & Calendar):** Next
+- **Phase 4.6 (Hardening):** Complete
+- **Phase 5 (Periodic Notes & Calendar):** Upcoming
+- **Phase 6 (Command Palette, Theming & Editor Polish):** Planned
+- **Phase 7 (Live Preview & Split Panes):** Planned
+- **Phase 8 (Blocks, Tables & Power Editing):** Planned
+- **Phase 9 (MCP Server):** Planned
+- **Phase 10 (Tier 2 Features):** Planned
 
 ## Project Structure
 
@@ -29,7 +35,10 @@ src/                          # Frontend (React + TypeScript)
 ├── components/
 │   ├── Titlebar.tsx          #   25 lines — Custom titlebar with window controls
 │   ├── TabBar.tsx            #   41 lines — Tab strip with close/modified indicator
-│   ├── Sidebar.tsx           #  627 lines — File tree, context menu, inline rename, add/remove dir
+│   ├── Sidebar.tsx           #  330 lines — File tree, inline rename, add/remove dir
+│   ├── BookmarkStrip.tsx     #   80 lines — Bookmarks section pinned at sidebar bottom
+│   ├── SidebarContextMenu.tsx#  130 lines — Right-click context menu for file tree
+│   ├── ErrorBoundary.tsx     #   35 lines — React error boundary (wraps sidebar, editor, context panel)
 │   ├── Editor.tsx            #  456 lines — CM6 editor with state caching, cache migration exports
 │   ├── ContextPanel.tsx      #  493 lines — Backlinks, property editor (typed + untyped)
 │   ├── StatusBar.tsx         #   27 lines — Cursor position, word count
@@ -41,7 +50,7 @@ src/                          # Frontend (React + TypeScript)
 ├── lib/
 │   ├── fileOps.ts            #  118 lines — Centralized file mutations (create/rename/delete)
 │   ├── openFile.ts           #   20 lines — Shared open-file-in-editor utility
-│   └── session.ts            #   90 lines — Tab/panel state persistence (localStorage)
+│   └── session.ts            #   85 lines — Tab/panel state persistence (~/.onyx/session.json via Rust)
 └── styles/
     ├── reset.css             #   56 lines — CSS reset
     ├── theme.css             #   63 lines — CSS custom properties (dark theme)
@@ -61,7 +70,7 @@ src-tauri/                    # Backend (Rust)
     └── object_types.rs       #  135 lines — Type registry (~/.onyx/object-types.json)
 ```
 
-**Total:** ~5,400 lines (2,600 TS/TSX + 1,750 Rust + 900 CSS)
+**Total:** ~5,700 lines (2,850 TS/TSX + 1,800 Rust + 930 CSS)
 
 ## Architecture Essentials
 
@@ -117,6 +126,12 @@ src-tauri/                    # Backend (Rust)
 | `get_file_frontmatter` | `(path: String) → Option<String>` (JSON) |
 | `update_frontmatter` | `(path: String, frontmatterJson: String) → ()` |
 
+### Session
+| Command | Signature |
+|---------|-----------|
+| `read_session` | `() → Option<String>` (JSON) |
+| `write_session` | `(json: String) → ()` |
+
 ## Build & Run
 
 ```bash
@@ -130,7 +145,7 @@ npx tsc --noEmit         # TypeScript type check
 
 - `getCurrentWindow()` must be called lazily (in handlers), not at module/component level
 - `sharedExtensions` initialized once on first Editor mount — `loadFileIntoCache` before mount creates bare states (auto-detected and rebuilt)
-- File watcher debounce thread has no shutdown signal (known debt item #8)
+- File watcher has `Drop` impl that signals shutdown and joins the debounce thread
 - `unchecked_transaction` in db.rs is safe because all DB access is behind a Mutex
 - File mutations must go through `fileOps.ts`, never direct `invoke()` — otherwise editor caches, tabs, and sidebar fall out of sync
 - `replaceTabContent()` must be called after external writes (e.g. property panel) to sync CM6 state

@@ -5,19 +5,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import * as fileOps from "../lib/fileOps";
-
-interface BookmarkRecord {
-  path: string;
-  title: string | null;
-  label: string | null;
-}
-
-interface DirEntry {
-  name: string;
-  path: string;
-  is_dir: boolean;
-  extension: string | null;
-}
+import type { DirEntry } from "../types";
+import { BookmarkStrip } from "./BookmarkStrip";
+import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
 
 interface RegisteredDirectory {
   id: string;
@@ -25,12 +15,6 @@ interface RegisteredDirectory {
   label: string;
   color: string;
   position: number;
-}
-
-interface ContextMenuState {
-  x: number;
-  y: number;
-  entry: DirEntry;
 }
 
 function RenameInput({
@@ -173,128 +157,9 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
   );
 }
 
-function ContextMenu({
-  menu,
-  onClose,
-  onNewNote,
-  onNewFolder,
-  onRename,
-  onDelete,
-  onReveal,
-}: {
-  menu: ContextMenuState;
-  onClose: () => void;
-  onNewNote: (entry: DirEntry) => void;
-  onNewFolder: (entry: DirEntry) => void;
-  onRename: (entry: DirEntry) => void;
-  onDelete: (entry: DirEntry) => void;
-  onReveal: (entry: DirEntry) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ x: menu.x, y: menu.y });
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [onClose]);
-
-  // Clamp to viewport after the menu renders and we know its dimensions
-  useEffect(() => {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    const pad = 8;
-    let x = menu.x;
-    let y = menu.y;
-    if (x + rect.width > window.innerWidth - pad) {
-      x = window.innerWidth - rect.width - pad;
-    }
-    if (y + rect.height > window.innerHeight - pad) {
-      y = window.innerHeight - rect.height - pad;
-    }
-    if (x !== position.x || y !== position.y) {
-      setPosition({ x, y });
-    }
-  }, [menu.x, menu.y]);
-
-  const isDir = menu.entry.is_dir;
-
-  return (
-    <div
-      ref={ref}
-      className="context-menu"
-      style={{ left: position.x, top: position.y }}
-    >
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onNewNote(menu.entry);
-          onClose();
-        }}
-      >
-        {isDir ? "New Note" : "New Note (sibling)"}
-      </div>
-      {isDir && (
-        <div
-          className="context-menu-item"
-          onClick={() => {
-            onNewFolder(menu.entry);
-            onClose();
-          }}
-        >
-          New Folder
-        </div>
-      )}
-      <div className="context-menu-separator" />
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onRename(menu.entry);
-          onClose();
-        }}
-      >
-        Rename
-      </div>
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onReveal(menu.entry);
-          onClose();
-        }}
-      >
-        Reveal in Finder
-      </div>
-      <div className="context-menu-separator" />
-      <div
-        className="context-menu-item destructive"
-        onClick={() => {
-          onDelete(menu.entry);
-          onClose();
-        }}
-      >
-        Delete
-      </div>
-    </div>
-  );
-}
-
 export function Sidebar() {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const activeTabId = useAppStore((s) => s.activeTabId);
-  const tabs = useAppStore((s) => s.tabs);
   const fileTreeVersion = useAppStore((s) => s.fileTreeVersion);
   const [directories, setDirectories] = useState<RegisteredDirectory[]>([]);
   const [rootEntries, setRootEntries] = useState<Map<string, DirEntry[]>>(
@@ -302,22 +167,6 @@ export function Sidebar() {
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
-  const [bookmarks, setBookmarks] = useState<BookmarkRecord[]>([]);
-  const bookmarkVersion = useAppStore((s) => s.bookmarkVersion);
-
-  const loadBookmarks = useCallback(async () => {
-    try {
-      const results = await invoke<BookmarkRecord[]>("get_bookmarks");
-      setBookmarks(results);
-    } catch {
-      // Command may not be registered yet during development
-      setBookmarks([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (sidebarVisible) loadBookmarks();
-  }, [loadBookmarks, bookmarkVersion, sidebarVisible]);
 
   const addDirectory = async () => {
     const selected = await open({ directory: true, multiple: false });
@@ -476,16 +325,6 @@ export function Sidebar() {
     }
   };
 
-  const handleBookmarkClick = async (bookmark: BookmarkRecord) => {
-    const name =
-      bookmark.title || bookmark.path.split("/").pop() || bookmark.path;
-    try {
-      await openFileInEditor(bookmark.path, name);
-    } catch (err) {
-      console.error("Failed to open bookmark:", err);
-    }
-  };
-
   return (
     <div className={`sidebar ${sidebarVisible ? "" : "collapsed"}`}>
       <div className="sidebar-directories">
@@ -572,47 +411,10 @@ export function Sidebar() {
 
       </div>
 
-      {/* Bookmarks — pinned at bottom */}
-      <div className="sidebar-bookmarks">
-        <div className="sidebar-bookmarks-header">
-          <span>☆ Bookmarks</span>
-        </div>
-        {bookmarks.length === 0 ? (
-          <div
-            style={{
-              padding: "8px 12px",
-              color: "var(--text-tertiary)",
-              fontSize: "12px",
-            }}
-          >
-            No bookmarks yet
-          </div>
-        ) : (
-          bookmarks.map((bookmark) => {
-            const label =
-              bookmark.label ||
-              bookmark.title ||
-              bookmark.path.split("/").pop() ||
-              bookmark.path;
-            const activeTab = tabs.find((t) => t.id === activeTabId);
-            const isActive = activeTab?.path === bookmark.path;
-            return (
-              <div
-                key={bookmark.path}
-                className={`tree-item bookmark-item ${isActive ? "active" : ""}`}
-                style={{ "--indent": 0 } as React.CSSProperties}
-                onClick={() => handleBookmarkClick(bookmark)}
-              >
-                <span className="tree-item-icon">★</span>
-                <span className="tree-item-label">{label}</span>
-              </div>
-            );
-          })
-        )}
-      </div>
+      <BookmarkStrip />
 
       {contextMenu && (
-        <ContextMenu
+        <SidebarContextMenu
           menu={contextMenu}
           onClose={() => setContextMenu(null)}
           onNewNote={handleNewNote}

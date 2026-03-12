@@ -777,3 +777,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Error boundary fallback */
+.error-boundary-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  height: 100%;
+}
+
+.error-boundary-fallback button {
+  padding: 6px 16px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.error-boundary-fallback button:hover {
+  background: var(--bg-hover);
+}
