@@ -72,7 +72,7 @@ src-tauri/                    # Backend (Rust)
 ├── tauri.conf.json           # Window config, dev URL, CSP
 └── src/
     ├── main.rs               #    6 lines — Entry point
-    ├── lib.rs                #  170 lines — Tauri setup, native menu bar, AppState, plugins
+    ├── lib.rs                #  185 lines — Tauri setup, native menu bar (app+file+edit+view+go+format+window+help), AppState, plugins
     ├── commands.rs           #  540 lines — Tauri commands (file ops, search, bookmarks, autocomplete)
     ├── db.rs                 #  550 lines — SQLite (WAL, files/links/tags/bookmarks + tag/title queries)
     ├── dirs.rs               #  117 lines — Directory registration (~/.onyx/directories.json)
