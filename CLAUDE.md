@@ -20,7 +20,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 5 (Periodic Notes & Calendar):** Complete
 - **Phase 5.X (Backfill):** Complete
 - **Phase 6 (Command Palette, Theming & Editor Polish):** Complete
-- **Phase 7 (Live Preview & Split Panes):** Planned
+- **Phase 7 (Live Preview & Split Panes):** Complete
 - **Phase 8 (Blocks, Tables & Power Editing):** Planned
 - **Phase 9 (MCP Server):** Planned
 - **Phase 10 (Tier 2 Features):** Planned
@@ -30,9 +30,9 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 ```
 src/                          # Frontend (React + TypeScript)
 ├── main.tsx                  #   12 lines — React entry point
-├── App.tsx                   #  210 lines — Root component, shortcuts, command registration, menu events
+├── App.tsx                   #  350 lines — Root component, shortcuts, command registration, menu events
 ├── stores/
-│   └── app.ts                #  200 lines — Zustand store (tabs, panels, cursor, themes, commands)
+│   └── app.ts                #  400 lines — Zustand store (tabs, panels, panes, cursor, nav, commands)
 ├── components/
 │   ├── Titlebar.tsx          #   25 lines — Custom titlebar with traffic lights spacer
 │   ├── TabBar.tsx            #   80 lines — Tab strip with drag-to-reorder
@@ -40,26 +40,30 @@ src/                          # Frontend (React + TypeScript)
 │   ├── BookmarkStrip.tsx     #   80 lines — Bookmarks section pinned at sidebar bottom
 │   ├── SidebarContextMenu.tsx#  130 lines — Right-click context menu for file tree
 │   ├── ErrorBoundary.tsx     #   35 lines — React error boundary
-│   ├── Editor.tsx            #  460 lines — CM6 editor with all extensions
-│   ├── ContextPanel.tsx      #  590 lines — Calendar, backlinks, properties, recent docs
+│   ├── Editor.tsx            #  640 lines — CM6 editor with split panes, live preview sync
+│   ├── editorShared.ts       #   27 lines — Shared editor state caches (editorStateCache, scrollCache)
+│   ├── ContextPanel.tsx      #  720 lines — Calendar, backlinks, properties, outline, recent docs
 │   ├── Calendar.tsx          #  130 lines — Month-grid calendar widget
-│   ├── StatusBar.tsx         #   40 lines — Cursor, word count, char count, file path
+│   ├── StatusBar.tsx         #   62 lines — Cursor, word count, lint status, editor mode, file path
 │   ├── QuickOpen.tsx         #  256 lines — Cmd+O fuzzy search + type: prefix queries
 │   └── CommandPalette.tsx    #  120 lines — Cmd+P fuzzy command search
 ├── extensions/
-│   ├── frontmatter.ts        #  136 lines — CM6: frontmatter detection, styling, auto-fold
-│   ├── wikilinks.ts          #  136 lines — CM6: wikilink syntax highlighting, Cmd+Enter follow
-│   ├── tags.ts               #   98 lines — CM6: #tag syntax highlighting
-│   ├── formatting.ts         #   70 lines — CM6: Cmd+B/I/Shift+C toggle wrap
+│   ├── frontmatter.ts        #  147 lines — CM6: frontmatter detection, styling, auto-fold, fold command
+│   ├── wikilinks.ts          #  141 lines — CM6: wikilink syntax highlighting, Cmd+Enter follow
+│   ├── tags.ts               #  110 lines — CM6: #tag syntax highlighting (viewport-aware)
+│   ├── formatting.ts         #  119 lines — CM6: Cmd+B/I/Shift+C toggle wrap (multi-cursor safe)
 │   ├── outliner.ts           #  130 lines — CM6: list item indent/outdent/move/enter
 │   ├── urlPaste.ts           #   30 lines — CM6: URL paste → markdown link
-│   └── autocomplete.ts       #   95 lines — CM6: wikilink + tag autocomplete
+│   ├── autocomplete.ts       #   95 lines — CM6: wikilink + tag autocomplete
+│   ├── livePreview.ts        #  370 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks)
+│   ├── symbolWrap.ts         #  105 lines — CM6: wrap selection with brackets/quotes on type
+│   └── linting.ts            #  194 lines — CM6: markdown lint rules + autofix on save
 ├── lib/
 │   ├── fileOps.ts            #  130 lines — Centralized file mutations (with link warnings)
-│   ├── openFile.ts           #   22 lines — Shared open-file-in-editor utility
+│   ├── openFile.ts           #   37 lines — Shared open-file-in-editor utility (with nav stack)
 │   ├── periodicNotes.ts      #   32 lines — Create/open periodic notes utility
 │   ├── recentDocs.ts         #   50 lines — Recent documents tracking (localStorage ring buffer)
-│   ├── session.ts            #   85 lines — Tab/panel state persistence (~/.onyx/session.json via Rust)
+│   ├── session.ts            #  100 lines — Tab/panel/pane state persistence (~/.onyx/session.json)
 │   ├── commands.ts           #   45 lines — Command registry for palette + menu bar
 │   └── themes.ts             #  120 lines — Theme system (dark/light/warm)
 └── styles/
@@ -72,7 +76,7 @@ src-tauri/                    # Backend (Rust)
 ├── tauri.conf.json           # Window config, dev URL, CSP
 └── src/
     ├── main.rs               #    6 lines — Entry point
-    ├── lib.rs                #  185 lines — Tauri setup, native menu bar (app+file+edit+view+go+format+window+help), AppState, plugins
+    ├── lib.rs                #  189 lines — Tauri setup, native menu bar (app+file+edit+view+go+format+window+help), AppState, plugins
     ├── commands.rs           #  540 lines — Tauri commands (file ops, search, bookmarks, autocomplete)
     ├── db.rs                 #  550 lines — SQLite (WAL, files/links/tags/bookmarks + tag/title queries)
     ├── dirs.rs               #  117 lines — Directory registration (~/.onyx/directories.json)
@@ -82,12 +86,12 @@ src-tauri/                    # Backend (Rust)
     └── periodic.rs           #  320 lines — Periodic notes config, template engine, date formatting
 ```
 
-**Total:** ~7,200 lines (3,700 TS/TSX + 2,100 Rust + 1,100 CSS)
+**Total:** ~8,800 lines (5,200 TS/TSX + 2,100 Rust + 1,200 CSS)
 
 ## Architecture Essentials
 
 - **State split:** Zustand owns UI state (tabs, panels). CM6 owns editor state (content, undo, cursor). Rust owns file data + index.
-- **Editor pattern:** Single persistent `EditorView`, state swapped via `setState()` on tab switch. `EditorState` cached per tab (preserves undo/cursor/scroll). Module-level `activeTabIdBox` object for cross-closure communication.
+- **Editor pattern:** One or two persistent `EditorView` instances (split panes). State swapped via `setState()` on tab switch. `EditorState` cached per tab (preserves undo/cursor/scroll). `viewTabIdMap` WeakMap maps views to tab IDs for the updateListener. Module-level `activeTabIdBox` for external API functions.
 - **File mutations:** All through `src/lib/fileOps.ts` which owns the full sequence: disk → DB → tabs → editor caches → tree refresh. Components never call `invoke("rename_file")` etc. directly.
 - **File I/O:** All through Rust commands. Atomic writes (temp + rename). Auto-save 500ms debounce.
 - **Indexing:** Background thread walks directories, extracts frontmatter/wikilinks/tags, stores in SQLite. File watcher triggers 3s debounced reindex.
