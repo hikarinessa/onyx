@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { EditorState, EditorSelection, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
-import { openSearchPanel, closeSearchPanel, searchKeymap } from "@codemirror/search";
+import { searchKeymap } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import {
