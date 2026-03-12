@@ -175,14 +175,23 @@ cargo test               # Rust unit tests
 npx tsc --noEmit         # TypeScript type check
 ```
 
-## Known Debt (from Phase 5.X + 6 review)
+## Known Debt (from Phase 5.X + 6 + 7 review)
 
 - **Editor↔QuickOpen coupling:** `QuickOpen` imports `insertAtCursor` from `Editor.tsx`. Extract into `lib/editorBridge.ts` when adding more consumers.
 - **Focus trapping:** Command palette and QuickOpen overlays don't trap Tab focus. Keyboard-only users can Tab behind the overlay.
 - **Tab reorder accessibility:** Drag-to-reorder is mouse-only. Add Cmd+Shift+Left/Right for keyboard users.
 - **ARIA on command palette:** Category headers need `role="separator"` or group wrapping for screen readers.
 - **Autocomplete scaling:** `get_all_titles` fetches all indexed files on `[[` with empty prefix. Cache with short TTL for vaults >5k files.
-- **Multi-cursor formatting:** `toggleWrap` in `formatting.ts` has offset drift on multi-cursor unwrap. Single-cursor is correct.
+- **Multi-cursor formatting:** `toggleWrap` in `formatting.ts` offset drift fixed, but needs multi-cursor integration test.
+- **Editor.tsx size:** 640+ lines — owns two EditorView lifecycles, split pane rendering, save hooks, and 7 public API functions. Extract `EditorBridge` service to decouple consumers from component internals.
+- **Circular dependency:** `ContextPanel → Editor → openFile → Editor`. Works but fragile. Extract shared exports into `editorShared.ts` or `lib/editorBridge.ts`.
+- **Live preview pre-scan perf:** `buildPreviewDecorations` pre-scans from line 1 to first visible line on every cursor move. Cache code-block state at viewport start, invalidate only on `docChanged` for large docs (10k+ lines).
+- **Word count on every keystroke:** `content.trim().split(/\s+/).length` allocates on each char typed. Debounce or compute less frequently for large files.
+- **Double-char symbol wrap:** `[[`/`**`/`==` wrapping relies on char-before-selection detection that may not trigger as expected. Needs manual testing/verification.
+- **Divider drag event churn:** `handleDividerMouseDown` recreates listeners on each ratio change during drag. Use a ref for `splitRatio`.
+- **Outline items not keyboard accessible:** Plain `<div>` with `onClick`, needs `<button>` or `role="button" tabindex="0"`.
+- **Split pane divider not keyboard accessible:** Missing `role="separator"` and arrow key handlers per WAI-ARIA separator pattern.
+- **Rapid nav race condition:** Back/forward pop is synchronous but tab switch is async. Rapid Cmd+[ could double-pop. Guard with navigating flag if needed.
 
 ## Gotchas
 

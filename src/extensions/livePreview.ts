@@ -38,7 +38,8 @@ export const previewModeField = StateField.define<boolean>({
 // ── Widgets ──
 
 class CheckboxWidget extends WidgetType {
-  constructor(readonly checked: boolean, readonly pos: number) {
+  /** @param checked current check state @param bracketPos absolute doc position of `[` */
+  constructor(readonly checked: boolean, readonly bracketPos: number) {
     super();
   }
 
@@ -47,23 +48,22 @@ class CheckboxWidget extends WidgetType {
     input.type = "checkbox";
     input.checked = this.checked;
     input.className = "cm-preview-checkbox";
+    // Build aria-label from the text after the checkbox on this line
+    const line = view.state.doc.lineAt(this.bracketPos);
+    const labelText = line.text.slice(this.bracketPos - line.from + 4).trim();
+    if (labelText) input.setAttribute("aria-label", labelText);
     input.addEventListener("mousedown", (e) => {
       e.preventDefault();
-      const line = view.state.doc.lineAt(this.pos);
-      const text = line.text;
-      const bracketIdx = text.indexOf(this.checked ? "[x]" : "[ ]");
-      if (bracketIdx === -1) return;
-      const from = line.from + bracketIdx;
       const replacement = this.checked ? "[ ]" : "[x]";
       view.dispatch({
-        changes: { from, to: from + 3, insert: replacement },
+        changes: { from: this.bracketPos, to: this.bracketPos + 3, insert: replacement },
       });
     });
     return input;
   }
 
   eq(other: CheckboxWidget): boolean {
-    return this.checked === other.checked && this.pos === other.pos;
+    return this.checked === other.checked && this.bracketPos === other.bracketPos;
   }
 
   ignoreEvent(): boolean {
@@ -158,7 +158,7 @@ function buildPreviewDecorations(view: EditorView): DecorationSet {
           bracketStart,
           bracketStart + 4, // [x] + trailing space
           Decoration.replace({
-            widget: new CheckboxWidget(checked, line.from),
+            widget: new CheckboxWidget(checked, bracketStart),
           })
         );
         if (checked) {

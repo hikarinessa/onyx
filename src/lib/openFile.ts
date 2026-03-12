@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { loadFileIntoCache } from "../components/Editor";
+import { editorStateCache } from "../components/editorShared";
 import { recordRecentDoc } from "./recentDocs";
 
 /**
@@ -19,7 +20,10 @@ export async function openFileInEditor(
   if (!opts?.skipNav) {
     const { activeTabId, pushNav } = useAppStore.getState();
     if (activeTabId && activeTabId !== path) {
-      pushNav(activeTabId, { path: activeTabId, cursor: 0 });
+      // Capture actual cursor position from cached editor state
+      const cachedState = editorStateCache.get(activeTabId);
+      const cursor = cachedState ? cachedState.selection.main.head : 0;
+      pushNav(activeTabId, { path: activeTabId, cursor });
     }
   }
 

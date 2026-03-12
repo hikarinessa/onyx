@@ -41,13 +41,16 @@ const SAVE_DEBOUNCE_MS = 500;
 // ---------------------------------------------------------------------------
 
 /**
- * Mutable ref for active tab id — the updateListener closure reads this
- * to know which tab is currently active, avoiding stale closure captures.
+ * Mutable ref for active tab id — used by external API functions
+ * (scrollToLine, insertAtCursor, etc.) to know the current tab.
  */
 const activeTabIdBox = { current: null as string | null };
 
 /** Module-level reference to the live EditorView for external content updates */
 let _liveViewRef: EditorView | null = null;
+
+/** Maps each EditorView to the tab ID it's currently displaying */
+const viewTabIdMap = new WeakMap<EditorView, string>();
 
 /** Module-level save timer */
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -104,7 +107,7 @@ const onyxTheme = EditorView.theme({
 
 function buildExtensions(): Extension[] {
   const updateListener = EditorView.updateListener.of((update) => {
-    const tabId = activeTabIdBox.current;
+    const tabId = viewTabIdMap.get(update.view);
     if (!tabId) return;
 
     const { setCursorInfo, setModified, setWordCount, setCharCount } = useAppStore.getState();
@@ -316,6 +319,7 @@ function swapViewToTab(view: EditorView, tabId: string, editorMode: string) {
   }
 
   frontmatterTabRef.current = tabId;
+  viewTabIdMap.set(view, tabId);
   view.setState(state);
 
   // Sync preview mode

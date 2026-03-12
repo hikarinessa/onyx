@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, type AccordionState } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import { replaceTabContent, scrollToLine } from "./Editor";
+import { editorStateCache } from "./editorShared";
 import { Calendar } from "./Calendar";
 import { createOrOpenPeriodicNote } from "../lib/periodicNotes";
 
@@ -422,44 +423,43 @@ function OutlineSection({
   const [headings, setHeadings] = useState<HeadingEntry[]>([]);
 
   useEffect(() => {
-    let stale = false;
-    invoke<string>("read_file", { path })
-      .then((content) => {
-        if (stale) return;
-        const entries: HeadingEntry[] = [];
-        const lines = content.split("\n");
-        let inFrontmatter = false;
-        let inCodeBlock = false;
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          if (i === 0 && line.trim() === "---") {
-            inFrontmatter = true;
-            continue;
-          }
-          if (inFrontmatter) {
-            if (line.trim() === "---") inFrontmatter = false;
-            continue;
-          }
-          if (line.trimStart().startsWith("```")) {
-            inCodeBlock = !inCodeBlock;
-            continue;
-          }
-          if (inCodeBlock) continue;
-          const match = line.match(HEADING_RE);
-          if (match) {
-            entries.push({
-              level: match[1].length,
-              text: match[2].trim(),
-              lineNumber: i + 1,
-            });
-          }
-        }
-        setHeadings(entries);
-      })
-      .catch(() => {
-        if (!stale) setHeadings([]);
-      });
-    return () => { stale = true; };
+    // Read from editor state cache (in-memory) instead of disk IPC
+    const cachedState = editorStateCache.get(path);
+    const content = cachedState ? cachedState.doc.toString() : null;
+    if (!content) {
+      setHeadings([]);
+      return;
+    }
+
+    const entries: HeadingEntry[] = [];
+    const lines = content.split("\n");
+    let inFrontmatter = false;
+    let inCodeBlock = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (i === 0 && line.trim() === "---") {
+        inFrontmatter = true;
+        continue;
+      }
+      if (inFrontmatter) {
+        if (line.trim() === "---") inFrontmatter = false;
+        continue;
+      }
+      if (line.trimStart().startsWith("```")) {
+        inCodeBlock = !inCodeBlock;
+        continue;
+      }
+      if (inCodeBlock) continue;
+      const match = line.match(HEADING_RE);
+      if (match) {
+        entries.push({
+          level: match[1].length,
+          text: match[2].trim(),
+          lineNumber: i + 1,
+        });
+      }
+    }
+    setHeadings(entries);
   }, [path, saveVersion]);
 
   return (
