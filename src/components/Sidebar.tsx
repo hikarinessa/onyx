@@ -428,7 +428,7 @@ export function Sidebar() {
               )}
             </div>
           );
-        }))
+        })
       )}
       <button
         className="sidebar-add-folder-btn"
