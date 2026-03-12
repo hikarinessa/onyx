@@ -28,6 +28,7 @@ function toggleQuickOpen() {
 
 function openQuickOpenForWikilink() {
   const s = useAppStore.getState();
+  if (!s.activeTabId) return; // No editor to insert into
   s.setQuickOpenMode("insert-wikilink");
   s.setQuickOpenVisible(true);
 }
