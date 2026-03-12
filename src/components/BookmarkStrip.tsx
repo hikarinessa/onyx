@@ -9,17 +9,44 @@ interface BookmarkRecord {
   label: string | null;
 }
 
+interface GlobalBookmark {
+  path: string;
+  label: string;
+}
+
+interface DisplayBookmark {
+  path: string;
+  label: string;
+  global: boolean;
+}
+
 export function BookmarkStrip() {
   const activeTabId = useAppStore((s) => s.activeTabId);
   const tabs = useAppStore((s) => s.tabs);
   const bookmarkVersion = useAppStore((s) => s.bookmarkVersion);
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
-  const [bookmarks, setBookmarks] = useState<BookmarkRecord[]>([]);
+  const [bookmarks, setBookmarks] = useState<DisplayBookmark[]>([]);
 
   const loadBookmarks = useCallback(async () => {
     try {
-      const results = await invoke<BookmarkRecord[]>("get_bookmarks");
-      setBookmarks(results);
+      const [dirBookmarks, globalBookmarks] = await Promise.all([
+        invoke<BookmarkRecord[]>("get_bookmarks"),
+        invoke<GlobalBookmark[]>("get_global_bookmarks"),
+      ]);
+
+      const display: DisplayBookmark[] = [
+        ...dirBookmarks.map((b) => ({
+          path: b.path,
+          label: b.label || b.title || b.path.split("/").pop() || b.path,
+          global: false,
+        })),
+        ...globalBookmarks.map((b) => ({
+          path: b.path,
+          label: b.label || b.path.split("/").pop() || b.path,
+          global: true,
+        })),
+      ];
+      setBookmarks(display);
     } catch (err) {
       console.error("Failed to load bookmarks:", err);
       setBookmarks([]);
@@ -30,9 +57,8 @@ export function BookmarkStrip() {
     if (sidebarVisible) loadBookmarks();
   }, [loadBookmarks, bookmarkVersion, sidebarVisible]);
 
-  const handleBookmarkClick = async (bookmark: BookmarkRecord) => {
-    const name =
-      bookmark.title || bookmark.path.split("/").pop() || bookmark.path;
+  const handleBookmarkClick = async (bookmark: DisplayBookmark) => {
+    const name = bookmark.label;
     try {
       await openFileInEditor(bookmark.path, name);
     } catch (err) {
@@ -57,11 +83,6 @@ export function BookmarkStrip() {
         </div>
       ) : (
         bookmarks.map((bookmark) => {
-          const label =
-            bookmark.label ||
-            bookmark.title ||
-            bookmark.path.split("/").pop() ||
-            bookmark.path;
           const activeTab = tabs.find((t) => t.id === activeTabId);
           const isActive = activeTab?.path === bookmark.path;
           return (
@@ -70,9 +91,12 @@ export function BookmarkStrip() {
               className={`tree-item bookmark-item ${isActive ? "active" : ""}`}
               style={{ "--indent": 0 } as React.CSSProperties}
               onClick={() => handleBookmarkClick(bookmark)}
+              title={bookmark.path}
             >
-              <span className="tree-item-icon">★</span>
-              <span className="tree-item-label">{label}</span>
+              <span className="tree-item-icon">
+                {bookmark.global ? "◆" : "★"}
+              </span>
+              <span className="tree-item-label">{bookmark.label}</span>
             </div>
           );
         })

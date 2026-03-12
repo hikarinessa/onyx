@@ -186,6 +186,24 @@ export function Sidebar() {
 
   const removeDirectory = async (id: string) => {
     try {
+      const dir = directories.find((d) => d.id === id);
+      if (dir) {
+        const store = useAppStore.getState();
+        const affectedTabs = store.tabs.filter((t) =>
+          t.path.startsWith(dir.path + "/") || t.path === dir.path
+        );
+        if (affectedTabs.length > 0) {
+          const noun = affectedTabs.length === 1 ? "tab" : "tabs";
+          const close = window.confirm(
+            `Close ${affectedTabs.length} open ${noun} from "${dir.label}"?`
+          );
+          if (close) {
+            for (const tab of affectedTabs) {
+              store.closeTab(tab.id);
+            }
+          }
+        }
+      }
       await invoke("unregister_directory", { id });
       loadDirectories();
     } catch (err) {

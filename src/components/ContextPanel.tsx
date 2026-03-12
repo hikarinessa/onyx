@@ -376,16 +376,17 @@ export function ContextPanel() {
     };
   }, [activeTabId]);
 
-  // Check bookmark state
+  // Check bookmark state (directory bookmark OR global bookmark)
   useEffect(() => {
     if (!activeTab?.path) {
       setIsBookmarked(false);
       return;
     }
 
-    invoke<boolean>("is_file_bookmarked", { path: activeTab.path })
-      .then((result) => setIsBookmarked(result))
-      .catch(() => setIsBookmarked(false));
+    Promise.all([
+      invoke<boolean>("is_file_bookmarked", { path: activeTab.path }).catch(() => false),
+      invoke<boolean>("is_global_bookmarked", { path: activeTab.path }).catch(() => false),
+    ]).then(([dir, global]) => setIsBookmarked(dir || global));
   }, [activeTabId]);
 
   const handleBacklinkClick = async (record: BacklinkRecord) => {
@@ -402,13 +403,25 @@ export function ContextPanel() {
   const handleToggleBookmark = async () => {
     if (!activeTab?.path) return;
     try {
+      // Try directory bookmark first (file is indexed)
       const nowBookmarked = await invoke<boolean>("toggle_bookmark", {
         path: activeTab.path,
       });
       setIsBookmarked(nowBookmarked);
       useAppStore.getState().bumpBookmarkVersion();
-    } catch (err) {
-      console.error("toggle_bookmark not yet available:", err);
+    } catch {
+      // File not in a registered directory — use global bookmark
+      try {
+        const label = activeTab.name || activeTab.path.split("/").pop() || activeTab.path;
+        const nowBookmarked = await invoke<boolean>("toggle_global_bookmark", {
+          path: activeTab.path,
+          label,
+        });
+        setIsBookmarked(nowBookmarked);
+        useAppStore.getState().bumpBookmarkVersion();
+      } catch (err) {
+        console.error("Failed to toggle bookmark:", err);
+      }
     }
   };
 

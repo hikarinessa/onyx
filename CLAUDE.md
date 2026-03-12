@@ -111,12 +111,19 @@ src-tauri/                    # Backend (Rust)
 | `get_index_stats` | `() → IndexStats` |
 | `resolve_wikilink` | `(link: String, contextPath: String) → Option<String>` |
 
-### Bookmarks
+### Bookmarks (Directory)
 | Command | Signature |
 |---------|-----------|
-| `toggle_bookmark` | `(path: String) → bool` |
+| `toggle_bookmark` | `(path: String) → bool` — requires file in registered dir |
 | `get_bookmarks` | `() → Vec<BookmarkRecord>` |
 | `is_file_bookmarked` | `(path: String) → bool` |
+
+### Global Bookmarks
+| Command | Signature |
+|---------|-----------|
+| `toggle_global_bookmark` | `(path: String, label: String) → bool` — any file on disk |
+| `get_global_bookmarks` | `() → Vec<GlobalBookmark>` |
+| `is_global_bookmarked` | `(path: String) → bool` |
 
 ### Typed Objects & Frontmatter
 | Command | Signature |

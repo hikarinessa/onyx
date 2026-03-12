@@ -105,6 +105,9 @@ pub fn run() {
             commands::reveal_in_finder,
             commands::read_session,
             commands::write_session,
+            commands::get_global_bookmarks,
+            commands::toggle_global_bookmark,
+            commands::is_global_bookmarked,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
