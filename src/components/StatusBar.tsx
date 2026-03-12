@@ -7,6 +7,9 @@ export function StatusBar() {
   const cursorCol = useAppStore((s) => s.cursorCol);
   const wordCount = useAppStore((s) => s.wordCount);
   const charCount = useAppStore((s) => s.charCount);
+  const toggleEditorMode = useAppStore((s) => s.toggleEditorMode);
+  const lintErrors = useAppStore((s) => s.lintErrors);
+  const lintWarnings = useAppStore((s) => s.lintWarnings);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
@@ -37,6 +40,19 @@ export function StatusBar() {
               Ln {cursorLine}, Col {cursorCol}
             </span>
             <span title={`${charCount} characters`}>{wordCount} words</span>
+            <span className="statusbar-lint" title={`${lintErrors} errors, ${lintWarnings} warnings`}>
+              {lintErrors > 0 || lintWarnings > 0
+                ? `${lintErrors > 0 ? `${lintErrors}E` : ""}${lintErrors > 0 && lintWarnings > 0 ? " " : ""}${lintWarnings > 0 ? `${lintWarnings}W` : ""}`
+                : "\u2713"
+              }
+            </span>
+            <span
+              className="statusbar-mode"
+              title="Click to toggle (Cmd+/)"
+              onClick={() => { if (activeTabId) toggleEditorMode(activeTabId); }}
+            >
+              {activeTab?.editorMode === "preview" ? "Preview" : "Source"}
+            </span>
             <span>Markdown</span>
           </>
         )}

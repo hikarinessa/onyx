@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/app";
+import { useAppStore, type AccordionState } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
-import { replaceTabContent } from "./Editor";
+import { replaceTabContent, scrollToLine } from "./Editor";
 import { Calendar } from "./Calendar";
 import { createOrOpenPeriodicNote } from "../lib/periodicNotes";
 
@@ -165,18 +165,20 @@ function PropertiesSection({
   expanded,
   onToggle,
   onTypeDetected,
+  saveVersion,
 }: {
   path: string;
   expanded: boolean;
   onToggle: () => void;
   onTypeDetected: (hasType: boolean) => void;
+  saveVersion: number;
 }) {
   const [frontmatter, setFrontmatter] = useState<FrontmatterMap | null>(null);
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [loading, setLoading] = useState(true);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load frontmatter + object types when path changes
+  // Load frontmatter + object types when path or saveVersion changes
   useEffect(() => {
     let stale = false;
     setLoading(true);
@@ -212,7 +214,7 @@ function PropertiesSection({
     return () => {
       stale = true;
     };
-  }, [path]);
+  }, [path, saveVersion]);
 
   // Cancel pending save on path change or unmount
   useEffect(() => {
@@ -337,8 +339,13 @@ function PropertiesSection({
 
 // ── Recent Documents ──
 
-function RecentDocuments() {
-  const [expanded, setExpanded] = useState(false);
+function RecentDocuments({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const [recents, setRecents] = useState<{ path: string; name: string }[]>([]);
 
   useEffect(() => {
@@ -358,7 +365,7 @@ function RecentDocuments() {
     <div className="context-panel-section">
       <div
         className="context-panel-section-title collapsible"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={onToggle}
       >
         <span className="collapse-arrow">{expanded ? "▾" : "▸"}</span>
         Recent ({recents.length})
@@ -391,31 +398,143 @@ function RecentDocuments() {
   );
 }
 
+// ── Outline Section ──
+
+interface HeadingEntry {
+  level: number;
+  text: string;
+  lineNumber: number;
+}
+
+const HEADING_RE = /^(#{1,6})\s+(.+)$/;
+
+function OutlineSection({
+  path,
+  expanded,
+  onToggle,
+  saveVersion,
+}: {
+  path: string;
+  expanded: boolean;
+  onToggle: () => void;
+  saveVersion: number;
+}) {
+  const [headings, setHeadings] = useState<HeadingEntry[]>([]);
+
+  useEffect(() => {
+    let stale = false;
+    invoke<string>("read_file", { path })
+      .then((content) => {
+        if (stale) return;
+        const entries: HeadingEntry[] = [];
+        const lines = content.split("\n");
+        let inFrontmatter = false;
+        let inCodeBlock = false;
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (i === 0 && line.trim() === "---") {
+            inFrontmatter = true;
+            continue;
+          }
+          if (inFrontmatter) {
+            if (line.trim() === "---") inFrontmatter = false;
+            continue;
+          }
+          if (line.trimStart().startsWith("```")) {
+            inCodeBlock = !inCodeBlock;
+            continue;
+          }
+          if (inCodeBlock) continue;
+          const match = line.match(HEADING_RE);
+          if (match) {
+            entries.push({
+              level: match[1].length,
+              text: match[2].trim(),
+              lineNumber: i + 1,
+            });
+          }
+        }
+        setHeadings(entries);
+      })
+      .catch(() => {
+        if (!stale) setHeadings([]);
+      });
+    return () => { stale = true; };
+  }, [path, saveVersion]);
+
+  return (
+    <div className="context-panel-section">
+      <div
+        className="context-panel-section-title collapsible"
+        onClick={onToggle}
+      >
+        <span className="collapse-arrow">{expanded ? "▾" : "▸"}</span>
+        Outline ({headings.length})
+      </div>
+      {expanded && (
+        <div className="outline-list">
+          {headings.length === 0 ? (
+            <div className="backlinks-empty">No headings</div>
+          ) : (
+            headings.map((h, i) => (
+              <div
+                key={`${h.lineNumber}-${i}`}
+                className="outline-item"
+                style={{ paddingLeft: `${(h.level - 1) * 12}px` }}
+                onClick={() => scrollToLine(h.lineNumber)}
+              >
+                {h.text}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ──
+
+/** Resolve effective expanded state: user override or smart default */
+function useAccordionSection(
+  section: keyof AccordionState,
+  smartDefault: boolean,
+): [boolean, () => void] {
+  const override = useAppStore((s) => s.accordionState[section]);
+  const setExpanded = useAppStore((s) => s.setAccordionExpanded);
+  const expanded = override !== null ? override : smartDefault;
+  const toggle = useCallback(() => {
+    setExpanded(section, !expanded);
+  }, [section, expanded, setExpanded]);
+  return [expanded, toggle];
+}
 
 export function ContextPanel() {
   const visible = useAppStore((s) => s.contextPanelVisible);
   const tabs = useAppStore((s) => s.tabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
+  const saveVersion = useAppStore((s) => s.saveVersion);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   const [backlinks, setBacklinks] = useState<BacklinkRecord[]>([]);
-  const [backlinksExpanded, setBacklinksExpanded] = useState(false);
-  const [propsExpanded, setPropsExpanded] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [hasType, setHasType] = useState(false);
 
-  // Reset accordion defaults on tab switch
-  const handleTypeDetected = useCallback((hasType: boolean) => {
-    setPropsExpanded(hasType);
-    setBacklinksExpanded(!hasType);
+  // Accordion sections with store persistence
+  const [propsExpanded, toggleProps] = useAccordionSection("properties", hasType);
+  const [backlinksExpanded, toggleBacklinks] = useAccordionSection("backlinks", !hasType);
+  const [outlineExpanded, toggleOutline] = useAccordionSection("outline", true);
+  const [recentExpanded, toggleRecent] = useAccordionSection("recent", false);
+
+  // Smart defaults: reset overrides on tab switch so defaults re-apply
+  const handleTypeDetected = useCallback((detected: boolean) => {
+    setHasType(detected);
   }, []);
 
   // Fetch backlinks
   useEffect(() => {
     if (!activeTab?.path) {
       setBacklinks([]);
-      setBacklinksExpanded(false);
-      setPropsExpanded(false);
       return;
     }
 
@@ -533,8 +652,19 @@ export function ContextPanel() {
         <PropertiesSection
           path={activeTab.path}
           expanded={propsExpanded}
-          onToggle={() => setPropsExpanded((v) => !v)}
+          onToggle={toggleProps}
           onTypeDetected={handleTypeDetected}
+          saveVersion={saveVersion}
+        />
+      )}
+
+      {/* Outline section */}
+      {activeTab?.path && (
+        <OutlineSection
+          path={activeTab.path}
+          expanded={outlineExpanded}
+          onToggle={toggleOutline}
+          saveVersion={saveVersion}
         />
       )}
 
@@ -542,7 +672,7 @@ export function ContextPanel() {
       <div className="context-panel-section">
         <div
           className="context-panel-section-title collapsible"
-          onClick={() => setBacklinksExpanded((v) => !v)}
+          onClick={toggleBacklinks}
         >
           <span className="collapse-arrow">{backlinksExpanded ? "▾" : "▸"}</span>
           Backlinks ({backlinks.length})
@@ -580,7 +710,7 @@ export function ContextPanel() {
       </div>
 
       {/* Recent Documents */}
-      <RecentDocuments />
+      <RecentDocuments expanded={recentExpanded} onToggle={toggleRecent} />
     </div>
   );
 }

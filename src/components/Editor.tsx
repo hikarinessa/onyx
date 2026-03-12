@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { EditorState, EditorSelection, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
@@ -15,39 +15,42 @@ import {
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
-import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab } from "../extensions/frontmatter";
+import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab, foldFrontmatterCommand } from "../extensions/frontmatter";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
 import { formattingKeymap } from "../extensions/formatting";
 import { outlinerKeymap } from "../extensions/outliner";
 import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
+import { symbolWrapExtension } from "../extensions/symbolWrap";
+import { livePreviewExtension, togglePreviewEffect, previewModeField } from "../extensions/livePreview";
+import { lintingExtension, autoFixOnSave } from "../extensions/linting";
 import { openFileInEditor } from "../lib/openFile";
+import {
+  editorStateCache,
+  scrollCache,
+  lastSavedContent,
+  sharedExtensionsRef,
+  createStateWithExtensions,
+} from "./editorShared";
 
 const SAVE_DEBOUNCE_MS = 500;
 
 // ---------------------------------------------------------------------------
-// Module-level caches
+// Module-level state
 // ---------------------------------------------------------------------------
-
-/** Full EditorState snapshots — preserves undo history, selections, etc. */
-const editorStateCache = new Map<string, EditorState>();
-
-/** Scroll positions per tab */
-const scrollCache = new Map<string, number>();
-
-/** Last-saved content strings — used for dirty detection */
-const lastSavedContent = new Map<string, string>();
 
 /**
  * Mutable ref for active tab id — the updateListener closure reads this
  * to know which tab is currently active, avoiding stale closure captures.
- * Stored as an object so closures capture the reference, not the value.
  */
 const activeTabIdBox = { current: null as string | null };
 
 /** Module-level reference to the live EditorView for external content updates */
 let _liveViewRef: EditorView | null = null;
+
+/** Module-level save timer */
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
 // ---------------------------------------------------------------------------
 // Shared styles and highlight
@@ -99,13 +102,6 @@ const onyxTheme = EditorView.theme({
 // Extensions builder
 // ---------------------------------------------------------------------------
 
-/**
- * Module-level save timer — avoids coupling a React ref into the extensions.
- * The extensions are built once and live for the app lifetime, so a module-level
- * mutable is the right scope.
- */
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
-
 function buildExtensions(): Extension[] {
   const updateListener = EditorView.updateListener.of((update) => {
     const tabId = activeTabIdBox.current;
@@ -136,9 +132,11 @@ function buildExtensions(): Extension[] {
         if (tab) {
           saveTimer = setTimeout(async () => {
             try {
-              await invoke("write_file", { path: tab.path, content });
-              lastSavedContent.set(tabId, content);
+              const fixed = autoFixOnSave(content);
+              await invoke("write_file", { path: tab.path, content: fixed });
+              lastSavedContent.set(tabId, fixed);
               setModified(tabId, false);
+              useAppStore.getState().bumpSaveVersion();
             } catch (err) {
               console.error("Failed to save:", err);
             }
@@ -170,25 +168,15 @@ function buildExtensions(): Extension[] {
     tagExtension(),
     urlPasteExtension,
     autocompleteExtension(),
+    symbolWrapExtension(),
+    livePreviewExtension(),
+    lintingExtension(),
   ];
 }
 
 // ---------------------------------------------------------------------------
 // Public API — used by openFile / Sidebar
 // ---------------------------------------------------------------------------
-
-/** Shared extensions ref — initialized on first Editor mount */
-let sharedExtensions: Extension[] | null = null;
-
-/** Create an EditorState with the shared extensions */
-function createStateWithExtensions(doc: string): EditorState {
-  if (!sharedExtensions) {
-    // Fallback: create minimal state. This shouldn't happen in practice
-    // because loadFileIntoCache is called after Editor mounts.
-    return EditorState.create({ doc });
-  }
-  return EditorState.create({ doc, extensions: sharedExtensions });
-}
 
 /** Seed content into the editor cache before opening a tab */
 export function loadFileIntoCache(id: string, content: string) {
@@ -247,6 +235,25 @@ export function clearEditorCache(path: string) {
   clearAutoFoldForTab(path);
 }
 
+/** Scroll the live editor to a specific line number */
+export function scrollToLine(lineNumber: number) {
+  if (!_liveViewRef) return;
+  const doc = _liveViewRef.state.doc;
+  if (lineNumber < 1 || lineNumber > doc.lines) return;
+  const line = doc.line(lineNumber);
+  _liveViewRef.dispatch({
+    selection: EditorSelection.cursor(line.from),
+    effects: EditorView.scrollIntoView(line.from, { y: "start", yMargin: 50 }),
+  });
+  _liveViewRef.focus();
+}
+
+/** Fold frontmatter in the live editor (for command palette) */
+export function foldFrontmatter(): boolean {
+  if (!_liveViewRef) return false;
+  return foldFrontmatterCommand(_liveViewRef);
+}
+
 /** Insert text at the current cursor position in the live editor */
 export function insertAtCursor(text: string) {
   if (!_liveViewRef) return;
@@ -280,22 +287,71 @@ export async function flushSaveForTab(id: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers: swap editor state into a view
+// ---------------------------------------------------------------------------
+
+function swapViewToTab(view: EditorView, tabId: string, editorMode: string) {
+  let state = editorStateCache.get(tabId);
+  if (state) {
+    try {
+      const hasKm = state.facet(keymap).length > 0;
+      if (!hasKm) {
+        state = createStateWithExtensions(state.doc.toString());
+        editorStateCache.set(tabId, state);
+      }
+    } catch {
+      state = createStateWithExtensions(state.doc.toString());
+      editorStateCache.set(tabId, state);
+    }
+  } else {
+    state = createStateWithExtensions("");
+    editorStateCache.set(tabId, state);
+  }
+
+  frontmatterTabRef.current = tabId;
+  view.setState(state);
+
+  // Sync preview mode
+  const wantPreview = editorMode === "preview";
+  const currentPreview = view.state.field(previewModeField);
+  if (currentPreview !== wantPreview) {
+    view.dispatch({ effects: togglePreviewEffect.of(wantPreview) });
+  }
+
+  // Restore scroll
+  const savedScroll = scrollCache.get(tabId);
+  if (savedScroll !== undefined) {
+    requestAnimationFrame(() => {
+      view.scrollDOM.scrollTop = savedScroll;
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function Editor() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const rightContainerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  /** Tracks which tab the EditorView is currently showing */
+  const rightViewRef = useRef<EditorView | null>(null);
+  /** Tracks which tab the left EditorView is currently showing */
   const viewTabIdRef = useRef<string | null>(null);
+  const rightViewTabIdRef = useRef<string | null>(null);
 
   const activeTabId = useAppStore((s) => s.activeTabId);
   const tabs = useAppStore((s) => s.tabs);
   const activeTab = tabs.find((t) => t.id === activeTabId);
+  const editorMode = activeTab?.editorMode ?? "source";
+  const paneLayout = useAppStore((s) => s.paneLayout);
+
+  // Draggable divider state
+  const [dragging, setDragging] = useState(false);
 
   // Initialize shared extensions once
-  if (!sharedExtensions) {
-    sharedExtensions = buildExtensions();
+  if (!sharedExtensionsRef.current) {
+    sharedExtensionsRef.current = buildExtensions();
   }
 
   // Register hooks so closeTab can snapshot + flush
@@ -304,6 +360,10 @@ export function Editor() {
       if (viewRef.current && viewTabIdRef.current === id) {
         editorStateCache.set(id, viewRef.current.state);
         scrollCache.set(id, viewRef.current.scrollDOM.scrollTop);
+      }
+      if (rightViewRef.current && rightViewTabIdRef.current === id) {
+        editorStateCache.set(id, rightViewRef.current.state);
+        scrollCache.set(id, rightViewRef.current.scrollDOM.scrollTop);
       }
     });
     setFlushSaveHook(flushSaveForTab);
@@ -337,68 +397,33 @@ export function Editor() {
 
   // Create or swap the EditorView when the active tab changes
   useEffect(() => {
-    // Update the mutable ref immediately so the updateListener knows which tab is active.
-    // Must happen before any editor operations in this effect.
     activeTabIdBox.current = activeTabId;
 
     if (!containerRef.current || !activeTab) return;
 
-    // --- Save current tab state before switching ---
+    // Save current tab state before switching
     if (viewRef.current && viewTabIdRef.current && viewTabIdRef.current !== activeTab.id) {
       editorStateCache.set(viewTabIdRef.current, viewRef.current.state);
       scrollCache.set(viewTabIdRef.current, viewRef.current.scrollDOM.scrollTop);
     }
 
-    // --- Get or create EditorState for the new tab ---
-    let state = editorStateCache.get(activeTab.id);
-    if (state) {
-      // Check if state was created without extensions (by loadFileIntoCache
-      // before sharedExtensions were initialized). If so, rebuild with extensions.
-      // We detect this by checking if the state has fewer extensions facets.
-      // A simple heuristic: if the state has no keymaps configured, it's bare.
-      try {
-        const hasKeymap = state.facet(keymap).length > 0;
-        if (!hasKeymap) {
-          state = createStateWithExtensions(state.doc.toString());
-          editorStateCache.set(activeTab.id, state);
-        }
-      } catch {
-        // Facet check failed — rebuild to be safe
-        state = createStateWithExtensions(state.doc.toString());
+    if (viewRef.current) {
+      swapViewToTab(viewRef.current, activeTab.id, activeTab.editorMode);
+    } else {
+      let state = editorStateCache.get(activeTab.id);
+      if (!state) {
+        state = createStateWithExtensions("");
         editorStateCache.set(activeTab.id, state);
       }
-    } else {
-      state = createStateWithExtensions("");
-      editorStateCache.set(activeTab.id, state);
-    }
-
-    // Tell the frontmatter plugin which tab is being shown so it can
-    // track auto-fold state per tab instead of per document content.
-    frontmatterTabRef.current = activeTab.id;
-
-    if (viewRef.current) {
-      // View exists — swap state (preserves the DOM element)
-      viewRef.current.setState(state);
-    } else {
-      // First tab ever — create the EditorView
       viewRef.current = new EditorView({
         state,
         parent: containerRef.current,
       });
+      swapViewToTab(viewRef.current, activeTab.id, activeTab.editorMode);
     }
 
     _liveViewRef = viewRef.current;
     viewTabIdRef.current = activeTab.id;
-
-    // Restore scroll position (deferred so layout is complete)
-    const savedScroll = scrollCache.get(activeTab.id);
-    if (savedScroll !== undefined) {
-      requestAnimationFrame(() => {
-        if (viewRef.current) {
-          viewRef.current.scrollDOM.scrollTop = savedScroll;
-        }
-      });
-    }
 
     viewRef.current.focus();
 
@@ -418,7 +443,71 @@ export function Editor() {
     };
   }, [activeTab?.id, activeTab?.path]); // eslint-disable-line -- CM6 manages its own state
 
-  // Destroy the view on unmount, saving state first
+  // Handle right pane in split mode
+  useEffect(() => {
+    if (paneLayout.type !== "split" || !paneLayout.rightActiveTabId) {
+      // Clean up right pane view
+      if (rightViewRef.current) {
+        if (rightViewTabIdRef.current) {
+          editorStateCache.set(rightViewTabIdRef.current, rightViewRef.current.state);
+          scrollCache.set(rightViewTabIdRef.current, rightViewRef.current.scrollDOM.scrollTop);
+        }
+        rightViewRef.current.destroy();
+        rightViewRef.current = null;
+        rightViewTabIdRef.current = null;
+      }
+      return;
+    }
+
+    if (!rightContainerRef.current) return;
+
+    const rightTabId = paneLayout.rightActiveTabId;
+    const rightTab = tabs.find((t) => t.id === rightTabId);
+    if (!rightTab) return;
+
+    // Save state of previous right tab
+    if (rightViewRef.current && rightViewTabIdRef.current && rightViewTabIdRef.current !== rightTabId) {
+      editorStateCache.set(rightViewTabIdRef.current, rightViewRef.current.state);
+      scrollCache.set(rightViewTabIdRef.current, rightViewRef.current.scrollDOM.scrollTop);
+    }
+
+    if (rightViewRef.current) {
+      swapViewToTab(rightViewRef.current, rightTabId, rightTab.editorMode);
+    } else {
+      let state = editorStateCache.get(rightTabId);
+      if (!state) {
+        state = createStateWithExtensions("");
+        editorStateCache.set(rightTabId, state);
+      }
+      rightViewRef.current = new EditorView({
+        state,
+        parent: rightContainerRef.current,
+      });
+      swapViewToTab(rightViewRef.current, rightTabId, rightTab.editorMode);
+    }
+
+    rightViewTabIdRef.current = rightTabId;
+
+    // Update _liveViewRef based on active pane
+    if (paneLayout.activePaneId === "right") {
+      _liveViewRef = rightViewRef.current;
+      activeTabIdBox.current = rightTabId;
+    }
+  }, [paneLayout.type, paneLayout.rightActiveTabId, paneLayout.activePaneId]);
+
+  // Sync live preview mode when editorMode changes
+  useEffect(() => {
+    if (!viewRef.current) return;
+    const isPreview = editorMode === "preview";
+    const current = viewRef.current.state.field(previewModeField);
+    if (current !== isPreview) {
+      viewRef.current.dispatch({
+        effects: togglePreviewEffect.of(isPreview),
+      });
+    }
+  }, [editorMode]);
+
+  // Destroy views on unmount
   useEffect(() => {
     return () => {
       if (viewRef.current) {
@@ -429,6 +518,14 @@ export function Editor() {
         viewRef.current.destroy();
         viewRef.current = null;
         _liveViewRef = null;
+      }
+      if (rightViewRef.current) {
+        if (rightViewTabIdRef.current) {
+          editorStateCache.set(rightViewTabIdRef.current, rightViewRef.current.state);
+          scrollCache.set(rightViewTabIdRef.current, rightViewRef.current.scrollDOM.scrollTop);
+        }
+        rightViewRef.current.destroy();
+        rightViewRef.current = null;
       }
     };
   }, []);
@@ -446,10 +543,84 @@ export function Editor() {
     }
   }, [tabs]);
 
+  // Draggable divider handlers
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setDragging(true);
+    const startX = e.clientX;
+    const startRatio = paneLayout.splitRatio;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const editorArea = (e.target as HTMLElement).closest(".editor-area");
+      if (!editorArea) return;
+      const rect = editorArea.getBoundingClientRect();
+      const dx = ev.clientX - startX;
+      const newRatio = Math.min(0.8, Math.max(0.2, startRatio + dx / rect.width));
+      useAppStore.getState().setSplitRatio(newRatio);
+    };
+
+    const handleMouseUp = () => {
+      setDragging(false);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [paneLayout.splitRatio]);
+
+  // Handle pane activation clicks
+  const handleLeftClick = useCallback(() => {
+    if (paneLayout.type === "split" && paneLayout.activePaneId !== "left") {
+      useAppStore.getState().setActivePaneId("left");
+      if (paneLayout.leftActiveTabId) {
+        useAppStore.getState().setActiveTab(paneLayout.leftActiveTabId);
+        activeTabIdBox.current = paneLayout.leftActiveTabId;
+        _liveViewRef = viewRef.current;
+      }
+    }
+  }, [paneLayout]);
+
+  const handleRightClick = useCallback(() => {
+    if (paneLayout.type === "split" && paneLayout.activePaneId !== "right") {
+      useAppStore.getState().setActivePaneId("right");
+      if (paneLayout.rightActiveTabId) {
+        useAppStore.getState().setActiveTab(paneLayout.rightActiveTabId);
+        activeTabIdBox.current = paneLayout.rightActiveTabId;
+        _liveViewRef = rightViewRef.current;
+      }
+    }
+  }, [paneLayout]);
+
   if (!activeTab) {
     return (
       <div className="editor-area">
         <div className="editor-empty">Open a file to start editing</div>
+      </div>
+    );
+  }
+
+  if (paneLayout.type === "split") {
+    return (
+      <div className={`editor-area editor-split ${dragging ? "dragging" : ""}`}>
+        <div
+          className={`editor-pane ${paneLayout.activePaneId === "left" ? "active-pane" : ""}`}
+          style={{ flexBasis: `${paneLayout.splitRatio * 100}%` }}
+          onClick={handleLeftClick}
+        >
+          <div className="editor-container" ref={containerRef} />
+        </div>
+        <div
+          className="editor-divider"
+          onMouseDown={handleDividerMouseDown}
+        />
+        <div
+          className={`editor-pane ${paneLayout.activePaneId === "right" ? "active-pane" : ""}`}
+          style={{ flexBasis: `${(1 - paneLayout.splitRatio) * 100}%` }}
+          onClick={handleRightClick}
+        >
+          <div className="editor-container" ref={rightContainerRef} />
+        </div>
       </div>
     );
   }

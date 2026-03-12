@@ -29,44 +29,55 @@ function frontmatterEndLine(doc: EditorView["state"]["doc"]): number {
   return 0;
 }
 
-/** Build decorations for all #tags in the document, skipping fenced regions */
+/** Build decorations for #tags in visible ranges, skipping fenced regions */
 function buildTagDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
   const mark = Decoration.mark({ class: "cm-tag-highlight" });
 
   const fmEnd = frontmatterEndLine(doc);
-  let inCodeBlock = false;
 
-  for (let i = 1; i <= doc.lines; i++) {
-    const line = doc.line(i);
-    const text = line.text;
+  for (const { from, to } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number;
+    const endLine = doc.lineAt(to).number;
 
-    // Toggle code fence tracking
-    if (text.trimStart().startsWith("```")) {
-      inCodeBlock = !inCodeBlock;
-      continue;
+    // Pre-scan from line 1 to first visible line to determine initial inCodeBlock state
+    let inCodeBlock = false;
+    for (let i = 1; i < startLine; i++) {
+      if (doc.line(i).text.trimStart().startsWith("```")) {
+        inCodeBlock = !inCodeBlock;
+      }
     }
 
-    // Skip lines inside code blocks or frontmatter
-    if (inCodeBlock || (fmEnd > 0 && i <= fmEnd)) continue;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      const text = line.text;
 
-    // Find all tag matches on this line
-    let match: RegExpExecArray | null;
-    TAG_RE.lastIndex = 0;
-    while ((match = TAG_RE.exec(text)) !== null) {
-      // The full match may start with a whitespace char — find the `#` position
-      const hashOffset = match[0].indexOf("#");
-      const from = line.from + match.index + hashOffset;
-      const to = line.from + match.index + match[0].length;
-      builder.add(from, to, mark);
+      // Toggle code fence tracking
+      if (text.trimStart().startsWith("```")) {
+        inCodeBlock = !inCodeBlock;
+        continue;
+      }
+
+      // Skip lines inside code blocks or frontmatter
+      if (inCodeBlock || (fmEnd > 0 && i <= fmEnd)) continue;
+
+      // Find all tag matches on this line
+      let match: RegExpExecArray | null;
+      TAG_RE.lastIndex = 0;
+      while ((match = TAG_RE.exec(text)) !== null) {
+        const hashOffset = match[0].indexOf("#");
+        const mFrom = line.from + match.index + hashOffset;
+        const mTo = line.from + match.index + match[0].length;
+        builder.add(mFrom, mTo, mark);
+      }
     }
   }
 
   return builder.finish();
 }
 
-/** ViewPlugin that tracks and rebuilds decorations on doc changes */
+/** ViewPlugin that tracks and rebuilds decorations on doc or viewport changes */
 const tagDecorations = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
@@ -75,8 +86,8 @@ const tagDecorations = ViewPlugin.fromClass(
       this.decorations = buildTagDecorations(view);
     }
 
-    update(update: { docChanged: boolean; view: EditorView }) {
-      if (update.docChanged) {
+    update(update: { docChanged: boolean; viewportChanged: boolean; view: EditorView }) {
+      if (update.docChanged || update.viewportChanged) {
         this.decorations = buildTagDecorations(update.view);
       }
     }

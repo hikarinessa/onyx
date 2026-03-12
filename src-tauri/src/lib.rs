@@ -74,10 +74,14 @@ pub fn run() {
                 .item(&MenuItemBuilder::with_id("toggle_sidebar", "Toggle Sidebar").accelerator("CmdOrCtrl+Alt+[").build(app)?)
                 .item(&MenuItemBuilder::with_id("toggle_context", "Toggle Context Panel").accelerator("CmdOrCtrl+Alt+]").build(app)?)
                 .separator()
+                .item(&MenuItemBuilder::with_id("toggle_preview", "Toggle Preview").accelerator("CmdOrCtrl+/").build(app)?)
                 .item(&MenuItemBuilder::with_id("command_palette", "Command Palette").accelerator("CmdOrCtrl+P").build(app)?)
                 .build()?;
 
             let go_menu = SubmenuBuilder::new(app, "Go")
+                .item(&MenuItemBuilder::with_id("nav_back", "Back").accelerator("CmdOrCtrl+[").build(app)?)
+                .item(&MenuItemBuilder::with_id("nav_forward", "Forward").accelerator("CmdOrCtrl+]").build(app)?)
+                .separator()
                 .item(&MenuItemBuilder::with_id("today_note", "Today's Note").accelerator("CmdOrCtrl+Shift+D").build(app)?)
                 .build()?;
 

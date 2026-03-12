@@ -305,6 +305,45 @@
   display: none;
 }
 
+/* Split pane layout */
+.editor-split {
+  flex-direction: row;
+}
+
+.editor-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.editor-pane .editor-container {
+  flex: 1;
+  overflow: auto;
+}
+
+.editor-pane:not(.active-pane) {
+  opacity: 0.85;
+}
+
+.editor-divider {
+  width: 4px;
+  cursor: col-resize;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
+}
+
+.editor-divider:hover,
+.editor-split.dragging .editor-divider {
+  background: var(--accent);
+}
+
+.editor-split.dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+
 /* Empty state */
 .editor-empty {
   flex: 1;
@@ -913,6 +952,28 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/* Outline */
+.outline-list {
+  margin-top: 6px;
+}
+
+.outline-item {
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background var(--transition-fast);
+}
+
+.outline-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 /* Recent documents */
 .recent-docs-list {
   max-height: 200px;
@@ -968,6 +1029,23 @@
 
 .statusbar-path:hover {
   opacity: 1;
+}
+
+.statusbar-lint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.statusbar-mode {
+  cursor: pointer;
+  padding: 1px 6px;
+  border-radius: 3px;
+  transition: background var(--transition-fast);
+}
+
+.statusbar-mode:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* ── Tab drag-to-reorder ── */

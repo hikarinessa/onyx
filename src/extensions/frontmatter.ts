@@ -136,6 +136,17 @@ const frontmatterTheme = EditorView.theme({
   },
 });
 
+/** Command: fold frontmatter block (for command palette) */
+export function foldFrontmatterCommand(view: EditorView): boolean {
+  const fm = findFrontmatter(view.state.doc);
+  if (!fm) return false;
+  const firstLine = view.state.doc.line(1);
+  view.dispatch({
+    effects: foldEffect.of({ from: firstLine.to, to: fm.to }),
+  });
+  return true;
+}
+
 /** Bundle all frontmatter extensions */
 export function frontmatterExtension() {
   return [frontmatterDecorations, frontmatterAutoFold, frontmatterTheme];

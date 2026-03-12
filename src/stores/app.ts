@@ -1,10 +1,41 @@
 import { create } from "zustand";
 
+export type EditorMode = "source" | "preview";
+
+export interface NavEntry {
+  path: string;
+  cursor: number;
+}
+
 export interface Tab {
   id: string;
   path: string;
   name: string;
   modified: boolean;
+  editorMode: EditorMode;
+  navBack: NavEntry[];
+  navForward: NavEntry[];
+}
+
+export type PaneId = "left" | "right";
+
+export interface PaneLayout {
+  type: "single" | "split";
+  activePaneId: PaneId;
+  /** Tab IDs assigned to each pane */
+  leftTabs: string[];
+  rightTabs: string[];
+  leftActiveTabId: string | null;
+  rightActiveTabId: string | null;
+  splitRatio: number; // 0–1, left pane share
+}
+
+/** null = use smart default, non-null = user override */
+export interface AccordionState {
+  properties: boolean | null;
+  backlinks: boolean | null;
+  recent: boolean | null;
+  outline: boolean | null;
 }
 
 // Injected by Editor.tsx to avoid circular imports
@@ -37,6 +68,10 @@ interface AppState {
   setActiveTab: (id: string) => void;
   setModified: (id: string, modified: boolean) => void;
   updateTabPath: (id: string, newPath: string, newName: string) => void;
+  toggleEditorMode: (id: string) => void;
+  pushNav: (tabId: string, entry: NavEntry) => void;
+  navigateBack: (tabId: string) => NavEntry | null;
+  navigateForward: (tabId: string) => NavEntry | null;
 
   // Status bar
   cursorLine: number;
@@ -71,6 +106,27 @@ interface AppState {
   // File tree refresh signal — bump after any file mutation to refresh sidebar
   fileTreeVersion: number;
   bumpFileTreeVersion: () => void;
+
+  // Accordion state for context panel sections
+  accordionState: AccordionState;
+  setAccordionExpanded: (section: keyof AccordionState, expanded: boolean | null) => void;
+
+  // Save version — bumped after each successful write_file to trigger re-fetches
+  saveVersion: number;
+  bumpSaveVersion: () => void;
+
+  // Lint diagnostics summary
+  lintErrors: number;
+  lintWarnings: number;
+  setLintCounts: (errors: number, warnings: number) => void;
+
+  // Pane layout
+  paneLayout: PaneLayout;
+  setActivePaneId: (paneId: PaneId) => void;
+  setSplitRatio: (ratio: number) => void;
+  openInPane: (path: string, name: string, paneId: PaneId) => void;
+  splitPane: (path: string, name: string) => void;
+  closeSplit: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -93,7 +149,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const id = path;
-    const tab: Tab = { id, path, name, modified: false };
+    const tab: Tab = { id, path, name, modified: false, editorMode: "source", navBack: [], navForward: [] };
     set({ tabs: [...tabs, tab], activeTabId: id });
   },
 
@@ -155,6 +211,56 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
   },
 
+  toggleEditorMode: (id) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === id
+          ? { ...t, editorMode: t.editorMode === "source" ? "preview" : "source" }
+          : t
+      ),
+    }));
+  },
+
+  pushNav: (tabId, entry) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) => {
+        if (t.id !== tabId) return t;
+        const navBack = [...t.navBack, entry].slice(-50);
+        return { ...t, navBack, navForward: [] };
+      }),
+    }));
+  },
+
+  navigateBack: (tabId) => {
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab || tab.navBack.length === 0) return null;
+    const entry = tab.navBack[tab.navBack.length - 1];
+    set((s) => ({
+      tabs: s.tabs.map((t) => {
+        if (t.id !== tabId) return t;
+        const navBack = t.navBack.slice(0, -1);
+        const navForward = [...t.navForward, { path: t.path, cursor: 0 }].slice(-50);
+        return { ...t, navBack, navForward };
+      }),
+    }));
+    return entry;
+  },
+
+  navigateForward: (tabId) => {
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab || tab.navForward.length === 0) return null;
+    const entry = tab.navForward[tab.navForward.length - 1];
+    set((s) => ({
+      tabs: s.tabs.map((t) => {
+        if (t.id !== tabId) return t;
+        const navForward = t.navForward.slice(0, -1);
+        const navBack = [...t.navBack, { path: t.path, cursor: 0 }].slice(-50);
+        return { ...t, navBack, navForward };
+      }),
+    }));
+    return entry;
+  },
+
   cursorLine: 1,
   cursorCol: 1,
   wordCount: 0,
@@ -193,4 +299,103 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fileTreeVersion: 0,
   bumpFileTreeVersion: () => set((s) => ({ fileTreeVersion: s.fileTreeVersion + 1 })),
+
+  accordionState: { properties: null, backlinks: null, recent: null, outline: null },
+  setAccordionExpanded: (section, expanded) =>
+    set((s) => ({
+      accordionState: { ...s.accordionState, [section]: expanded },
+    })),
+
+  saveVersion: 0,
+  bumpSaveVersion: () => set((s) => ({ saveVersion: s.saveVersion + 1 })),
+
+  lintErrors: 0,
+  lintWarnings: 0,
+  setLintCounts: (errors, warnings) => set({ lintErrors: errors, lintWarnings: warnings }),
+
+  paneLayout: {
+    type: "single",
+    activePaneId: "left",
+    leftTabs: [],
+    rightTabs: [],
+    leftActiveTabId: null,
+    rightActiveTabId: null,
+    splitRatio: 0.5,
+  },
+
+  setActivePaneId: (paneId) =>
+    set((s) => ({ paneLayout: { ...s.paneLayout, activePaneId: paneId } })),
+
+  setSplitRatio: (ratio) =>
+    set((s) => ({ paneLayout: { ...s.paneLayout, splitRatio: ratio } })),
+
+  openInPane: (path, name, paneId) => {
+    const s = get();
+    // Ensure tab exists in global tabs
+    const existing = s.tabs.find((t) => t.path === path);
+    if (!existing) {
+      const tab: Tab = { id: path, path, name, modified: false, editorMode: "source", navBack: [], navForward: [] };
+      set({ tabs: [...s.tabs, tab] });
+    }
+    // Assign to pane
+    const layout = { ...s.paneLayout };
+    if (paneId === "left") {
+      if (!layout.leftTabs.includes(path)) layout.leftTabs = [...layout.leftTabs, path];
+      layout.leftActiveTabId = path;
+    } else {
+      if (!layout.rightTabs.includes(path)) layout.rightTabs = [...layout.rightTabs, path];
+      layout.rightActiveTabId = path;
+    }
+    layout.activePaneId = paneId;
+    set({ paneLayout: layout, activeTabId: path });
+  },
+
+  splitPane: (path, name) => {
+    const s = get();
+    // Ensure tab exists
+    const existing = s.tabs.find((t) => t.path === path);
+    if (!existing) {
+      const tab: Tab = { id: path, path, name, modified: false, editorMode: "source", navBack: [], navForward: [] };
+      set({ tabs: [...s.tabs, tab] });
+    }
+
+    const layout = { ...s.paneLayout };
+    if (layout.type === "single") {
+      // Move current tabs to left pane, open target in right
+      layout.type = "split";
+      layout.leftTabs = s.tabs.map((t) => t.id);
+      layout.leftActiveTabId = s.activeTabId;
+      layout.rightTabs = [path];
+      layout.rightActiveTabId = path;
+      layout.activePaneId = "right";
+    } else {
+      // Already split — open in the inactive pane
+      const targetPane = layout.activePaneId === "left" ? "right" : "left";
+      if (targetPane === "right") {
+        if (!layout.rightTabs.includes(path)) layout.rightTabs = [...layout.rightTabs, path];
+        layout.rightActiveTabId = path;
+      } else {
+        if (!layout.leftTabs.includes(path)) layout.leftTabs = [...layout.leftTabs, path];
+        layout.leftActiveTabId = path;
+      }
+      layout.activePaneId = targetPane;
+    }
+    set({ paneLayout: layout, activeTabId: path });
+  },
+
+  closeSplit: () => {
+    const s = get();
+    const layout = { ...s.paneLayout };
+    if (layout.type === "single") return;
+
+    // Merge all tabs to single pane
+    const allPaneTabs = [...new Set([...layout.leftTabs, ...layout.rightTabs])];
+    layout.type = "single";
+    layout.leftTabs = allPaneTabs;
+    layout.rightTabs = [];
+    layout.leftActiveTabId = s.activeTabId;
+    layout.rightActiveTabId = null;
+    layout.activePaneId = "left";
+    set({ paneLayout: layout });
+  },
 }));

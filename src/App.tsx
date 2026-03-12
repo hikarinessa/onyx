@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Titlebar } from "./components/Titlebar";
 import { TabBar } from "./components/TabBar";
 import { Sidebar } from "./components/Sidebar";
-import { Editor } from "./components/Editor";
+import { Editor, foldFrontmatter } from "./components/Editor";
 import { ContextPanel } from "./components/ContextPanel";
 import { StatusBar } from "./components/StatusBar";
 import { QuickOpen } from "./components/QuickOpen";
@@ -14,6 +14,7 @@ import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
 import { registerCommand } from "./lib/commands";
 import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
 import { createNewNote } from "./lib/fileOps";
+import { openFileInEditor } from "./lib/openFile";
 import { listen } from "@tauri-apps/api/event";
 import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
 
@@ -85,9 +86,18 @@ function registerCommands() {
     label: "Close Tab",
     shortcut: "Cmd+W",
     category: "File",
-    execute: () => {
-      const { activeTabId, closeTab } = store();
-      if (activeTabId) closeTab(activeTabId);
+    execute: async () => {
+      const s = store();
+      if (!s.activeTabId) return;
+      await s.closeTab(s.activeTabId);
+      // If that was the last tab in a split pane, close the split
+      const after = store();
+      if (after.paneLayout.type === "split") {
+        const { rightTabs, leftTabs } = after.paneLayout;
+        if (rightTabs.length === 0 || leftTabs.length === 0) {
+          after.closeSplit();
+        }
+      }
     },
   });
   registerCommand({
@@ -113,6 +123,60 @@ function registerCommands() {
       execute: () => applyTheme(theme.id),
     });
   }
+
+  registerCommand({
+    id: "navigate.back",
+    label: "Go Back",
+    shortcut: "Cmd+[",
+    category: "Navigate",
+    execute: async () => {
+      const { activeTabId, navigateBack } = store();
+      if (!activeTabId) return;
+      const entry = navigateBack(activeTabId);
+      if (entry) {
+        await openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path);
+      }
+    },
+  });
+  registerCommand({
+    id: "navigate.forward",
+    label: "Go Forward",
+    shortcut: "Cmd+]",
+    category: "Navigate",
+    execute: async () => {
+      const { activeTabId, navigateForward } = store();
+      if (!activeTabId) return;
+      const entry = navigateForward(activeTabId);
+      if (entry) {
+        await openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path);
+      }
+    },
+  });
+
+  registerCommand({
+    id: "view.closeSplit",
+    label: "Close Split Pane",
+    category: "View",
+    execute: () => store().closeSplit(),
+  });
+
+  registerCommand({
+    id: "editor.toggleMode",
+    label: "Toggle Preview Mode",
+    shortcut: "Cmd+/",
+    category: "Editor",
+    execute: () => {
+      const { activeTabId, toggleEditorMode } = store();
+      if (activeTabId) toggleEditorMode(activeTabId);
+    },
+  });
+
+  registerCommand({
+    id: "editor.foldFrontmatter",
+    label: "Fold Frontmatter",
+    category: "Editor",
+    execute: () => foldFrontmatter(),
+  });
 
   registerCommand({
     id: "view.commandPalette",
@@ -156,6 +220,27 @@ export default function App() {
         case "command_palette":
           store().setCommandPaletteVisible(true);
           break;
+        case "toggle_preview": {
+          const { activeTabId, toggleEditorMode } = store();
+          if (activeTabId) toggleEditorMode(activeTabId);
+          break;
+        }
+        case "nav_back": {
+          const { activeTabId: id, navigateBack } = store();
+          if (id) {
+            const entry = navigateBack(id);
+            if (entry) openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path);
+          }
+          break;
+        }
+        case "nav_forward": {
+          const { activeTabId: id2, navigateForward } = store();
+          if (id2) {
+            const entry = navigateForward(id2);
+            if (entry) openFileInEditor(entry.path, entry.path.split("/").pop() || entry.path);
+          }
+          break;
+        }
         case "today_note":
           openTodayNote();
           break;
@@ -228,6 +313,12 @@ export default function App() {
       if (meta && e.shiftKey && (e.key === "D" || e.key === "d")) {
         e.preventDefault();
         openTodayNote();
+      }
+
+      if (meta && !alt && !e.shiftKey && e.key === "/") {
+        e.preventDefault();
+        const { activeTabId, toggleEditorMode } = store();
+        if (activeTabId) toggleEditorMode(activeTabId);
       }
     };
 
