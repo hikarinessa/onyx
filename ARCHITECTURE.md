@@ -978,21 +978,16 @@ Decisions made during the design phase:
 
 ## 18. Known Technical Debt
 
-Items identified during Phase 1 review. Fix before or during the indicated phase.
+### Resolved
 
-### Fix before Phase 2
+- ~~#1 Tab switch destroys undo/cursor/scroll state~~ — Fixed Phase 2: `EditorState` cached per tab, swapped via `setState()`
+- ~~#2 Extract shared `openFileInEditor`~~ — Fixed Phase 2: `src/lib/openFile.ts`
+- ~~#4 `findAvailablePath` TOCTOU race~~ — Fixed Phase 4.5: `path_exists` Rust command replaces `read_file` existence check
+- ~~#5 Delete action stubbed/no feedback~~ — Fixed Phase 4.5: `trash_file` implemented, delete works via context menu
 
-1. **Tab switch destroys undo/cursor/scroll state.** Currently the CM6 `EditorView` is destroyed and recreated on every tab switch. The editor content is preserved (via `editorContentCache`), but undo history, cursor position, and scroll offset are lost. **Fix:** Cache `EditorState` snapshots per tab (not just string content) and restore via `view.setState()`, or keep multiple `EditorView` instances alive and toggle visibility.
+### Open
 
-2. **Extract shared `openFileInEditor` function.** Both `Sidebar.tsx` and the future quick-open/wikilink-follow need to read a file, seed the cache, and open a tab. Currently duplicated in `Sidebar.handleFileClick`. Extract to a shared utility when building quick open (Phase 2 command palette).
-
-### Phase 2+ considerations
-
-3. **External edit conflict detection.** If a file is modified externally while Onyx has it open with unsaved changes, the stale editor cache can overwrite the external edit on the next auto-save. **Fix:** On `fs:change` events for open files, compare the on-disk content with `lastSavedContent`. If they differ and the editor also has unsaved changes, show a conflict notification (reload / keep mine / diff). Reference Otterly's pattern (watcher → diff → notify).
-
-4. **`findAvailablePath` TOCTOU race.** `Sidebar.tsx` checks file existence via `read_file` then creates with `write_file` — another process could create the file in between. Low risk for a single-user desktop app, but a Rust-side `create_file_unique` command would be correct.
-
-5. **Delete action has no user feedback.** `trash_file` command is stubbed; the delete context menu item silently catches errors. When implementing, add a toast or undo notification.
+3. **External edit conflict detection.** If a file is modified externally while Onyx has it open with unsaved changes, the stale editor cache can overwrite the external edit on the next auto-save. **Fix:** On `fs:change` events for open files, compare the on-disk content with `lastSavedContent`. If they differ and the editor also has unsaved changes, show a conflict notification (reload / keep mine / diff).
 
 6. **Context menu lacks keyboard navigation.** Currently mouse-only. Add arrow key navigation and Enter to select for accessibility.
 
@@ -1011,3 +1006,5 @@ Items identified during Phase 1 review. Fix before or during the indicated phase
 13. **No index on `json_extract(frontmatter, '$.type')`.** `query_by_type` does a full table scan. Fine for <50k files, but if it becomes a bottleneck, add a generated column or expression index.
 
 14. **`update_frontmatter` doesn't update `title` column.** If an untyped note's raw frontmatter edit changes the title, the `files.title` column won't reflect it until the next full reindex. Low impact since title is derived from filename, not frontmatter.
+
+15. **`rename_dir_prefix` byte offset vs UTF-8.** The `substr` call uses `old_p.len()` (byte length) but SQLite's `substr` works on characters. Multi-byte folder names would slice at the wrong position. Low risk for typical usage but technically incorrect.
