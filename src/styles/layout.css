@@ -301,8 +301,54 @@
   outline: none;
 }
 
-.editor-container .cm-gutters {
+/* Preview mode: hide gutters and line numbers */
+.editor-container.preview-mode .cm-gutters {
   display: none;
+}
+
+/* Source mode: show gutters with dark theme styling */
+.editor-container.source-mode .cm-lineNumbers .cm-gutterElement {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  padding: 0 8px 0 4px;
+}
+
+/* Source mode: plain monospace text, keep syntax colors */
+.editor-container.source-mode .cm-content {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.editor-container.source-mode .cm-line {
+  font-size: inherit !important;
+  font-weight: normal !important;
+  font-style: normal !important;
+}
+
+/* Override HighlightStyle size/weight in source mode — keep colors */
+.editor-container.source-mode .cm-content span {
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  font-style: inherit !important;
+  font-family: inherit !important;
+  background: none !important;
+}
+
+/* Wikilinks in source mode: keep color, remove underline/pointer */
+.editor-container.source-mode .cm-content .cm-wikilink {
+  text-decoration: none;
+  cursor: text;
+}
+
+/* Source mode: less padding, no max-width constraint */
+.editor-container.source-mode .cm-scroller {
+  padding: 16px 24px;
+}
+
+.editor-container.source-mode .cm-content {
+  max-width: none;
 }
 
 /* Empty state */

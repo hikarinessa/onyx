@@ -8,6 +8,7 @@ export function StatusBar() {
   const wordCount = useAppStore((s) => s.wordCount);
   const charCount = useAppStore((s) => s.charCount);
 
+  const toggleEditorMode = useAppStore((s) => s.toggleEditorMode);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   const handlePathClick = () => {
@@ -37,7 +38,13 @@ export function StatusBar() {
               Ln {cursorLine}, Col {cursorCol}
             </span>
             <span title={`${charCount} characters`}>{wordCount} words</span>
-            <span>Markdown</span>
+            <span
+              className="statusbar-mode"
+              title="Toggle preview (Cmd+/)"
+              onClick={() => { if (activeTabId) toggleEditorMode(activeTabId); }}
+            >
+              {activeTab?.editorMode === "preview" ? "Preview" : "Source"}
+            </span>
           </>
         )}
       </div>

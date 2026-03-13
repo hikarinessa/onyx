@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { EditorState, EditorSelection, type Extension } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
 import { searchKeymap } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
@@ -23,6 +23,7 @@ import { outlinerKeymap } from "../extensions/outliner";
 import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
+import { livePreviewExtension, togglePreviewEffect, previewModeField } from "../extensions/livePreview";
 import { openFileInEditor } from "../lib/openFile";
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -88,6 +89,11 @@ const onyxTheme = EditorView.theme({
   "&.cm-focused": {
     outline: "none",
   },
+  ".cm-gutters": {
+    background: "var(--bg-surface)",
+    borderRight: "1px solid var(--border-subtle)",
+    color: "var(--text-tertiary)",
+  },
   ".cm-activeLineGutter": {
     background: "transparent",
   },
@@ -150,7 +156,20 @@ function buildExtensions(): Extension[] {
     }
   });
 
+  // Cmd+/ must be intercepted before defaultKeymap (which binds toggleComment)
+  const editorModeKeymap = keymap.of([
+    {
+      key: "Mod-/",
+      run: () => {
+        const { activeTabId, toggleEditorMode } = useAppStore.getState();
+        if (activeTabId) toggleEditorMode(activeTabId);
+        return true;
+      },
+    },
+  ]);
+
   return [
+    editorModeKeymap,
     keymap.of([
       ...defaultKeymap,
       ...historyKeymap,
@@ -164,6 +183,7 @@ function buildExtensions(): Extension[] {
     syntaxHighlighting(onyxHighlightStyle),
     codeFolding(),
     foldGutter(),
+    lineNumbers(),
     onyxTheme,
     EditorView.lineWrapping,
     updateListener,
@@ -173,6 +193,7 @@ function buildExtensions(): Extension[] {
     urlPasteExtension,
     autocompleteExtension(),
     symbolWrapExtension(),
+    livePreviewExtension(),
   ];
 }
 
@@ -301,6 +322,7 @@ export function Editor() {
   const activeTabId = useAppStore((s) => s.activeTabId);
   const tabs = useAppStore((s) => s.tabs);
   const activeTab = tabs.find((t) => t.id === activeTabId);
+  const editorMode = activeTab?.editorMode ?? "source";
 
   // Initialize shared extensions once
   if (!sharedExtensions) {
@@ -399,6 +421,13 @@ export function Editor() {
     _liveViewRef = viewRef.current;
     viewTabIdRef.current = activeTab.id;
 
+    // Sync preview mode state
+    const wantPreview = activeTab.editorMode === "preview";
+    const currentPreview = viewRef.current.state.field(previewModeField);
+    if (currentPreview !== wantPreview) {
+      viewRef.current.dispatch({ effects: togglePreviewEffect.of(wantPreview) });
+    }
+
     // Restore scroll position (deferred so layout is complete)
     const savedScroll = scrollCache.get(activeTab.id);
     if (savedScroll !== undefined) {
@@ -442,6 +471,16 @@ export function Editor() {
     };
   }, []);
 
+  // Sync live preview mode when editorMode changes
+  useEffect(() => {
+    if (!viewRef.current) return;
+    const isPreview = editorMode === "preview";
+    const current = viewRef.current.state.field(previewModeField);
+    if (current !== isPreview) {
+      viewRef.current.dispatch({ effects: togglePreviewEffect.of(isPreview) });
+    }
+  }, [editorMode]);
+
   // Clean up caches when tabs close
   useEffect(() => {
     const tabIds = new Set(tabs.map((t) => t.id));
@@ -463,9 +502,11 @@ export function Editor() {
     );
   }
 
+  const modeClass = editorMode === "source" ? "source-mode" : "preview-mode";
+
   return (
     <div className="editor-area">
-      <div className="editor-container" ref={containerRef} />
+      <div className={`editor-container ${modeClass}`} ref={containerRef} />
     </div>
   );
 }

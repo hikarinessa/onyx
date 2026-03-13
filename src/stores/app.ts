@@ -1,10 +1,13 @@
 import { create } from "zustand";
 
+export type EditorMode = "source" | "preview";
+
 export interface Tab {
   id: string;
   path: string;
   name: string;
   modified: boolean;
+  editorMode: EditorMode;
 }
 
 /** null = use smart default, non-null = user override */
@@ -45,6 +48,7 @@ interface AppState {
   setActiveTab: (id: string) => void;
   setModified: (id: string, modified: boolean) => void;
   updateTabPath: (id: string, newPath: string, newName: string) => void;
+  toggleEditorMode: (id: string) => void;
 
   // Status bar
   cursorLine: number;
@@ -109,7 +113,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const id = path;
-    const tab: Tab = { id, path, name, modified: false };
+    const tab: Tab = { id, path, name, modified: false, editorMode: "source" };
     set({ tabs: [...tabs, tab], activeTabId: id });
   },
 
@@ -168,6 +172,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         t.id === id ? { ...t, id: newPath, path: newPath, name: newName } : t
       ),
       activeTabId: activeTabId === id ? newPath : activeTabId,
+    }));
+  },
+
+  toggleEditorMode: (id) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === id
+          ? { ...t, editorMode: t.editorMode === "source" ? "preview" : "source" }
+          : t
+      ),
     }));
   },
 
