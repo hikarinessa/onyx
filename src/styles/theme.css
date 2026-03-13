@@ -1,4 +1,4 @@
-@layer reset, tokens, base, layout, components, editor;
+@layer reset, tokens, base, layout, components;
 
 @layer tokens {
   :root {

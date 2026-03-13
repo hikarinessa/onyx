@@ -1028,9 +1028,29 @@
     background: var(--accent-muted);
     color: var(--text-primary);
   }
+
+  .statusbar-conflict {
+    cursor: pointer;
+    padding: 1px 8px;
+    border-radius: 3px;
+    background: rgba(232, 84, 84, 0.15);
+    color: var(--status-error);
+    font-weight: 500;
+    animation: conflict-pulse 2s ease-in-out infinite;
+  }
+
+  .statusbar-conflict:hover {
+    background: rgba(232, 84, 84, 0.25);
+  }
+
+  @keyframes conflict-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
 }
 
-@layer editor {
+/* ── Editor styles (unlayered — must compete with CM6 runtime styles) ── */
+
   /* Editor container */
   .editor-container {
     flex: 1;
@@ -1205,4 +1225,3 @@
     font-style: normal !important;
     margin-left: 8px !important;
   }
-}

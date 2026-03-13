@@ -148,7 +148,15 @@ function buildExtensions(): Extension[] {
               lastSavedContent.set(tabId, content);
               setModified(tabId, false);
               useAppStore.getState().bumpSaveVersion();
+              // Clear conflict if save succeeds for this path
+              if (useAppStore.getState().saveConflictPath === tab.path) {
+                useAppStore.getState().setSaveConflictPath(null);
+              }
             } catch (err) {
+              const msg = String(err);
+              if (msg.includes("CONFLICT:")) {
+                useAppStore.getState().setSaveConflictPath(tab.path);
+              }
               console.error("Failed to save:", err);
             }
           }, SAVE_DEBOUNCE_MS);

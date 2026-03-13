@@ -39,14 +39,15 @@ export async function openFileInEditor(
     return;
   }
 
-  const content = await invoke<string>("read_file", { path });
-  loadFileIntoCache(path, content);
-
-  // Track files outside registered directories as orphan notes
+  // Check if orphan — if so, allow the path on the Rust side before reading
   const underDir = await isUnderRegisteredDir(path);
   if (!underDir) {
+    await invoke("allow_path", { path });
     useAppStore.getState().addOrphanPath(path);
   }
+
+  const content = await invoke<string>("read_file", { path });
+  loadFileIntoCache(path, content);
 
   if (opts?.replaceActive && store.activeTabId) {
     // Push current location to nav stack before replacing

@@ -40,8 +40,11 @@ pub struct AppState {
     pub directories: Mutex<dirs::DirectoryManager>,
     pub watcher: Mutex<Option<watcher::FileWatcher>>,
     pub db: Arc<Mutex<db::Database>>,
-    /// Tracks last-read mtime per file path to detect external modifications before write
+    /// Tracks last-read mtime per file path to detect external modifications before write.
+    /// Keys are canonical path strings for consistency.
     pub last_read_mtimes: Mutex<std::collections::HashMap<String, std::time::SystemTime>>,
+    /// Paths explicitly allowed outside registered directories (orphan notes opened by the user)
+    pub allowed_paths: Mutex<std::collections::HashSet<String>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -194,6 +197,7 @@ pub fn run() {
             watcher: Mutex::new(None),
             db,
             last_read_mtimes: Mutex::new(std::collections::HashMap::new()),
+            allowed_paths: Mutex::new(std::collections::HashSet::new()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_directory,
@@ -231,6 +235,8 @@ pub fn run() {
             commands::get_all_tags,
             commands::get_all_titles,
             commands::count_incoming_links,
+            commands::allow_path,
+            commands::disallow_path,
             plugins::mac_rounded_corners::enable_rounded_corners,
             plugins::mac_rounded_corners::enable_modern_window_style,
             plugins::mac_rounded_corners::reposition_traffic_lights,

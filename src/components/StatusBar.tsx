@@ -1,4 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, selectActiveTabPath, selectActiveEditorMode } from "../stores/app";
+import { loadFileIntoCache } from "./Editor";
 
 export function StatusBar() {
   const activeTabId = useAppStore((s) => s.activeTabId);
@@ -8,8 +10,22 @@ export function StatusBar() {
   const cursorCol = useAppStore((s) => s.cursorCol);
   const wordCount = useAppStore((s) => s.wordCount);
   const charCount = useAppStore((s) => s.charCount);
+  const saveConflictPath = useAppStore((s) => s.saveConflictPath);
 
   const toggleEditorMode = useAppStore((s) => s.toggleEditorMode);
+
+  const hasConflict = saveConflictPath != null && saveConflictPath === activeTabPath;
+
+  const handleReload = async () => {
+    if (!saveConflictPath) return;
+    try {
+      const content = await invoke<string>("read_file", { path: saveConflictPath });
+      loadFileIntoCache(saveConflictPath, content);
+      useAppStore.getState().setSaveConflictPath(null);
+    } catch (err) {
+      console.error("Failed to reload file:", err);
+    }
+  };
 
   const handlePathClick = () => {
     if (activeTabPath) {
@@ -35,6 +51,18 @@ export function StatusBar() {
         )}
       </div>
       <div className="statusbar-right">
+        {hasConflict && (
+          <span
+            className="statusbar-conflict"
+            title="File was modified externally. Click to reload from disk (unsaved changes will be lost)."
+            role="button"
+            tabIndex={0}
+            onClick={handleReload}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleReload(); } }}
+          >
+            External change — click to reload
+          </span>
+        )}
         {activeTabId && (
           <>
             <span>
