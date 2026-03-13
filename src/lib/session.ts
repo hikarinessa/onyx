@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/app";
+import { useAppStore, type AccordionState } from "../stores/app";
 import { openFileInEditor } from "./openFile";
 import { getActiveThemeId, applyTheme } from "./themes";
 
@@ -15,6 +15,7 @@ interface SessionData {
   contextPanelVisible: boolean;
   collapsedDirs?: string[];
   themeId?: string;
+  accordionState?: AccordionState;
   timestamp: number;
 }
 
@@ -27,6 +28,7 @@ function getSessionData(): SessionData {
     contextPanelVisible: state.contextPanelVisible,
     collapsedDirs: state.collapsedDirs,
     themeId: getActiveThemeId(),
+    accordionState: state.accordionState,
     timestamp: Date.now(),
   };
 }
@@ -110,6 +112,13 @@ export async function restoreSession(): Promise<void> {
   if (data.collapsedDirs && data.collapsedDirs.length > 0) {
     for (const dirId of data.collapsedDirs) {
       state.toggleDirCollapsed(dirId);
+    }
+  }
+
+  // Restore accordion state
+  if (data.accordionState) {
+    for (const [key, val] of Object.entries(data.accordionState)) {
+      state.setAccordionExpanded(key as keyof AccordionState, val);
     }
   }
 

@@ -7,6 +7,14 @@ export interface Tab {
   modified: boolean;
 }
 
+/** null = use smart default, non-null = user override */
+export interface AccordionState {
+  properties: boolean | null;
+  backlinks: boolean | null;
+  recent: boolean | null;
+  outline: boolean | null;
+}
+
 // Injected by Editor.tsx to avoid circular imports
 let flushSaveHook: ((id: string) => Promise<void>) | null = null;
 export function setFlushSaveHook(fn: (id: string) => Promise<void>) {
@@ -71,6 +79,14 @@ interface AppState {
   // File tree refresh signal — bump after any file mutation to refresh sidebar
   fileTreeVersion: number;
   bumpFileTreeVersion: () => void;
+
+  // Accordion state for context panel sections
+  accordionState: AccordionState;
+  setAccordionExpanded: (section: keyof AccordionState, expanded: boolean | null) => void;
+
+  // Save version — bumped after each successful write_file to trigger re-fetches
+  saveVersion: number;
+  bumpSaveVersion: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -193,4 +209,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fileTreeVersion: 0,
   bumpFileTreeVersion: () => set((s) => ({ fileTreeVersion: s.fileTreeVersion + 1 })),
+
+  accordionState: { properties: null, backlinks: null, recent: null, outline: null },
+  setAccordionExpanded: (section, expanded) =>
+    set((s) => ({
+      accordionState: { ...s.accordionState, [section]: expanded },
+    })),
+
+  saveVersion: 0,
+  bumpSaveVersion: () => set((s) => ({ saveVersion: s.saveVersion + 1 })),
 }));

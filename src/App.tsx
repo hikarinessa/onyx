@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Titlebar } from "./components/Titlebar";
 import { TabBar } from "./components/TabBar";
 import { Sidebar } from "./components/Sidebar";
-import { Editor } from "./components/Editor";
+import { Editor, foldFrontmatter } from "./components/Editor";
 import { ContextPanel } from "./components/ContextPanel";
 import { StatusBar } from "./components/StatusBar";
 import { QuickOpen } from "./components/QuickOpen";
@@ -113,6 +113,13 @@ function registerCommands() {
       execute: () => applyTheme(theme.id),
     });
   }
+
+  registerCommand({
+    id: "editor.foldFrontmatter",
+    label: "Fold Frontmatter",
+    category: "Editor",
+    execute: () => foldFrontmatter(),
+  });
 
   registerCommand({
     id: "view.commandPalette",

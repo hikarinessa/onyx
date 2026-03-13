@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/app";
+import { useAppStore, type AccordionState } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import { replaceTabContent } from "./Editor";
 import { Calendar } from "./Calendar";
@@ -165,18 +165,20 @@ function PropertiesSection({
   expanded,
   onToggle,
   onTypeDetected,
+  saveVersion,
 }: {
   path: string;
   expanded: boolean;
   onToggle: () => void;
   onTypeDetected: (hasType: boolean) => void;
+  saveVersion: number;
 }) {
   const [frontmatter, setFrontmatter] = useState<FrontmatterMap | null>(null);
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [loading, setLoading] = useState(true);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load frontmatter + object types when path changes
+  // Load frontmatter + object types when path or saveVersion changes
   useEffect(() => {
     let stale = false;
     setLoading(true);
@@ -212,7 +214,7 @@ function PropertiesSection({
     return () => {
       stale = true;
     };
-  }, [path]);
+  }, [path, saveVersion]);
 
   // Cancel pending save on path change or unmount
   useEffect(() => {
@@ -337,8 +339,13 @@ function PropertiesSection({
 
 // ── Recent Documents ──
 
-function RecentDocuments() {
-  const [expanded, setExpanded] = useState(false);
+function RecentDocuments({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const [recents, setRecents] = useState<{ path: string; name: string }[]>([]);
 
   useEffect(() => {
@@ -358,7 +365,7 @@ function RecentDocuments() {
     <div className="context-panel-section">
       <div
         className="context-panel-section-title collapsible"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={onToggle}
       >
         <span className="collapse-arrow">{expanded ? "▾" : "▸"}</span>
         Recent ({recents.length})
@@ -391,31 +398,48 @@ function RecentDocuments() {
   );
 }
 
+// ── Accordion hook ──
+
+/** Resolve effective expanded state: user override or smart default */
+function useAccordionSection(
+  section: keyof AccordionState,
+  smartDefault: boolean,
+): [boolean, () => void] {
+  const override = useAppStore((s) => s.accordionState[section]);
+  const setExpanded = useAppStore((s) => s.setAccordionExpanded);
+  const expanded = override !== null ? override : smartDefault;
+  const toggle = useCallback(() => {
+    setExpanded(section, !expanded);
+  }, [section, expanded, setExpanded]);
+  return [expanded, toggle];
+}
+
 // ── Main component ──
 
 export function ContextPanel() {
   const visible = useAppStore((s) => s.contextPanelVisible);
   const tabs = useAppStore((s) => s.tabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
+  const saveVersion = useAppStore((s) => s.saveVersion);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   const [backlinks, setBacklinks] = useState<BacklinkRecord[]>([]);
-  const [backlinksExpanded, setBacklinksExpanded] = useState(false);
-  const [propsExpanded, setPropsExpanded] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [hasType, setHasType] = useState(false);
 
-  // Reset accordion defaults on tab switch
-  const handleTypeDetected = useCallback((hasType: boolean) => {
-    setPropsExpanded(hasType);
-    setBacklinksExpanded(!hasType);
+  // Accordion sections with store persistence
+  const [propsExpanded, toggleProps] = useAccordionSection("properties", hasType);
+  const [backlinksExpanded, toggleBacklinks] = useAccordionSection("backlinks", !hasType);
+  const [recentExpanded, toggleRecent] = useAccordionSection("recent", false);
+
+  const handleTypeDetected = useCallback((detected: boolean) => {
+    setHasType(detected);
   }, []);
 
   // Fetch backlinks
   useEffect(() => {
     if (!activeTab?.path) {
       setBacklinks([]);
-      setBacklinksExpanded(false);
-      setPropsExpanded(false);
       return;
     }
 
@@ -533,8 +557,9 @@ export function ContextPanel() {
         <PropertiesSection
           path={activeTab.path}
           expanded={propsExpanded}
-          onToggle={() => setPropsExpanded((v) => !v)}
+          onToggle={toggleProps}
           onTypeDetected={handleTypeDetected}
+          saveVersion={saveVersion}
         />
       )}
 
@@ -542,7 +567,7 @@ export function ContextPanel() {
       <div className="context-panel-section">
         <div
           className="context-panel-section-title collapsible"
-          onClick={() => setBacklinksExpanded((v) => !v)}
+          onClick={toggleBacklinks}
         >
           <span className="collapse-arrow">{backlinksExpanded ? "▾" : "▸"}</span>
           Backlinks ({backlinks.length})
@@ -580,7 +605,7 @@ export function ContextPanel() {
       </div>
 
       {/* Recent Documents */}
-      <RecentDocuments />
+      <RecentDocuments expanded={recentExpanded} onToggle={toggleRecent} />
     </div>
   );
 }
