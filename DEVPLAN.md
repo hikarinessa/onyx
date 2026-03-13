@@ -19,7 +19,8 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 6 (Palette & Theming) | 0.6.0 |
 | Phase 7 (Preview & Navigation) | 0.7.0 ✅ |
 | Phase 7.5 (Hardening & CSS) | 0.7.5 ✅ |
-| Phase 7.6 (Settings Window) | 0.7.6 |
+| Phase 7.6 (Settings Window) | 0.7.6 ✅ |
+| Phase 7.7 (Lucide Icons) | 0.7.7 |
 | Phase 8 (Split Panes) | 0.8.0 |
 | Phase 9 (Tables) | 0.9.0 |
 | Phase 10 (Per-Block Features) | 0.10.0 |
@@ -764,7 +765,7 @@ Build incrementally as desired. Includes original Tier 2 items plus medium-prior
 ### Core Tier 2
 
 - 12.1 Slash commands (`/h1`, `/table`, `/template`, `/divider`)
-- 12.2 Custom keybindings (`~/.onyx/keybindings.json`)
+- 12.2 ~~Custom keybindings~~ (done in 7.6 — keybinding registry + Settings editor + `~/.onyx/keybindings.json`)
 - 12.3 Full-text search across files (Cmd+Shift+F) — ripgrep-style in Rust
 - 12.4 Natural language dates (`@today` → `[[2026-03-11]]`)
 - 12.5 Custom sort (drag-to-reorder in sidebar)
@@ -787,9 +788,14 @@ Build incrementally as desired. Includes original Tier 2 items plus medium-prior
 ### CSS & Theming (medium term)
 
 - 12.C1 OKLCH primitive color tokens — accent color picker derives variants from one hue
-- 12.C2 JSON theme format — `base` inheritance, `colors` + `syntax` sections, `~/.onyx/themes/`
-- 12.C3 User typography preferences — font family, size, line height, content width in `~/.onyx/preferences.json`
-- 12.C4 Theme editor/preview — live preview, contrast ratio warnings
+- 12.C2 **User-created themes** — `~/.onyx/themes/*.json` loaded at startup, appear alongside built-ins in Settings. Each file defines a theme with:
+  - `name`, `id`, optional `base` (inherit from "dark"/"light"/"warm" — only override what you change)
+  - `colors` section: all 9 base colors (bg_base, bg_surface, bg_elevated, text_primary/secondary/tertiary, accent, border_default/subtle) plus derived (hover, active, muted, tag, link, status)
+  - `headings` section: per-level size + color
+  - `elements` section: blockquote, link, code, tag styling
+  - Infrastructure already exists: `configBridge.ts` applies vars, `theme.css` defines `data-theme` selectors, Settings has per-theme color tabs. Remaining work: Rust `load_user_themes()` to scan `~/.onyx/themes/`, dynamic CSS injection for user themes (can't use static `theme.css` selectors), theme import/export in Settings, "Duplicate theme" button to fork a built-in
+- 12.C3 ~~User typography preferences~~ (done in 7.6 — font family, size, line height, content width in config.json)
+- 12.C4 Theme editor/preview — live preview, contrast ratio warnings, "Save as theme" button to export current overrides
 
 ### Deferred Gotchas (when scale demands)
 

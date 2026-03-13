@@ -6,6 +6,7 @@ import { replaceTabContent } from "./Editor";
 import { Calendar } from "./Calendar";
 import { createOrOpenPeriodicNote } from "../lib/periodicNotes";
 import { getCached, setCache } from "../lib/ipcCache";
+import { Icon } from "./Icon";
 
 // ── Types ──
 
@@ -278,7 +279,7 @@ function PropertiesSection({
         className="context-panel-section-title collapsible"
         onClick={onToggle}
       >
-        <span className="collapse-arrow">{expanded ? "▾" : "▸"}</span>
+        <span className="collapse-arrow"><Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} /></span>
         {label}
       </div>
 
@@ -368,7 +369,7 @@ function RecentDocuments({
         className="context-panel-section-title collapsible"
         onClick={onToggle}
       >
-        <span className="collapse-arrow">{expanded ? "▾" : "▸"}</span>
+        <span className="collapse-arrow"><Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} /></span>
         Recent ({recents.length})
       </div>
       {expanded && (
@@ -570,7 +571,7 @@ export function ContextPanel() {
             title={isBookmarked ? "Remove bookmark" : "Bookmark this note"}
             onClick={handleToggleBookmark}
           >
-            {isBookmarked ? "★" : "☆"}
+            <Icon name={isBookmarked ? "bookmark-check" : "bookmark"} size={16} />
           </button>
           <span className="context-panel-bookmark-label">
             {isBookmarked ? "Bookmarked" : "Bookmark"}
@@ -595,7 +596,7 @@ export function ContextPanel() {
           className="context-panel-section-title collapsible"
           onClick={toggleBacklinks}
         >
-          <span className="collapse-arrow">{backlinksExpanded ? "▾" : "▸"}</span>
+          <span className="collapse-arrow"><Icon name={backlinksExpanded ? "chevron-down" : "chevron-right"} size={14} /></span>
           Backlinks ({backlinks.length})
         </div>
 
