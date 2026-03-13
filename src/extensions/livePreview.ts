@@ -234,66 +234,27 @@ function addInlineDecorations(
 
   let m: RegExpExecArray | null;
 
-  // Bold+Italic (***text***) — must come before bold/italic
-  BOLD_ITALIC_RE.lastIndex = 0;
-  while ((m = BOLD_ITALIC_RE.exec(text)) !== null) {
-    const from = line.from + m.index;
-    const to = from + m[0].length;
-    ranges.push({ from, to: from + 3, deco: DECO_REPLACE });
-    ranges.push({ from: from + 3, to: to - 3, deco: DECO_BOLD_ITALIC });
-    ranges.push({ from: to - 3, to, deco: DECO_REPLACE });
-    claimed.push({ from, to });
-  }
-
-  // Bold (**text**)
-  BOLD_RE.lastIndex = 0;
-  while ((m = BOLD_RE.exec(text)) !== null) {
-    const from = line.from + m.index;
-    const to = from + m[0].length;
-    if (isClaimed(from, to)) continue;
-    ranges.push({ from, to: from + 2, deco: DECO_REPLACE });
-    ranges.push({ from: from + 2, to: to - 2, deco: DECO_BOLD });
-    ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
-    claimed.push({ from, to });
-  }
-
-  // Italic (*text* and _text_)
-  for (const re of [ITALIC_STAR_RE, ITALIC_UNDER_RE]) {
+  /** Match a symmetric inline pattern, hide markers, apply decoration */
+  function matchInline(re: RegExp, markerLen: number, deco: Decoration, skipClaimed = true) {
     re.lastIndex = 0;
     while ((m = re.exec(text)) !== null) {
       const from = line.from + m.index;
       const to = from + m[0].length;
-      if (isClaimed(from, to)) continue;
-      ranges.push({ from, to: from + 1, deco: DECO_REPLACE });
-      ranges.push({ from: from + 1, to: to - 1, deco: DECO_ITALIC });
-      ranges.push({ from: to - 1, to, deco: DECO_REPLACE });
+      if (skipClaimed && isClaimed(from, to)) continue;
+      ranges.push({ from, to: from + markerLen, deco: DECO_REPLACE });
+      ranges.push({ from: from + markerLen, to: to - markerLen, deco });
+      ranges.push({ from: to - markerLen, to, deco: DECO_REPLACE });
       claimed.push({ from, to });
     }
   }
 
-  // Strikethrough (~~text~~)
-  STRIKETHROUGH_RE.lastIndex = 0;
-  while ((m = STRIKETHROUGH_RE.exec(text)) !== null) {
-    const from = line.from + m.index;
-    const to = from + m[0].length;
-    if (isClaimed(from, to)) continue;
-    ranges.push({ from, to: from + 2, deco: DECO_REPLACE });
-    ranges.push({ from: from + 2, to: to - 2, deco: DECO_STRIKETHROUGH });
-    ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
-    claimed.push({ from, to });
-  }
-
-  // Highlight (==text==)
-  HIGHLIGHT_RE.lastIndex = 0;
-  while ((m = HIGHLIGHT_RE.exec(text)) !== null) {
-    const from = line.from + m.index;
-    const to = from + m[0].length;
-    if (isClaimed(from, to)) continue;
-    ranges.push({ from, to: from + 2, deco: DECO_REPLACE });
-    ranges.push({ from: from + 2, to: to - 2, deco: DECO_HIGHLIGHT });
-    ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
-    claimed.push({ from, to });
-  }
+  // Order matters: longer markers first to prevent partial matches
+  matchInline(BOLD_ITALIC_RE, 3, DECO_BOLD_ITALIC, false);
+  matchInline(BOLD_RE, 2, DECO_BOLD);
+  matchInline(ITALIC_STAR_RE, 1, DECO_ITALIC);
+  matchInline(ITALIC_UNDER_RE, 1, DECO_ITALIC);
+  matchInline(STRIKETHROUGH_RE, 2, DECO_STRIKETHROUGH);
+  matchInline(HIGHLIGHT_RE, 2, DECO_HIGHLIGHT);
 
   // Wikilinks
   WIKILINK_RE.lastIndex = 0;
