@@ -163,6 +163,7 @@ export function Sidebar() {
   const fileTreeVersion = useAppStore((s) => s.fileTreeVersion);
   const collapsedDirs = useAppStore((s) => s.collapsedDirs);
   const toggleDirCollapsed = useAppStore((s) => s.toggleDirCollapsed);
+  const orphanPaths = useAppStore((s) => s.orphanPaths);
   const [directories, setDirectories] = useState<RegisteredDirectory[]>([]);
   const [rootEntries, setRootEntries] = useState<Map<string, DirEntry[]>>(
     new Map()
@@ -250,12 +251,15 @@ export function Sidebar() {
   // Listen for file system changes to refresh
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>;
+    let cancelled = false;
     const unlisten = listen("fs:change", () => {
+      if (cancelled) return;
       clearTimeout(timeout);
       timeout = setTimeout(loadDirectories, 1000);
     });
 
     return () => {
+      cancelled = true;
       clearTimeout(timeout);
       unlisten.then((fn) => fn());
     };
@@ -430,6 +434,43 @@ export function Sidebar() {
           );
         })
       )}
+      {orphanPaths.length > 0 && (
+        <div className="sidebar-directory">
+          <div className="sidebar-header" style={{ borderLeft: "2px solid var(--text-tertiary)" }}>
+            <span className="sidebar-header-chevron">▾</span>
+            <span className="sidebar-header-label">Orphan Notes</span>
+          </div>
+          <div className="sidebar-content">
+            {orphanPaths.map((p) => {
+              const name = p.split("/").pop() || p;
+              const isActive = p === activeTabId;
+              return (
+                <div
+                  key={p}
+                  className={`tree-item ${isActive ? "active" : ""}`}
+                  style={{ "--indent": 0 } as React.CSSProperties}
+                  onClick={(e) => handleFileClick(p, name, e.metaKey)}
+                >
+                  <span className="tree-item-icon">◇</span>
+                  <span className="tree-item-label">{name}</span>
+                  <button
+                    className="tab-close"
+                    style={{ opacity: 1, fontSize: "12px" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      useAppStore.getState().removeOrphanPath(p);
+                    }}
+                    title="Remove from orphan notes"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <button
         className="sidebar-add-folder-btn"
         onClick={addDirectory}

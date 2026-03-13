@@ -102,6 +102,11 @@ interface AppState {
   // Save version — bumped after each successful write_file to trigger re-fetches
   saveVersion: number;
   bumpSaveVersion: () => void;
+
+  // Orphan notes — files not in any registered directory
+  orphanPaths: string[];
+  addOrphanPath: (path: string) => void;
+  removeOrphanPath: (path: string) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -306,4 +311,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   saveVersion: 0,
   bumpSaveVersion: () => set((s) => ({ saveVersion: s.saveVersion + 1 })),
+
+  orphanPaths: [],
+  addOrphanPath: (path) => set((s) => {
+    if (s.orphanPaths.includes(path)) return s;
+    return { orphanPaths: [...s.orphanPaths, path] };
+  }),
+  removeOrphanPath: (path) => set((s) => ({
+    orphanPaths: s.orphanPaths.filter((p) => p !== path),
+  })),
 }));

@@ -5,6 +5,7 @@ import { openFileInEditor } from "../lib/openFile";
 import { replaceTabContent } from "./Editor";
 import { Calendar } from "./Calendar";
 import { createOrOpenPeriodicNote } from "../lib/periodicNotes";
+import { getCached, setCache } from "../lib/ipcCache";
 
 // ── Types ──
 
@@ -418,10 +419,10 @@ function useAccordionSection(
 
 export function ContextPanel() {
   const visible = useAppStore((s) => s.contextPanelVisible);
-  const tabs = useAppStore((s) => s.tabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
+  const activeTabPath = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.path);
+  const activeTabName = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.name);
   const saveVersion = useAppStore((s) => s.saveVersion);
-  const activeTab = tabs.find((t) => t.id === activeTabId);
 
   const [backlinks, setBacklinks] = useState<BacklinkRecord[]>([]);
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -436,17 +437,25 @@ export function ContextPanel() {
     setHasType(detected);
   }, []);
 
-  // Fetch backlinks
+  // Fetch backlinks (with IPC cache)
   useEffect(() => {
-    if (!activeTab?.path) {
+    if (!activeTabPath) {
       setBacklinks([]);
       return;
     }
 
+    const cacheKey = `backlinks:${activeTabPath}`;
+    const cached = getCached<BacklinkRecord[]>(cacheKey);
+    if (cached) {
+      setBacklinks(cached);
+      return;
+    }
+
     let stale = false;
-    invoke<BacklinkRecord[]>("get_backlinks", { path: activeTab.path })
+    invoke<BacklinkRecord[]>("get_backlinks", { path: activeTabPath })
       .then((results) => {
         if (stale) return;
+        setCache(cacheKey, results);
         setBacklinks(results);
       })
       .catch(() => {
@@ -460,14 +469,14 @@ export function ContextPanel() {
 
   // Check bookmark state (directory bookmark OR global bookmark)
   useEffect(() => {
-    if (!activeTab?.path) {
+    if (!activeTabPath) {
       setIsBookmarked(false);
       return;
     }
 
     Promise.all([
-      invoke<boolean>("is_file_bookmarked", { path: activeTab.path }).catch(() => false),
-      invoke<boolean>("is_global_bookmarked", { path: activeTab.path }).catch(() => false),
+      invoke<boolean>("is_file_bookmarked", { path: activeTabPath }).catch(() => false),
+      invoke<boolean>("is_global_bookmarked", { path: activeTabPath }).catch(() => false),
     ]).then(([dir, global]) => setIsBookmarked(dir || global));
   }, [activeTabId]);
 
@@ -483,20 +492,20 @@ export function ContextPanel() {
   };
 
   const handleToggleBookmark = async () => {
-    if (!activeTab?.path) return;
+    if (!activeTabPath) return;
     try {
       // Try directory bookmark first (file is indexed)
       const nowBookmarked = await invoke<boolean>("toggle_bookmark", {
-        path: activeTab.path,
+        path: activeTabPath,
       });
       setIsBookmarked(nowBookmarked);
       useAppStore.getState().bumpBookmarkVersion();
     } catch {
       // File not in a registered directory — use global bookmark
       try {
-        const label = activeTab.name || activeTab.path.split("/").pop() || activeTab.path;
+        const label = activeTabName || activeTabPath.split("/").pop() || activeTabPath;
         const nowBookmarked = await invoke<boolean>("toggle_global_bookmark", {
-          path: activeTab.path,
+          path: activeTabPath,
           label,
         });
         setIsBookmarked(nowBookmarked);
@@ -555,7 +564,7 @@ export function ContextPanel() {
       )}
 
       {/* Bookmark toggle button */}
-      {activeTab && (
+      {activeTabPath && (
         <div className="context-panel-bookmark-row">
           <button
             className={`context-panel-bookmark-btn ${isBookmarked ? "active" : ""}`}
@@ -571,9 +580,9 @@ export function ContextPanel() {
       )}
 
       {/* Properties section */}
-      {activeTab?.path && (
+      {activeTabPath && (
         <PropertiesSection
-          path={activeTab.path}
+          path={activeTabPath}
           expanded={propsExpanded}
           onToggle={toggleProps}
           onTypeDetected={handleTypeDetected}

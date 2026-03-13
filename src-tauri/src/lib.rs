@@ -11,10 +11,37 @@ use std::sync::{Arc, Mutex};
 use tauri::{Manager, Emitter};
 use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItemBuilder};
 
+/// Disable macOS App Nap to prevent throttling of JS timers when minimized.
+/// Without this, auto-save (500ms debounce) and session persistence (30s interval) stall.
+#[cfg(target_os = "macos")]
+fn disable_app_nap() {
+    use cocoa::base::{nil, id};
+    use cocoa::foundation::NSString;
+    use objc::{msg_send, sel, sel_impl};
+    unsafe {
+        let process_info: id = msg_send![
+            objc::runtime::Class::get("NSProcessInfo").expect("NSProcessInfo class not found"),
+            processInfo
+        ];
+        let reason = NSString::alloc(nil).init_str(
+            "Onyx auto-save and session persistence timers must not be throttled",
+        );
+        // NSActivityUserInitiatedAllowingIdleSystemSleep = 0x00FFFFFF
+        let _activity: id = msg_send![
+            process_info,
+            beginActivityWithOptions: 0x00FFFFFF_u64
+            reason: reason
+        ];
+        // Activity is intentionally leaked — we want it active for the app's lifetime
+    }
+}
+
 pub struct AppState {
     pub directories: Mutex<dirs::DirectoryManager>,
     pub watcher: Mutex<Option<watcher::FileWatcher>>,
     pub db: Arc<Mutex<db::Database>>,
+    /// Tracks last-read mtime per file path to detect external modifications before write
+    pub last_read_mtimes: Mutex<std::collections::HashMap<String, std::time::SystemTime>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -157,12 +184,16 @@ pub fn run() {
                 });
             }
 
+            #[cfg(target_os = "macos")]
+            disable_app_nap();
+
             Ok(())
         })
         .manage(AppState {
             directories: Mutex::new(dir_manager),
             watcher: Mutex::new(None),
             db,
+            last_read_mtimes: Mutex::new(std::collections::HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_directory,

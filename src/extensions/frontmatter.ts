@@ -5,7 +5,7 @@ import {
   EditorView,
 } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
-import { foldEffect } from "@codemirror/language";
+import { foldEffect, unfoldEffect, foldedRanges } from "@codemirror/language";
 
 /**
  * Detects YAML frontmatter (--- ... ---) at the start of a document.
@@ -144,6 +144,31 @@ export function foldFrontmatterCommand(view: EditorView): boolean {
   view.dispatch({
     effects: foldEffect.of({ from: firstLine.to, to: fm.to }),
   });
+  return true;
+}
+
+/** Command: toggle frontmatter fold/unfold */
+export function toggleFrontmatterFoldCommand(view: EditorView): boolean {
+  const fm = findFrontmatter(view.state.doc);
+  if (!fm) return false;
+
+  const firstLine = view.state.doc.line(1);
+
+  // Check if frontmatter is currently folded
+  let isFolded = false;
+  foldedRanges(view.state).between(firstLine.from, fm.to, () => {
+    isFolded = true;
+  });
+
+  if (isFolded) {
+    view.dispatch({
+      effects: unfoldEffect.of({ from: firstLine.to, to: fm.to }),
+    });
+  } else {
+    view.dispatch({
+      effects: foldEffect.of({ from: firstLine.to, to: fm.to }),
+    });
+  }
   return true;
 }
 

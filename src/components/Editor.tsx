@@ -15,7 +15,7 @@ import {
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
-import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab, foldFrontmatterCommand } from "../extensions/frontmatter";
+import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab, toggleFrontmatterFoldCommand } from "../extensions/frontmatter";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
 import { formattingKeymap } from "../extensions/formatting";
@@ -272,10 +272,10 @@ export function clearEditorCache(path: string) {
   clearAutoFoldForTab(path);
 }
 
-/** Fold frontmatter in the active editor (for command palette) */
+/** Toggle frontmatter fold in the active editor (for command palette) */
 export function foldFrontmatter(): boolean {
   if (!_liveViewRef) return false;
-  return foldFrontmatterCommand(_liveViewRef);
+  return toggleFrontmatterFoldCommand(_liveViewRef);
 }
 
 /** Insert text at the current cursor position in the live editor */
