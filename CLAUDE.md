@@ -37,15 +37,15 @@ src/                          # Frontend (React + TypeScript)
 │   ├── BookmarkStrip.tsx     #  106 lines — Bookmarks section pinned at sidebar bottom
 │   ├── SidebarContextMenu.tsx#  120 lines — Right-click context menu for file tree
 │   ├── ErrorBoundary.tsx     #   50 lines — React error boundary
-│   ├── Editor.tsx            #  566 lines — CM6 editor, inline title, live preview sync
-│   ├── ContextPanel.tsx      #  611 lines — Calendar, backlinks, properties, outline, recent docs
-│   ├── Calendar.tsx          #  178 lines — Month-grid calendar widget
+│   ├── Editor.tsx            #  564 lines — CM6 editor, inline title, live preview sync
+│   ├── ContextPanel.tsx      #  629 lines — Calendar, backlinks, properties, outline, recent docs
+│   ├── Calendar.tsx          #  261 lines — Month-grid calendar with week numbers
 │   ├── StatusBar.tsx         #   59 lines — Cursor, word count, lint status, editor mode, file path
 │   ├── QuickOpen.tsx         #  264 lines — Cmd+O fuzzy search + type: prefix queries
 │   └── CommandPalette.tsx    #  123 lines — Cmd+P fuzzy command search
 ├── extensions/
 │   ├── frontmatter.ts        #  153 lines — CM6: frontmatter detection, styling, auto-fold, fold command
-│   ├── wikilinks.ts          #  157 lines — CM6: wikilink syntax highlighting, click/Cmd+click follow
+│   ├── wikilinks.ts          #  157 lines — CM6: wikilink syntax highlighting, click to follow
 │   ├── tags.ts               #  109 lines — CM6: #tag syntax highlighting (viewport-aware)
 │   ├── formatting.ts         #  118 lines — CM6: Cmd+B/I/Shift+C toggle wrap (multi-cursor safe)
 │   ├── outliner.ts           #  160 lines — CM6: list item indent/outdent/move/enter
@@ -65,15 +65,15 @@ src/                          # Frontend (React + TypeScript)
 └── styles/
     ├── reset.css             #   56 lines — CSS reset
     ├── theme.css             #   63 lines — CSS custom properties (dark theme)
-    └── layout.css            # 1165 lines — All component styles
+    └── layout.css            # 1210 lines — All component styles
 
 src-tauri/                    # Backend (Rust)
 ├── Cargo.toml                # Dependencies
 ├── tauri.conf.json           # Window config, dev URL, CSP
 └── src/
     ├── main.rs               #    6 lines — Entry point
-    ├── lib.rs                #  208 lines — Tauri setup, native menu bar, AppState, plugins
-    ├── commands.rs           #  838 lines — Tauri commands (file ops, search, bookmarks, autocomplete)
+    ├── lib.rs                #  209 lines — Tauri setup, native menu bar, AppState, plugins
+    ├── commands.rs           #  892 lines — Tauri commands (file ops, search, bookmarks, autocomplete)
     ├── db.rs                 #  555 lines — SQLite (WAL, files/links/tags/bookmarks + tag/title queries)
     ├── dirs.rs               #  117 lines — Directory registration (~/.onyx/directories.json)
     ├── indexer.rs            #  235 lines — Background indexer (frontmatter, wikilinks, tags)
@@ -156,8 +156,9 @@ src-tauri/                    # Backend (Rust)
 |---------|-----------|
 | `get_periodic_config` | `() → PeriodicConfig` |
 | `save_periodic_config` | `(config: PeriodicConfig) → ()` |
-| `create_periodic_note` | `(periodType: String, date: String) → CreatePeriodicNoteResult` |
+| `create_periodic_note` | `(periodType: String, date: String) → CreatePeriodicNoteResult` — date accepts YYYY-MM-DD or YYYY-Www |
 | `get_dates_with_notes` | `(year: i32, month: u32) → Vec<u32>` — day numbers with notes |
+| `get_weeks_with_notes` | `(weeks: Vec<String>) → Vec<String>` — which ISO weeks (YYYY-Www) have notes |
 
 ### Autocomplete & Metadata
 | Command | Signature |

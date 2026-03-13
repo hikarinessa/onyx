@@ -21,7 +21,7 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 7.5 (Hardening & CSS) | 0.7.5 |
 | Phase 8 (Split Panes) | 0.8.0 |
 | Phase 9 (Tables) | 0.9.0 |
-| Phase 10 (Blocks) | 0.10.0 |
+| Phase 10 (Per-Block Features) | 0.10.0 |
 | Phase 11 (MCP Server) | 0.11.0 |
 | Phase 12 (Tier 2) | 0.12.0 |
 

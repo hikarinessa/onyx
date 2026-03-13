@@ -792,10 +792,10 @@ Claude responds with suggestions and can onyx_insert_at_cursor to add links
 
 | Action | Behavior |
 |--------|----------|
-| Click file in sidebar | Replace current tab |
-| Cmd+click file in sidebar | Open in new tab |
-| Click wikilink (preview mode) | Replace current tab |
-| Cmd+click wikilink (preview or source) | Open in new tab |
+| Click | Replace current tab |
+| Cmd+click | Open in new tab |
+
+This applies uniformly to: sidebar files, wikilinks (preview + source), calendar dates, calendar week numbers, backlinks, recent docs, bookmarks, and Quick Open (Enter / Cmd+Enter).
 
 ### Command Palette (`Cmd+P`)
 
@@ -1002,7 +1002,7 @@ Decisions made during the design phase:
 5. **Live preview architecture** — CM6 `ViewPlugin` + `StateField<boolean>`. Viewport-aware from day one. "Focus line" (cursor's line) always shows raw markdown; all other lines render inline. Decorations rebuilt on `docChanged || viewportChanged || selectionSet || mode toggle`. Pre-scan caches frontmatter end and code-block states per visible range.
 6. **Inline title** — Editable `<input>` above the editor displaying the filename without `.md`. Renaming commits on blur/Enter. Strips file-unsafe characters (`/`, `\0`, `:`). Reads active tab from Zustand store directly (not React closure) to avoid stale-closure races during rename.
 7. **Default editor mode** — Preview, not source. New tabs open in preview mode. Session restore toggles tabs saved as "source".
-8. **Click semantics** — Click replaces current tab (both sidebar and wikilinks). Cmd+click opens in new tab. Matches browser link behavior. Wikilinks in preview mode use `mousedown` (not `click`) to fire before CM6 moves cursor and removes focus-line decorations.
+8. **Click semantics** — Click replaces current tab, Cmd+click opens in new tab. Uniform across all navigation surfaces (sidebar, wikilinks, calendar, backlinks, recent docs, bookmarks, Quick Open). Matches browser link behavior. Wikilinks in preview mode use `mousedown` (not `click`) to fire before CM6 moves cursor and removes focus-line decorations.
 9. **Navigation history** — Per-tab back/forward stacks (50-entry cap). Mouse buttons 3/4 (back/forward) supported via `auxclick` handler. `Cmd+[`/`Cmd+]` keyboard shortcuts. `replaceActiveTab` preserves nav history from the replaced tab.
 10. **Italic marker** — `_` (underscore), not `*` (asterisk). Avoids ambiguity with bold (`**`) and bold-italic (`***`).
 11. **CM6 keymap priority** — Custom keymaps (`formattingKeymap`, `outlinerKeymap`) are registered in separate `keymap.of()` calls placed before `defaultKeymap` in the extensions array. This ensures they take priority over CM6's defaults and WebKit's text system.
