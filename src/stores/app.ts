@@ -329,7 +329,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fileTreeVersion: 0,
   bumpFileTreeVersion: () => set((s) => ({ fileTreeVersion: s.fileTreeVersion + 1 })),
 
-  accordionState: { properties: null, backlinks: null, recent: null, outline: null },
+  accordionState: { properties: true, backlinks: false, recent: null, outline: null },
   setAccordionExpanded: (section, expanded) =>
     set((s) => ({
       accordionState: { ...s.accordionState, [section]: expanded },
