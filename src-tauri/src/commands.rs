@@ -104,6 +104,7 @@ pub fn read_file(path: String, state: State<AppState>) -> Result<String, String>
     if let Ok(meta) = std::fs::metadata(&file_path) {
         if let Ok(mtime) = meta.modified() {
             let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
+            if mtimes.len() > 500 { mtimes.clear(); }
             mtimes.insert(path.clone(), mtime);
         }
     }
@@ -116,22 +117,32 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
     let target = PathBuf::from(&path);
     validate_path(&target, &state)?;
 
-    // No-op write optimization: skip write if content unchanged (preserves mtime, avoids watcher events)
-    if let Ok(existing) = std::fs::read_to_string(&target) {
-        if existing == content {
-            return Ok(());
-        }
-    }
-
-    // mtime check: detect external modifications since last read_file call
+    // Combined no-op + mtime check. Uses mtime first to avoid expensive disk read on every auto-save.
     {
-        let mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
-        if let Some(&last_read) = mtimes.get(&path) {
+        let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
+
+        // Cap the map to prevent unbounded growth over long sessions
+        if mtimes.len() > 500 {
+            mtimes.clear();
+        }
+
+        if let Some(&last_known) = mtimes.get(&path) {
             if let Ok(meta) = std::fs::metadata(&target) {
                 if let Ok(current_mtime) = meta.modified() {
-                    if current_mtime != last_read {
+                    if current_mtime == last_known {
+                        // mtime matches our last write — disk content is what we put there.
+                        // JS side only triggers saves when content differs, so proceed to write.
+                    } else {
                         return Err("File was modified externally. Reload before saving.".to_string());
                     }
+                }
+            }
+        } else {
+            // No mtime record (first save for this file) — fall back to content comparison
+            drop(mtimes);
+            if let Ok(existing) = std::fs::read_to_string(&target) {
+                if existing == content {
+                    return Ok(());
                 }
             }
         }
