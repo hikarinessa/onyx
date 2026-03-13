@@ -19,6 +19,7 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 6 (Palette & Theming) | 0.6.0 |
 | Phase 7 (Preview & Navigation) | 0.7.0 ✅ |
 | Phase 7.5 (Hardening & CSS) | 0.7.5 ✅ |
+| Phase 7.6 (Settings Window) | 0.7.6 |
 | Phase 8 (Split Panes) | 0.8.0 |
 | Phase 9 (Tables) | 0.9.0 |
 | Phase 10 (Per-Block Features) | 0.10.0 |
@@ -531,6 +532,112 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 - Indented by heading level, placed between Properties and Backlinks
 
 **Milestone:** The app is hardened — CSS is layered, themes switch cleanly, IPC is cached, timers survive App Nap, external edits don't silently overwrite. Linting and outline round out the editor experience.
+
+---
+
+## Phase 7.6 — Settings Window
+
+**Goal:** Centralized, in-app settings UI. Replaces manual JSON editing for all user-facing configuration. Includes a keybinding editor with capture and conflict detection.
+
+**Rationale:** Config surface has grown across 7 phases — themes, periodic notes, object types, directories, editor preferences, keybindings. Users currently need to know about `~/.onyx/*.json` files. A settings window makes the app self-contained and lets us add new options without documentation burden.
+
+### Infrastructure
+
+7.6.1 **Unified config file** (`~/.onyx/config.json`)
+- Single Rust-side config struct covering all general settings
+- Sections: `editor`, `appearance`, `behavior`, `keybindings`
+- Rust commands: `get_config` → full config JSON, `update_config(section, json)` → partial update
+- Config is loaded at startup, cached in `AppState`, written on change
+- Backward-compatible: missing keys use defaults, unknown keys are preserved
+
+7.6.2 **Settings window component** (`SettingsWindow.tsx`)
+- Modal overlay (like QuickOpen/CommandPalette) — not a separate Tauri window
+- Opened via `Cmd+,` (standard macOS) and command palette
+- Left sidebar with section nav, right content area
+- Sections: General, Editor, Appearance, Periodic Notes, Keybindings, Directories, About
+
+### Sections
+
+7.6.3 **General**
+- Auto-save interval (slider: 250ms–5000ms, default 500ms)
+- Spellcheck toggle (maps to `contenteditable` spellcheck attribute)
+- Default new note location (dropdown: first registered dir, or last active dir)
+
+7.6.4 **Editor**
+- Font family (text input with preview, default Literata)
+- Font size (slider: 12–24px, default 16px)
+- Line height (slider: 1.2–2.4, default 1.7)
+- Content max-width (slider: 500–1200px or "none", default 720px)
+- Default editor mode for new tabs: Preview or Source
+- Show line numbers in source mode (toggle, default on)
+- Tab size for code blocks (2/4/8, default 4)
+
+7.6.5 **Appearance**
+- Theme picker (visual cards showing each theme's colors)
+- Sidebar width (slider: 180–400px, default 240px)
+- Context panel width (slider: 220–400px, default 280px)
+- UI font override (text input, default DM Sans)
+- Monospace font override (text input, default IBM Plex Mono)
+
+7.6.6 **Periodic Notes**
+- Visual editor for `~/.onyx/periodic-notes.json`
+- Enable/disable toggles per period type (daily, weekly, monthly)
+- Path templates with live preview of resolved path
+- Template file picker (file chooser within registered dirs)
+- Date format customization
+
+7.6.7 **Keybindings**
+- Table: Command name | Current shortcut | Default shortcut
+- Searchable/filterable by command name or category
+- Click a shortcut cell → enters capture mode (records next key combo)
+- Conflict detection: highlight if another command uses the same binding
+- Reset individual binding to default, or reset all
+- Stored in `~/.onyx/keybindings.json` — overrides only (not full dump)
+- Keybinding registry: all commands declare their default binding, the registry merges defaults with user overrides
+
+7.6.8 **Directories**
+- Same as current sidebar "Add Folder" but with reorder, label/color editing, and remove
+- Drag to reorder directory display order
+- Color picker for directory accent color
+- Inline label editing
+
+7.6.9 **About**
+- Version, build info
+- Links: GitHub repo, changelog
+- Storage stats: indexed files count, DB size, cache size
+
+### Keybinding System
+
+7.6.10 **Keybinding registry** (`src/lib/keybindings.ts`)
+- All shortcuts currently hardcoded in `App.tsx` and CM6 keymaps move to a central registry
+- Each entry: `{ id, key, defaultKey, scope: "global" | "editor" }`
+- Global shortcuts wired via `window.addEventListener("keydown")` from registry
+- Editor shortcuts wired via CM6 `keymap.of()` built from registry
+- User overrides loaded from `~/.onyx/keybindings.json` at startup
+- Conflicts: warn in settings UI, last-registered wins at runtime
+
+7.6.11 **Keybinding capture widget**
+- Focused input that records `e.metaKey + e.altKey + e.shiftKey + e.key`
+- Renders as human-readable string: "Cmd+Shift+D"
+- Escape cancels capture, Enter/blur confirms
+- Shows conflict inline if another command binds the same combo
+
+### Deferred from 7.5
+
+7.6.12 **Linting extension** (carried forward)
+- `@codemirror/lint` with markdown rules
+- Auto-fix on save: trim trailing whitespace, ensure final newline
+- Settings: enable/disable individual lint rules
+
+7.6.13 **Drag-drop `.md` files** (carried forward)
+- Handle Tauri `drag-drop` event on the window
+- Open in editor, add to orphan section if not in a registered directory
+
+7.6.14 **Finder "Open With Onyx"** (carried forward)
+- Register `.md` file association in `tauri.conf.json`
+- Handle Tauri `open-file` event
+
+**Milestone:** Every user-facing setting is editable from within the app. Keybindings are fully customizable. No more manual JSON editing required for basic configuration.
 
 ---
 
