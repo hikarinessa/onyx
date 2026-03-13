@@ -9,6 +9,12 @@ pub struct RegisteredDirectory {
     pub label: String,
     pub color: String,
     pub position: u32,
+    #[serde(default = "default_icon")]
+    pub icon: String,
+}
+
+fn default_icon() -> String {
+    "folder".to_string()
 }
 
 pub struct DirectoryManager {
@@ -74,6 +80,7 @@ impl DirectoryManager {
             label,
             color,
             position,
+            icon: default_icon(),
         };
 
         self.directories.push(dir.clone());
@@ -95,6 +102,19 @@ impl DirectoryManager {
             dir.position = i as u32;
         }
 
+        self.save()
+    }
+
+    pub fn update_icon(&mut self, id: &str, icon: &str) -> Result<(), String> {
+        // Reject anything that isn't a reasonable kebab-case icon name
+        if icon.is_empty() || icon.len() > 64
+            || !icon.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        {
+            return Err(format!("Invalid icon name: {}", icon));
+        }
+        let dir = self.directories.iter_mut().find(|d| d.id == id)
+            .ok_or("Directory not found")?;
+        dir.icon = icon.to_string();
         self.save()
     }
 

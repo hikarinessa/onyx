@@ -14,15 +14,16 @@ import {
   type KeyBinding,
 } from "../lib/keybindings";
 import type { AppConfig, ThemeColorOverrides, HeadingStyle } from "../lib/configTypes";
+import { Icon } from "./Icon";
 
 type Section = "general" | "editor" | "appearance" | "keybindings" | "about";
 
-const SECTIONS: { id: Section; label: string }[] = [
-  { id: "general", label: "General" },
-  { id: "editor", label: "Editor" },
-  { id: "appearance", label: "Appearance" },
-  { id: "keybindings", label: "Keybindings" },
-  { id: "about", label: "About" },
+const SECTIONS: { id: Section; label: string; icon: string }[] = [
+  { id: "general", label: "General", icon: "settings" },
+  { id: "editor", label: "Editor", icon: "type" },
+  { id: "appearance", label: "Appearance", icon: "palette" },
+  { id: "keybindings", label: "Keybindings", icon: "keyboard" },
+  { id: "about", label: "About", icon: "info" },
 ];
 
 // ── Helpers ──
@@ -127,6 +128,7 @@ export function Settings() {
               className={`settings-nav-item ${section === s.id ? "active" : ""}`}
               onClick={() => setSection(s.id)}
             >
+              <Icon name={s.icon} size={14} />
               {s.label}
             </button>
           ))}
@@ -420,6 +422,7 @@ function EditorSection({
 const THEME_SWATCHES: Record<string, { bg: string; surface: string; accent: string; text: string }> = {
   dark: { bg: "#0e0e12", surface: "#1a1a20", accent: "#8b7cf6", text: "#e8e8ec" },
   light: { bg: "#ffffff", surface: "#eeeef0", accent: "#6b5ce7", text: "#1d1d1f" },
+  warm2: { bg: "#232323", surface: "#2d2d2d", accent: "#00a3d7", text: "#ebebeb" },
   warm: { bg: "#1c1917", surface: "#292523", accent: "#d4a574", text: "#ede8e3" },
 };
 
@@ -495,6 +498,7 @@ function AppearanceSection({
   const THEME_FALLBACKS: Record<string, Record<string, string>> = {
     dark: { bg_base: "#0e0e12", bg_surface: "#141418", bg_elevated: "#1a1a20", text_primary: "#e8e8ec", text_secondary: "#9898a4", text_tertiary: "#5c5c68", accent: "#8b7cf6", border_default: "#2a2a34", border_subtle: "#1e1e26" },
     light: { bg_base: "#ffffff", bg_surface: "#f5f5f7", bg_elevated: "#eeeef0", text_primary: "#1d1d1f", text_secondary: "#6e6e73", text_tertiary: "#9a9aa0", accent: "#6b5ce7", border_default: "#d2d2d7", border_subtle: "#e5e5ea" },
+    warm2: { bg_base: "#232323", bg_surface: "#252525", bg_elevated: "#2d2d2d", text_primary: "#ebebeb", text_secondary: "#c0c0c0", text_tertiary: "#6b7280", accent: "#00a3d7", border_default: "#404040", border_subtle: "#404040" },
     warm: { bg_base: "#1c1917", bg_surface: "#221f1c", bg_elevated: "#292523", text_primary: "#ede8e3", text_secondary: "#a8a09a", text_tertiary: "#6b635d", accent: "#d4a574", border_default: "#38322e", border_subtle: "#2a2522" },
   };
 
@@ -558,7 +562,7 @@ function AppearanceSection({
       <SubSection title="Colors" />
 
       <div className="settings-color-theme-tabs">
-        {["dark", "light", "warm"].map((t) => (
+        {["dark", "light", "warm", "warm2"].map((t) => (
           <button
             key={t}
             className={`settings-color-tab ${colorTheme === t ? "active" : ""}`}

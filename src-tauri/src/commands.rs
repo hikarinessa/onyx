@@ -271,6 +271,16 @@ pub fn unregister_directory(
 }
 
 #[tauri::command]
+pub fn update_directory_icon(
+    id: String,
+    icon: String,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let mut dirs = state.directories.lock().map_err(|e| e.to_string())?;
+    dirs.update_icon(&id, &icon)
+}
+
+#[tauri::command]
 pub fn search_files(
     query: String,
     state: State<AppState>,

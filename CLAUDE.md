@@ -15,13 +15,14 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 7 (Live Preview & Navigation):** Complete
 - **Phase 7.5 (Hardening & CSS Architecture):** Complete
 - **Phase 7.6 (Settings Window):** Complete
+- **Phase 7.7 (Lucide Icons):** Complete
 - **Phase 8 (Split Panes):** Planned
 - **Phase 9 (Tables):** Planned
 - **Phase 10 (Per-Block Features):** Planned
 - **Phase 11 (MCP Server):** Planned
 - **Phase 12 (Tier 2 Features):** Planned
 
-**Current version:** 0.7.6
+**Current version:** 0.7.7
 
 ## Project Structure
 
@@ -44,7 +45,9 @@ src/                          # Frontend (React + TypeScript)
 │   ├── StatusBar.tsx         #   59 lines — Cursor, word count, lint status, editor mode, file path
 │   ├── QuickOpen.tsx         #  264 lines — Cmd+O fuzzy search + type: prefix queries
 │   ├── CommandPalette.tsx    #  123 lines — Cmd+P fuzzy command search
-│   └── Settings.tsx         #  704 lines — Settings modal (config, keybindings, themes, about)
+│   ├── Settings.tsx          #  704 lines — Settings modal (config, keybindings, themes, about)
+│   ├── Icon.tsx              #   18 lines — Lucide icon wrapper: <Icon name="folder" size={16} />
+│   └── IconPicker.tsx        #  100 lines — Modal icon picker with search + categories
 ├── extensions/
 │   ├── frontmatter.ts        #  178 lines — CM6: frontmatter detection, styling, auto-fold, toggle-fold command
 │   ├── wikilinks.ts          #  157 lines — CM6: wikilink syntax highlighting, click to follow
@@ -66,7 +69,8 @@ src/                          # Frontend (React + TypeScript)
 │   ├── commands.ts           #   33 lines — Command registry for palette + menu bar
 │   ├── keybindings.ts        #  174 lines — Keybinding registry (parse, normalise, conflict detect, global keymap)
 │   ├── themes.ts             #   59 lines — Theme system (data-theme attribute switching)
-│   └── configBridge.ts       #  257 lines — Config bridge: loads Rust config → CSS custom properties, remeasure hook
+│   ├── configBridge.ts       #  257 lines — Config bridge: loads Rust config → CSS custom properties, remeasure hook
+│   └── iconCatalog.ts       #  290 lines — Curated ~250 Lucide icons + category metadata
 └── styles/
     ├── reset.css             #   67 lines — CSS reset (@layer reset, prefers-reduced-motion)
     ├── theme.css             #  117 lines — CSS layer order + custom properties (dark/light/warm via data-theme)

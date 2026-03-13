@@ -8,6 +8,8 @@ import * as fileOps from "../lib/fileOps";
 import type { DirEntry } from "../types";
 import { BookmarkStrip } from "./BookmarkStrip";
 import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
+import { Icon } from "./Icon";
+import { IconPicker } from "./IconPicker";
 
 interface RegisteredDirectory {
   id: string;
@@ -15,6 +17,7 @@ interface RegisteredDirectory {
   label: string;
   color: string;
   position: number;
+  icon: string;
 }
 
 function RenameInput({
@@ -134,7 +137,9 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
         onContextMenu={(e) => onContextMenu(e, entry)}
       >
         <span className="tree-item-icon">
-          {entry.is_dir ? (expanded ? "▾" : "▸") : isMarkdown ? "◇" : "·"}
+          {entry.is_dir
+            ? <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} />
+            : <Icon name={isMarkdown ? "file-text" : "file"} size={14} />}
         </span>
         {isRenaming ? (
           <RenameInput
@@ -181,6 +186,9 @@ export function Sidebar() {
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [iconPickerDirId, setIconPickerDirId] = useState<string | null>(null);
+  const iconPickerDirIdRef = useRef(iconPickerDirId);
+  iconPickerDirIdRef.current = iconPickerDirId;
 
   const addDirectory = async () => {
     const selected = await open({ directory: true, multiple: false });
@@ -387,7 +395,17 @@ export function Sidebar() {
                 onClick={() => toggleDirCollapsed(dir.id)}
               >
                 <span className="sidebar-header-chevron">
-                  {isCollapsed ? "▸" : "▾"}
+                  <Icon name={isCollapsed ? "chevron-right" : "chevron-down"} size={14} />
+                </span>
+                <span
+                  className="sidebar-header-icon"
+                  title="Change icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIconPickerDirId(dir.id);
+                  }}
+                >
+                  <Icon name={dir.icon || "folder"} size={14} />
                 </span>
                 <span className="sidebar-header-label">{dir.label}</span>
                 <div className="sidebar-header-actions">
@@ -399,7 +417,7 @@ export function Sidebar() {
                       handleNewNoteInDir(dir.path);
                     }}
                   >
-                    +
+                    <Icon name="plus" size={14} />
                   </button>
                   <button
                     className="sidebar-header-btn"
@@ -409,7 +427,7 @@ export function Sidebar() {
                       loadDirectories();
                     }}
                   >
-                    ↻
+                    <Icon name="refresh-cw" size={12} />
                   </button>
                   <button
                     className="sidebar-header-btn"
@@ -419,7 +437,7 @@ export function Sidebar() {
                       removeDirectory(dir.id);
                     }}
                   >
-                    ×
+                    <Icon name="x" size={14} />
                   </button>
                 </div>
               </div>
@@ -448,7 +466,9 @@ export function Sidebar() {
       {orphanPaths.length > 0 && (
         <div className="sidebar-directory">
           <div className="sidebar-header" style={{ borderLeft: "2px solid var(--text-tertiary)" }}>
-            <span className="sidebar-header-chevron">▾</span>
+            <span className="sidebar-header-chevron">
+              <Icon name="chevron-down" size={14} />
+            </span>
             <span className="sidebar-header-label">Orphan Notes</span>
           </div>
           <div className="sidebar-content">
@@ -462,7 +482,7 @@ export function Sidebar() {
                   style={{ "--indent": 0 } as React.CSSProperties}
                   onClick={(e) => handleFileClick(p, name, e.metaKey)}
                 >
-                  <span className="tree-item-icon">◇</span>
+                  <span className="tree-item-icon"><Icon name="file-text" size={14} /></span>
                   <span className="tree-item-label">{name}</span>
                   <button
                     className="tab-close"
@@ -474,7 +494,7 @@ export function Sidebar() {
                     }}
                     title="Remove from orphan notes"
                   >
-                    ×
+                    <Icon name="x" size={12} />
                   </button>
                 </div>
               );
@@ -488,12 +508,30 @@ export function Sidebar() {
         onClick={addDirectory}
         title="Add Folder"
       >
-        + Add Folder
+        <Icon name="folder-plus" size={14} /> Add Folder
       </button>
 
       </div>
 
       <BookmarkStrip />
+
+      {iconPickerDirId && (
+        <IconPicker
+          currentIcon={directories.find((d) => d.id === iconPickerDirId)?.icon || "folder"}
+          onSelect={async (icon) => {
+            const dirId = iconPickerDirIdRef.current;
+            if (!dirId) return;
+            try {
+              await invoke("update_directory_icon", { id: dirId, icon });
+              loadDirectories();
+            } catch (err) {
+              console.error("Failed to update directory icon:", err);
+            }
+            setIconPickerDirId(null);
+          }}
+          onClose={() => setIconPickerDirId(null)}
+        />
+      )}
 
       {contextMenu && (
         <SidebarContextMenu

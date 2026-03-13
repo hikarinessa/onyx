@@ -212,6 +212,7 @@ pub fn run() {
             commands::get_registered_directories,
             commands::register_directory,
             commands::unregister_directory,
+            commands::update_directory_icon,
             commands::search_files,
             commands::get_backlinks,
             commands::get_index_stats,

@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { useAppStore } from "../stores/app";
+import { Icon } from "./Icon";
 
 export function TabBar() {
   const tabs = useAppStore((s) => s.tabs);
@@ -75,7 +76,7 @@ export function TabBar() {
               closeTab(tab.id);
             }}
           >
-            ×
+            <Icon name="x" size={12} />
           </button>
         </div>
       ))}

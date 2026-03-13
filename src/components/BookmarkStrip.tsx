@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, selectActiveTabPath } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
+import { Icon } from "./Icon";
 
 interface BookmarkRecord {
   path: string;
@@ -68,7 +69,7 @@ export function BookmarkStrip() {
   return (
     <div className="sidebar-bookmarks">
       <div className="sidebar-bookmarks-header">
-        <span>☆ Bookmarks</span>
+        <span className="sidebar-bookmarks-header-content"><Icon name="bookmark" size={14} /> Bookmarks</span>
       </div>
       {bookmarks.length === 0 ? (
         <div
@@ -92,7 +93,7 @@ export function BookmarkStrip() {
               title={bookmark.path}
             >
               <span className="tree-item-icon">
-                {bookmark.global ? "◆" : "★"}
+                <Icon name={bookmark.global ? "bookmark-check" : "star"} size={14} />
               </span>
               <span className="tree-item-label">{bookmark.label}</span>
             </div>

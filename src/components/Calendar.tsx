@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Icon } from "./Icon";
 
 const WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const MONTH_NAMES = [
@@ -183,7 +184,7 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
           {MONTH_SHORT[viewMonth]} <span className="calendar-year">{viewYear}</span>
         </span>
         <div className="calendar-nav">
-          <button className="calendar-nav-btn" onClick={prevMonth} aria-label="Previous month">‹</button>
+          <button className="calendar-nav-btn" onClick={prevMonth} aria-label="Previous month"><Icon name="chevron-left" size={14} /></button>
           <button
             className={`calendar-nav-btn calendar-today-btn ${isViewingCurrentMonth ? "hidden" : ""}`}
             onClick={goToToday}
@@ -192,7 +193,7 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
           >
             TODAY
           </button>
-          <button className="calendar-nav-btn" onClick={nextMonth} aria-label="Next month">›</button>
+          <button className="calendar-nav-btn" onClick={nextMonth} aria-label="Next month"><Icon name="chevron-right" size={14} /></button>
         </div>
       </div>
       <div className="calendar-grid" role="grid" aria-label={`${MONTH_NAMES[viewMonth]} ${viewYear}`}>
