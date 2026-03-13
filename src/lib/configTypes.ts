@@ -61,5 +61,16 @@ export interface AppConfig {
     tag_text: string;
     paragraph_spacing: number;
     list_indent: number;
+    syntax_markup: string;
+    syntax_hr: string;
+    syntax_meta: string;
+    syntax_comment: string;
+    syntax_list_marker: string;
+    syntax_strikethrough: string;
+    syntax_highlight_bg: string;
+  };
+  linting: {
+    enabled: boolean;
+    autofix_on_save: boolean;
   };
 }

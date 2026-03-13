@@ -11,6 +11,8 @@ export function StatusBar() {
   const wordCount = useAppStore((s) => s.wordCount);
   const charCount = useAppStore((s) => s.charCount);
   const saveConflictPath = useAppStore((s) => s.saveConflictPath);
+  const lintErrors = useAppStore((s) => s.lintErrors);
+  const lintWarnings = useAppStore((s) => s.lintWarnings);
 
   const toggleEditorMode = useAppStore((s) => s.toggleEditorMode);
 
@@ -70,6 +72,12 @@ export function StatusBar() {
               Ln {cursorLine}, Col {cursorCol}
             </span>
             <span title={`${charCount} characters`}>{wordCount} words</span>
+            {(lintErrors > 0 || lintWarnings > 0) && (
+              <span className="statusbar-lint" title="Lint diagnostics">
+                {lintErrors > 0 && <span className="statusbar-lint-errors">{lintErrors}E</span>}
+                {lintWarnings > 0 && <span className="statusbar-lint-warnings">{lintWarnings}W</span>}
+              </span>
+            )}
             <span
               className="statusbar-mode"
               title="Toggle preview (Cmd+/)"

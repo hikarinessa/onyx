@@ -7,9 +7,19 @@ export function setRemeasureHook(fn: () => void) {
 }
 
 let autoSaveMs = 500;
+let lintingEnabled = true;
+let autofixOnSave = false;
 
 export function getAutoSaveMs(): number {
   return autoSaveMs;
+}
+
+export function isLintingEnabled(): boolean {
+  return lintingEnabled;
+}
+
+export function isAutofixOnSave(): boolean {
+  return autofixOnSave;
 }
 
 import type { AppConfig, ThemeColorOverrides } from "./configTypes";
@@ -118,6 +128,28 @@ function applyElementStyles(config: AppConfig["style"]) {
   s.setProperty("--list-indent", `${config.list_indent}px`);
 }
 
+const SYNTAX_MAP: Record<string, string> = {
+  syntax_markup: "--syntax-markup",
+  syntax_hr: "--syntax-hr",
+  syntax_meta: "--syntax-meta",
+  syntax_comment: "--syntax-comment",
+  syntax_list_marker: "--syntax-list-marker",
+  syntax_strikethrough: "--syntax-strikethrough",
+  syntax_highlight_bg: "--syntax-highlight-bg",
+};
+
+function applySyntaxStyles(config: AppConfig["style"]) {
+  const s = document.documentElement.style;
+  for (const [field, cssVar] of Object.entries(SYNTAX_MAP)) {
+    const val = (config as Record<string, unknown>)[field] as string;
+    if (val) {
+      s.setProperty(cssVar, val);
+    } else {
+      s.removeProperty(cssVar);
+    }
+  }
+}
+
 export function applyConfig(config: AppConfig) {
   const s = document.documentElement.style;
 
@@ -173,6 +205,15 @@ export function applyConfig(config: AppConfig) {
 
     // Element styles + spacing
     applyElementStyles(config.style);
+
+    // Syntax highlighting
+    applySyntaxStyles(config.style);
+  }
+
+  // Linting
+  if (config.linting) {
+    lintingEnabled = config.linting.enabled;
+    autofixOnSave = config.linting.autofix_on_save;
   }
 
   lastConfig = config;

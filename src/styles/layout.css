@@ -1059,6 +1059,19 @@
     color: var(--text-primary);
   }
 
+  .statusbar-lint {
+    display: flex;
+    gap: 6px;
+  }
+
+  .statusbar-lint-errors {
+    color: var(--status-error);
+  }
+
+  .statusbar-lint-warnings {
+    color: var(--status-modified);
+  }
+
   .statusbar-conflict {
     cursor: pointer;
     padding: 1px 8px;
@@ -2069,3 +2082,44 @@
     font-style: normal !important;
     margin-left: 8px !important;
   }
+
+  /* ── Lint gutter & tooltip theming ── */
+
+  .cm-lint-marker {
+    width: 8px !important;
+    height: 8px !important;
+  }
+
+  .cm-lintRange-error {
+    background-image: none !important;
+    text-decoration: wavy underline var(--status-error) !important;
+    text-decoration-skip-ink: none !important;
+  }
+
+  .cm-lintRange-warning {
+    background-image: none !important;
+    text-decoration: wavy underline var(--status-modified) !important;
+    text-decoration-skip-ink: none !important;
+  }
+
+  .cm-tooltip-lint {
+    background: var(--bg-elevated) !important;
+    border: 1px solid var(--border-default) !important;
+    border-radius: var(--radius-md) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    color: var(--text-secondary) !important;
+    font-family: var(--font-ui) !important;
+    font-size: 12px !important;
+  }
+
+  .cm-lint-marker-error {
+    content: none !important;
+  }
+
+  .cm-lint-marker-warning {
+    content: none !important;
+  }
+
+  .cm-panel.cm-panel-lint {
+    background: var(--bg-elevated) !important;
+    border-top: 1px solid var(--border-default) !important;

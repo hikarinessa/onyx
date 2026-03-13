@@ -413,6 +413,22 @@ function EditorSection({
           <option value={8}>8</option>
         </select>
       </SettingRow>
+
+      <SubSection title="Linting" />
+
+      <SettingRow label="Enable linting" description="Show warnings and errors in the editor">
+        <Toggle
+          checked={config.linting.enabled}
+          onChange={(v) => updateConfig({ linting: { enabled: v } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Autofix on save" description="Automatically fix trailing spaces, tabs, etc.">
+        <Toggle
+          checked={config.linting.autofix_on_save}
+          onChange={(v) => updateConfig({ linting: { autofix_on_save: v } })}
+        />
+      </SettingRow>
     </div>
   );
 }
@@ -724,6 +740,72 @@ function AppearanceSection({
           fallback="#a89cf8"
           onChange={(v) => updateConfig({ style: { tag_text: v } })}
           onReset={() => updateConfig({ style: { tag_text: "" } })}
+        />
+      </SettingRow>
+
+      {/* -- Syntax Colors -- */}
+      <SubSection title="Syntax Colors" />
+
+      <SettingRow label="Markdown syntax chars" description="##, **, ```, etc.">
+        <ColorPicker
+          value={config.style.syntax_markup}
+          fallback={THEME_FALLBACKS[activeTheme]?.text_tertiary ?? "#5c5c68"}
+          onChange={(v) => updateConfig({ style: { syntax_markup: v } })}
+          onReset={() => updateConfig({ style: { syntax_markup: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Horizontal rules">
+        <ColorPicker
+          value={config.style.syntax_hr}
+          fallback={THEME_FALLBACKS[activeTheme]?.text_tertiary ?? "#5c5c68"}
+          onChange={(v) => updateConfig({ style: { syntax_hr: v } })}
+          onReset={() => updateConfig({ style: { syntax_hr: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Frontmatter delimiters">
+        <ColorPicker
+          value={config.style.syntax_meta}
+          fallback={THEME_FALLBACKS[activeTheme]?.text_tertiary ?? "#5c5c68"}
+          onChange={(v) => updateConfig({ style: { syntax_meta: v } })}
+          onReset={() => updateConfig({ style: { syntax_meta: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Comments">
+        <ColorPicker
+          value={config.style.syntax_comment}
+          fallback={THEME_FALLBACKS[activeTheme]?.text_tertiary ?? "#5c5c68"}
+          onChange={(v) => updateConfig({ style: { syntax_comment: v } })}
+          onReset={() => updateConfig({ style: { syntax_comment: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="List markers">
+        <ColorPicker
+          value={config.style.syntax_list_marker}
+          fallback={THEME_FALLBACKS[activeTheme]?.accent ?? "#8b7cf6"}
+          onChange={(v) => updateConfig({ style: { syntax_list_marker: v } })}
+          onReset={() => updateConfig({ style: { syntax_list_marker: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Strikethrough">
+        <ColorPicker
+          value={config.style.syntax_strikethrough}
+          fallback={THEME_FALLBACKS[activeTheme]?.text_secondary ?? "#9898a4"}
+          onChange={(v) => updateConfig({ style: { syntax_strikethrough: v } })}
+          onReset={() => updateConfig({ style: { syntax_strikethrough: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Highlight background" description="==text==">
+        <ColorPicker
+          value={config.style.syntax_highlight_bg}
+          fallback="rgba(255,204,0,0.3)"
+          onChange={(v) => updateConfig({ style: { syntax_highlight_bg: v } })}
+          onReset={() => updateConfig({ style: { syntax_highlight_bg: "" } })}
         />
       </SettingRow>
 
