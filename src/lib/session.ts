@@ -124,10 +124,20 @@ export async function restoreSession(): Promise<void> {
     }
   }
 
-  // Restore orphan paths
+  // Restore orphan paths — allow in Rust, validate existence, remove dead ones
   if (data.orphanPaths && data.orphanPaths.length > 0) {
     for (const p of data.orphanPaths) {
-      state.addOrphanPath(p);
+      try {
+        await invoke("allow_path", { path: p });
+        const exists = await invoke<boolean>("path_exists", { path: p });
+        if (exists) {
+          state.addOrphanPath(p);
+        } else {
+          await invoke("disallow_path", { path: p });
+        }
+      } catch {
+        // File gone or inaccessible — skip silently
+      }
     }
   }
 

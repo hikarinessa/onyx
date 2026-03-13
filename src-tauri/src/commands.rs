@@ -20,22 +20,29 @@ pub struct DirEntry {
     pub extension: Option<String>,
 }
 
-fn validate_path(path: &PathBuf, state: &State<AppState>) -> Result<(), String> {
-    let dirs = state.directories.lock().map_err(|e| e.to_string())?;
-    // Try canonicalizing the full path first (works for existing files).
-    // If that fails (new file), canonicalize the parent directory and append the filename.
-    let canonical = path.canonicalize().or_else(|_| {
+/// Canonicalize a path, falling back to canonicalizing the parent for new files.
+fn canonical_path(path: &PathBuf) -> Result<PathBuf, String> {
+    path.canonicalize().or_else(|_| {
         let parent = path.parent().ok_or("Invalid file path")?;
         let name = path.file_name().ok_or("Invalid file name")?;
         parent.canonicalize()
             .map(|p| p.join(name))
             .map_err(|e| format!("Cannot resolve parent directory: {}", e))
-    }).map_err(|e: String| e)?;
+    }).map_err(|e: String| e)
+}
 
-    if !dirs.is_path_allowed(&canonical) {
-        return Err(format!("Access denied: path is not under a registered directory"));
+fn validate_path(path: &PathBuf, state: &State<AppState>) -> Result<(), String> {
+    let canonical = canonical_path(path)?;
+    let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+    if dirs.is_path_allowed(&canonical) {
+        return Ok(());
     }
-    Ok(())
+    // Check orphan allowlist
+    let allowed = state.allowed_paths.lock().map_err(|e| e.to_string())?;
+    if allowed.contains(&canonical.to_string_lossy().to_string()) {
+        return Ok(());
+    }
+    Err(format!("Access denied: path is not under a registered directory"))
 }
 
 #[tauri::command]
@@ -100,12 +107,16 @@ pub fn read_file(path: String, state: State<AppState>) -> Result<String, String>
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    // Record mtime so write_file can detect external modifications
+    // Record mtime so write_file can detect external modifications.
+    // Use canonical path as key for consistency (avoids symlink/trailing-slash mismatches).
+    let canonical_key = file_path.canonicalize()
+        .unwrap_or_else(|_| file_path.clone())
+        .to_string_lossy().to_string();
     if let Ok(meta) = std::fs::metadata(&file_path) {
         if let Ok(mtime) = meta.modified() {
             let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
             if mtimes.len() > 500 { mtimes.clear(); }
-            mtimes.insert(path.clone(), mtime);
+            mtimes.insert(canonical_key, mtime);
         }
     }
 
@@ -117,6 +128,11 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
     let target = PathBuf::from(&path);
     validate_path(&target, &state)?;
 
+    // Use canonical path as mtime key for consistency with read_file
+    let canonical_key = target.canonicalize()
+        .unwrap_or_else(|_| target.clone())
+        .to_string_lossy().to_string();
+
     // Combined no-op + mtime check. Uses mtime first to avoid expensive disk read on every auto-save.
     {
         let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
@@ -126,14 +142,14 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
             mtimes.clear();
         }
 
-        if let Some(&last_known) = mtimes.get(&path) {
+        if let Some(&last_known) = mtimes.get(&canonical_key) {
             if let Ok(meta) = std::fs::metadata(&target) {
                 if let Ok(current_mtime) = meta.modified() {
                     if current_mtime == last_known {
                         // mtime matches our last write — disk content is what we put there.
                         // JS side only triggers saves when content differs, so proceed to write.
                     } else {
-                        return Err("File was modified externally. Reload before saving.".to_string());
+                        return Err("CONFLICT:File was modified externally. Reload before saving.".to_string());
                     }
                 }
             }
@@ -169,11 +185,11 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
             format!("Failed to rename temp file: {}", e)
         })?;
 
-    // Update mtime tracking after successful write
+    // Update mtime tracking after successful write (use canonical key)
     if let Ok(meta) = std::fs::metadata(&target) {
         if let Ok(mtime) = meta.modified() {
             let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
-            mtimes.insert(path.clone(), mtime);
+            mtimes.insert(canonical_key, mtime);
         }
     }
 
@@ -939,4 +955,22 @@ fn parse_week_string(s: &str) -> Option<NaiveDate> {
     let year: i32 = parts[0].parse().ok()?;
     let week: u32 = parts[1].parse().ok()?;
     NaiveDate::from_isoywd_opt(year, week, chrono::Weekday::Mon)
+}
+
+/// Allow a path outside registered directories (for orphan notes opened by the user).
+#[tauri::command]
+pub fn allow_path(path: String, state: State<AppState>) -> Result<(), String> {
+    let canonical = canonical_path(&PathBuf::from(&path))?;
+    let mut allowed = state.allowed_paths.lock().map_err(|e| e.to_string())?;
+    allowed.insert(canonical.to_string_lossy().to_string());
+    Ok(())
+}
+
+/// Remove a path from the orphan allowlist.
+#[tauri::command]
+pub fn disallow_path(path: String, state: State<AppState>) -> Result<(), String> {
+    let canonical = canonical_path(&PathBuf::from(&path))?;
+    let mut allowed = state.allowed_paths.lock().map_err(|e| e.to_string())?;
+    allowed.remove(&canonical.to_string_lossy().to_string());
+    Ok(())
 }

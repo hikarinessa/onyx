@@ -107,6 +107,10 @@ interface AppState {
   orphanPaths: string[];
   addOrphanPath: (path: string) => void;
   removeOrphanPath: (path: string) => void;
+
+  // Save conflict — set when write_file detects external modification
+  saveConflictPath: string | null;
+  setSaveConflictPath: (path: string | null) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -320,6 +324,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   removeOrphanPath: (path) => set((s) => ({
     orphanPaths: s.orphanPaths.filter((p) => p !== path),
   })),
+
+  saveConflictPath: null,
+  setSaveConflictPath: (path) => set({ saveConflictPath: path }),
 }));
 
 // ── Memoized selectors ──

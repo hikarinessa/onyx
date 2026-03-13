@@ -459,6 +459,7 @@ export function Sidebar() {
                     onClick={(e) => {
                       e.stopPropagation();
                       useAppStore.getState().removeOrphanPath(p);
+                      invoke("disallow_path", { path: p }).catch(() => {});
                     }}
                     title="Remove from orphan notes"
                   >

@@ -18,7 +18,7 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 5.X (Backfill) | 0.5.X |
 | Phase 6 (Palette & Theming) | 0.6.0 |
 | Phase 7 (Preview & Navigation) | 0.7.0 ✅ |
-| Phase 7.5 (Hardening & CSS) | 0.7.5 |
+| Phase 7.5 (Hardening & CSS) | 0.7.5 ✅ |
 | Phase 8 (Split Panes) | 0.8.0 |
 | Phase 9 (Tables) | 0.9.0 |
 | Phase 10 (Per-Block Features) | 0.10.0 |
@@ -485,103 +485,45 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
 ---
 
-## Phase 7.5 — Foundation Hardening & CSS Architecture
+## Phase 7.5 — Foundation Hardening & CSS Architecture ✅
 
 **Goal:** Strengthen the foundation before complex feature work. High-impact, low-risk changes across architecture, CSS, and known gotchas.
 
-**Rationale:** Research identified concrete improvements that reduce tech debt accumulation and prevent classes of bugs. These are best done now while the codebase is ~9,400 LOC — each gets harder as features layer on top.
-
 ### Architecture
 
-7.5.1 **Zustand selector audit**
-- Replace any `useAppStore()` full-store subscriptions with fine-grained selectors (`s => s.tabs`, etc.)
-- Audit TabBar, Sidebar, StatusBar, ContextPanel for unnecessary re-renders
-- Use separate selectors for independent values (not object-returning selectors without `shallow`)
-
-7.5.2 **IPC query cache**
-- Simple `Map<string, {data, timestamp}>` with TTL (5s default)
-- Cache `get_backlinks`, `get_all_tags`, `get_file_frontmatter` results
-- Invalidate on file watcher events (`file-changed`)
-- Eliminates redundant IPC when switching tabs rapidly
-
-7.5.3 **Command pattern deepening**
-- Register all file ops, navigation actions, and panel toggles as commands
-- Menu bar items, keyboard shortcuts, and command palette all resolve by command ID
-- Every user-facing action discoverable via palette
+7.5.1 **Zustand selector audit** ✅ — Memoized `selectActiveTab`/`selectActiveTabPath`/`selectActiveEditorMode` selectors; StatusBar, BookmarkStrip, ContextPanel updated to use them
+7.5.2 **IPC query cache** ✅ — `src/lib/ipcCache.ts` with TTL-based cache; backlinks cached in ContextPanel; invalidated on `fs:change`
+7.5.3 **Command pattern deepening** ✅ — Registered Next/Previous Tab, Reveal in Finder, Copy File Path; added Ctrl+Tab/Ctrl+Shift+Tab shortcuts
 
 ### CSS
 
-7.5.4 **`@layer` declarations**
-- Wrap existing CSS in layers: `@layer reset, tokens, base, layout, components, editor`
-- Zero visual change — establishes specificity foundation for user themes
-
-7.5.5 **`data-theme` attribute switching**
-- Move built-in theme definitions into CSS (`:root[data-theme="dark"]`, `:root[data-theme="light"]`, etc.)
-- Keep JS `setProperty()` for user theme overrides only
-- Single DOM operation to switch themes
-
-7.5.6 **CM6 theme bridge to CSS variables**
-- Single `EditorView.theme()` that uses `var()` references for all colors
-- Theme switching requires zero editor reconfiguration
-- Syntax highlighting: override `.tok-*` classes in CSS with `--syntax-*` variables
-
-7.5.7 **`prefers-reduced-motion`**
-- Blanket disable in reset.css (~5 lines)
-- Use `0.01ms` duration (not `0ms`) to avoid breaking `transitionend` listeners
+7.5.4 **`@layer` declarations** ✅ — `@layer reset, tokens, base, layout, components` in theme.css. Editor styles kept **unlayered** (CM6 injects unlayered runtime styles that would override layered ones)
+7.5.5 **`data-theme` attribute switching** ✅ — Light/warm themes defined in CSS as `:root[data-theme="light"]`/`:root[data-theme="warm"]`. JS `applyTheme()` sets `dataset.theme`. Dark is bare `:root` default
+7.5.6 **CM6 theme bridge to CSS variables** — Deferred to Phase 8 (requires syntax token variable mapping)
+7.5.7 **`prefers-reduced-motion`** ✅ — Blanket `0.01ms` duration/delay in `@layer reset` of reset.css
 
 ### Tech Stack Gotchas
 
-7.5.8 **App Nap timer stalling**
-- Auto-save 500ms debounce and session persistence stall when minimized 5+ min
-- Move auto-save timer to Rust or use `macos-app-nap` crate to disable App Nap
-
-7.5.9 **Async listener cleanup**
-- Audit all `useEffect` + `listen()` calls for the async race condition
-- Add cancellation flag pattern: track `cancelled` flag, call `unlisten` inside `.then()` if cancelled
-- Prevents listener leaks from StrictMode double-mount
-
-7.5.10 **`scroll-behavior: smooth` audit**
-- Verify no global `scroll-behavior: smooth` in CSS (breaks programmatic scrolling in WKWebView)
-- Use JS `scrollTo({ behavior: 'smooth' })` instead where needed
+7.5.8 **App Nap prevention** ✅ — `NSProcessInfo.beginActivityWithOptions` in lib.rs with `0x00FFFFFF` flags
+7.5.9 **Async listener cleanup** ✅ — Cancellation flag pattern added to App.tsx menu/fs listeners and ContextPanel effects
+7.5.10 **`scroll-behavior: smooth` audit** ✅ — Verified: no global `scroll-behavior: smooth` in CSS
 
 ### Note-App Gotchas
 
-7.5.11 **mtime check before write**
-- Before `write_file`, compare on-disk mtime with last-read mtime
-- If changed externally, prompt user instead of silently overwriting
-- Prevents data loss from external editors or sync tools
-
-7.5.12 **Self-write detection audit**
-- Verify the watcher reliably ignores events from Onyx's own writes
-- Audit the write-suppression window (currently documented as 2s)
-
-7.5.13 **No-op write optimization**
-- If content hasn't changed since last save, skip the write
-- Avoids spurious watcher events and preserves mtime
+7.5.11 **mtime check before write** ✅ — `read_file` records mtime in `last_read_mtimes` map; `write_file` checks mtime before writing, rejects if externally modified. Map capped at 500 entries
+7.5.12 **Self-write detection audit** — Deferred (watcher suppression window needs testing under load)
+7.5.13 **No-op write optimization** ✅ — Combined with mtime check: mtime-first (cheap), content fallback only on first save
 
 ### Orphan Notes & External File Opening
 
-7.5.14 **Orphan notes sidebar section**
-- "Orphan Notes" section in sidebar (above or below bookmarks) for files not in any registered directory
-- Zustand: `orphanPaths: string[]` + `addOrphanPath` / `removeOrphanPath` actions
-- Persist in session data, restore on launch
-- Click opens file, right-click to remove from list
-
-7.5.15 **Drag-drop `.md` files**
-- Handle Tauri `drag-drop` event on the window
-- Drop `.md` file → open in editor, add to orphan section if not in a registered directory
-- If file IS in a registered directory, just open it normally
-
-7.5.16 **Finder "Open With Onyx"**
-- Register `.md` file association in `tauri.conf.json` (`fileAssociations`)
-- Handle Tauri `open-file` event → open the file, add to orphans if needed
+7.5.14 **Orphan notes sidebar section** ✅ — `orphanPaths` in Zustand, persisted in session. Sidebar shows orphan section. `openFileInEditor` detects files outside registered dirs
+7.5.15 **Drag-drop `.md` files** — Deferred to Phase 8
+7.5.16 **Finder "Open With Onyx"** — Deferred to Phase 8
 
 ### Deferred from Phase 7
 
-7.5.17 **Linting extension**
-- `@codemirror/lint` with markdown rules (ATX headings, consistent list markers, trailing whitespace, final newline, frontmatter validity)
-- Auto-fix on save: trim trailing whitespace, ensure final newline
-- Status bar: error/warning count or checkmark
+7.5.17 **Linting extension** — Deferred to Phase 8
+7.5.18 **Outline section in context panel** — Already implemented in Phase 6
 
 7.5.18 **Outline section in context panel**
 - Extract headings via regex, update on save + tab switch
