@@ -1582,13 +1582,13 @@
 
   .editor-container .cm-scroller {
     font-family: var(--font-editor);
-    font-size: 16px;
-    line-height: 1.7;
+    font-size: var(--editor-font-size, 16px);
+    line-height: var(--editor-line-height, 1.7);
     padding: 24px 48px;
   }
 
   .editor-container .cm-content {
-    max-width: 720px;
+    max-width: var(--editor-max-width, 720px);
     margin: 0 auto;
   }
 

@@ -25,6 +25,7 @@ import { navigateHistory } from "./lib/openFile";
 import { listen } from "@tauri-apps/api/event";
 import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
 import { invalidateCache } from "./lib/ipcCache";
+import { loadAndApplyConfig } from "./lib/configBridge";
 
 // ---------------------------------------------------------------------------
 // Shared action functions — called by commands, menu events, and shortcuts
@@ -239,6 +240,7 @@ export default function App() {
   useEffect(() => {
     registerCommands();
     restoreTheme();
+    loadAndApplyConfig();
 
     let cancelled = false;
 
@@ -305,20 +307,14 @@ export default function App() {
   // Global keyboard shortcuts — dispatched via keybinding registry.
   // Editor-specific shortcuts (formatting, outliner, search) live in CM6 keymaps.
   useEffect(() => {
-    // Build lookup once; rebuilt on next mount if bindings change.
-    const keyMap = getGlobalKeyMap();
-    const commandMap = new Map<string, () => void | Promise<void>>();
-    for (const cmd of getAllCommands()) {
-      commandMap.set(cmd.id, cmd.execute);
-    }
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       const combo = parseKeyCombo(e);
       if (!combo) return;
 
-      // Try exact combo first, then Ctrl→Cmd fallback (preserves the
-      // original `metaKey || ctrlKey` behaviour for cross-platform support).
+      // Read live from registry on every keypress so rebinds take effect
+      // immediately without restart. ~20 bindings — negligible cost.
+      const keyMap = getGlobalKeyMap();
       let commandId = keyMap.get(combo);
       if (!commandId && combo.startsWith("Ctrl+") && !combo.includes("Cmd+")) {
         commandId = keyMap.get(combo.replace("Ctrl+", "Cmd+"));
@@ -326,8 +322,9 @@ export default function App() {
 
       if (commandId) {
         e.preventDefault();
-        const execute = commandMap.get(commandId);
-        if (execute) execute();
+        const cmds = getAllCommands();
+        const cmd = cmds.find((c) => c.id === commandId);
+        if (cmd) cmd.execute();
       }
     };
 
