@@ -137,9 +137,8 @@ fn extract_frontmatter(content: &str) -> Option<String> {
     serde_json::to_string(&value).ok()
 }
 
-/// Check if a line is inside a fenced code block.
-/// Returns an iterator of (line_idx, line, in_code_block) tuples, skipping frontmatter.
-fn lines_outside_code_blocks(content: &str) -> Vec<(usize, &str, bool)> {
+/// Returns (line_idx, line) pairs for lines outside frontmatter and code blocks.
+fn lines_outside_code_blocks(content: &str) -> Vec<(usize, &str)> {
     let mut result = Vec::new();
     let mut in_code_block = false;
     let mut in_frontmatter = false;
@@ -165,8 +164,9 @@ fn lines_outside_code_blocks(content: &str) -> Vec<(usize, &str, bool)> {
             in_code_block = !in_code_block;
             continue;
         }
+        if in_code_block { continue; }
 
-        result.push((line_idx, line, in_code_block));
+        result.push((line_idx, line));
     }
 
     result
@@ -176,8 +176,7 @@ fn lines_outside_code_blocks(content: &str) -> Vec<(usize, &str, bool)> {
 fn extract_wikilinks(content: &str) -> Vec<LinkRecord> {
     let mut links = Vec::new();
 
-    for (line_idx, line, in_code_block) in lines_outside_code_blocks(content) {
-        if in_code_block { continue; }
+    for (line_idx, line) in lines_outside_code_blocks(content) {
         for cap in RE_WIKILINK.captures_iter(line) {
             let target = cap.get(1).unwrap().as_str();
 
@@ -207,8 +206,7 @@ fn extract_wikilinks(content: &str) -> Vec<LinkRecord> {
 fn extract_tags(content: &str) -> Vec<String> {
     let mut tags: Vec<String> = Vec::new();
 
-    for (_, line, in_code_block) in lines_outside_code_blocks(content) {
-        if in_code_block { continue; }
+    for (_, line) in lines_outside_code_blocks(content) {
         for cap in RE_TAG.captures_iter(line) {
             let tag = cap.get(1).unwrap().as_str().to_string();
             if !tags.contains(&tag) {
