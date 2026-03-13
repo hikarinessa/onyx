@@ -166,20 +166,19 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult): Decorat
       const headingMatch = text.match(HEADING_RE);
       if (headingMatch) {
         const level = headingMatch[1].length;
-        // Hide # markers
-        builder.add(
-          line.from,
-          line.from + headingMatch[0].length,
-          DECO_REPLACE
-        );
-        // Style the whole line
+        // Line decoration must come before range decorations at the same position
         builder.add(
           line.from,
           line.from,
           Decoration.line({ class: `cm-preview-heading cm-preview-h${level}` })
         );
-        // Still process inline formatting on heading lines
-        addInlineDecorations(builder, line, text);
+        // Hide # markers
+        const markerLen = headingMatch[0].length;
+        builder.add(line.from, line.from + markerLen, DECO_REPLACE);
+        // Process inline formatting on the text after the markers
+        const headingContent = text.slice(markerLen);
+        const contentLine = { from: line.from + markerLen, to: line.to };
+        addInlineDecorations(builder, contentLine, headingContent);
         continue;
       }
 

@@ -248,7 +248,7 @@ export default function App() {
         openTodayNote();
       }
 
-      if (meta && !alt && !e.shiftKey && e.key === "/") {
+      if (meta && !alt && !e.shiftKey && e.key === "/" && !e.defaultPrevented) {
         e.preventDefault();
         const { activeTabId, toggleEditorMode } = store();
         if (activeTabId) toggleEditorMode(activeTabId);
