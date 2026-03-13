@@ -694,8 +694,17 @@ pub fn create_periodic_note(
     date: String,
     state: State<AppState>,
 ) -> Result<CreatePeriodicNoteResult, String> {
-    let parsed_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d")
-        .map_err(|e| format!("Invalid date '{}': {}", date, e))?;
+    // Accept YYYY-MM-DD or YYYY-Www (ISO week → Monday of that week)
+    let parsed_date = if date.contains("-W") {
+        let parts: Vec<&str> = date.splitn(2, "-W").collect();
+        let year: i32 = parts[0].parse().map_err(|_| format!("Invalid week date '{}'", date))?;
+        let week: u32 = parts[1].parse().map_err(|_| format!("Invalid week date '{}'", date))?;
+        NaiveDate::from_isoywd_opt(year, week, chrono::Weekday::Mon)
+            .ok_or_else(|| format!("Invalid ISO week: {}", date))?
+    } else {
+        NaiveDate::parse_from_str(&date, "%Y-%m-%d")
+            .map_err(|e| format!("Invalid date '{}': {}", date, e))?
+    };
 
     let config = periodic::load_config()?;
 

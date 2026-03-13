@@ -36,7 +36,7 @@ function openQuickOpenForWikilink() {
 
 function openTodayNote() {
   const todayISO = new Date().toISOString().split("T")[0];
-  createOrOpenPeriodicNote("daily", todayISO).catch((err) => {
+  createOrOpenPeriodicNote("daily", todayISO, { newTab: false }).catch((err) => {
     const msg = String(err);
     if (msg.includes("not configured") || msg.includes("not enabled")) {
       window.alert(

@@ -137,7 +137,7 @@ export function QuickOpen() {
   }, [query, visible]);
 
   const selectItem = useCallback(
-    (item: QuickOpenItem) => {
+    (item: QuickOpenItem, newTab = false) => {
       if (isTypeSuggestion(item)) {
         // Fill in the type: prefix and trigger query
         setQuery(`type:${item.name}`);
@@ -148,7 +148,7 @@ export function QuickOpen() {
         onClose();
       } else {
         onClose();
-        openFileInEditor(item.path, item.name);
+        openFileInEditor(item.path, item.name, { replaceActive: !newTab });
       }
     },
     [onClose, mode]
@@ -177,7 +177,7 @@ export function QuickOpen() {
       if (e.key === "Enter") {
         e.preventDefault();
         if (results[selectedIndex]) {
-          selectItem(results[selectedIndex]);
+          selectItem(results[selectedIndex], e.metaKey);
         }
         return;
       }
@@ -219,7 +219,7 @@ export function QuickOpen() {
                 <div
                   key={item.name}
                   className={`quick-open-item ${i === selectedIndex ? "selected" : ""}`}
-                  onClick={() => selectItem(item)}
+                  onClick={(e) => selectItem(item, e.metaKey)}
                   onMouseEnter={() => setSelectedIndex(i)}
                 >
                   <span className="quick-open-item-name quick-open-type-hint">
@@ -236,7 +236,7 @@ export function QuickOpen() {
                 <div
                   key={item.path}
                   className={`quick-open-item ${i === selectedIndex ? "selected" : ""}`}
-                  onClick={() => selectItem(item)}
+                  onClick={(e) => selectItem(item, e.metaKey)}
                   onMouseEnter={() => setSelectedIndex(i)}
                 >
                   <span className="quick-open-item-name">{item.name}</span>

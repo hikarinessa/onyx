@@ -57,10 +57,10 @@ export function BookmarkStrip() {
     if (sidebarVisible) loadBookmarks();
   }, [loadBookmarks, bookmarkVersion, sidebarVisible]);
 
-  const handleBookmarkClick = async (bookmark: DisplayBookmark) => {
+  const handleBookmarkClick = async (bookmark: DisplayBookmark, newTab: boolean) => {
     const name = bookmark.label;
     try {
-      await openFileInEditor(bookmark.path, name);
+      await openFileInEditor(bookmark.path, name, { replaceActive: !newTab });
     } catch (err) {
       console.error("Failed to open bookmark:", err);
     }
@@ -90,7 +90,7 @@ export function BookmarkStrip() {
               key={bookmark.path}
               className={`tree-item bookmark-item ${isActive ? "active" : ""}`}
               style={{ "--indent": 0 } as React.CSSProperties}
-              onClick={() => handleBookmarkClick(bookmark)}
+              onClick={(e) => handleBookmarkClick(bookmark, e.metaKey)}
               title={bookmark.path}
             >
               <span className="tree-item-icon">

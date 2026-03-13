@@ -380,9 +380,9 @@ function RecentDocuments({
                 key={doc.path}
                 className="backlink-item"
                 title={doc.path}
-                onClick={async () => {
+                onClick={async (e) => {
                   try {
-                    await openFileInEditor(doc.path, doc.name);
+                    await openFileInEditor(doc.path, doc.name, { replaceActive: !e.metaKey });
                   } catch (err) {
                     console.error("Failed to open recent doc:", err);
                   }
@@ -471,12 +471,12 @@ export function ContextPanel() {
     ]).then(([dir, global]) => setIsBookmarked(dir || global));
   }, [activeTabId]);
 
-  const handleBacklinkClick = async (record: BacklinkRecord) => {
+  const handleBacklinkClick = async (record: BacklinkRecord, newTab: boolean) => {
     const name = record.source_title
       || record.source_path.split("/").pop()
       || record.source_path;
     try {
-      await openFileInEditor(record.source_path, name);
+      await openFileInEditor(record.source_path, name, { replaceActive: !newTab });
     } catch (err) {
       console.error("Failed to open backlink source:", err);
     }
@@ -510,12 +510,12 @@ export function ContextPanel() {
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const creatingRef = useRef(false);
 
-  const handleDateClick = async (isoDate: string) => {
+  const handleDateClick = async (isoDate: string, newTab: boolean) => {
     if (creatingRef.current) return;
     creatingRef.current = true;
     setCalendarError(null);
     try {
-      await createOrOpenPeriodicNote("daily", isoDate);
+      await createOrOpenPeriodicNote("daily", isoDate, { newTab });
     } catch (err) {
       const msg = String(err);
       if (msg.includes("not configured") || msg.includes("not enabled")) {
@@ -528,10 +528,28 @@ export function ContextPanel() {
     }
   };
 
+  const handleWeekClick = async (isoWeek: string, newTab: boolean) => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    setCalendarError(null);
+    try {
+      await createOrOpenPeriodicNote("weekly", isoWeek, { newTab });
+    } catch (err) {
+      const msg = String(err);
+      if (msg.includes("not configured") || msg.includes("not enabled")) {
+        setCalendarError("Enable weekly notes in ~/.onyx/periodic-notes.json");
+      } else {
+        setCalendarError(msg);
+      }
+    } finally {
+      creatingRef.current = false;
+    }
+  };
+
   return (
     <div className={`context-panel ${visible ? "" : "collapsed"}`}>
       {/* Calendar */}
-      <Calendar onDateClick={handleDateClick} />
+      <Calendar onDateClick={handleDateClick} onWeekClick={handleWeekClick} />
       {calendarError && (
         <div className="calendar-error">{calendarError}</div>
       )}
@@ -587,7 +605,7 @@ export function ContextPanel() {
                   <div
                     key={`${record.source_path}-${i}`}
                     className="backlink-item"
-                    onClick={() => handleBacklinkClick(record)}
+                    onClick={(e) => handleBacklinkClick(record, e.metaKey)}
                   >
                     <div className="backlink-title">{title}</div>
                     {record.context && (
