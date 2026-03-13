@@ -454,9 +454,29 @@ pub fn update_frontmatter(
             format!("Failed to rename temp file: {}", e)
         })?;
 
-    // Sync the index — watcher event is suppressed, so update DB directly
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.update_frontmatter(&path, &frontmatter_json)?;
+    // Update mtime tracking after write (mirrors write_file logic)
+    let canonical_key = target.canonicalize()
+        .unwrap_or_else(|_| target.clone())
+        .to_string_lossy().to_string();
+    if let Ok(meta) = std::fs::metadata(&target) {
+        if let Ok(mtime) = meta.modified() {
+            let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
+            mtimes.insert(canonical_key, mtime);
+        }
+    }
+
+    // Full reindex — watcher event is suppressed, so we must reindex here.
+    // db.update_frontmatter alone misses tags/links extracted from YAML.
+    if target.extension().and_then(|e| e.to_str()) == Some("md") {
+        let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+        let dir_id = dirs.list().iter().find_map(|d| {
+            if target.starts_with(&d.path) { Some(d.id.clone()) } else { None }
+        });
+        drop(dirs);
+        if let Some(id) = dir_id {
+            let _ = crate::indexer::Indexer::reindex_file(&target, &id, &state.db);
+        }
+    }
 
     Ok(())
 }

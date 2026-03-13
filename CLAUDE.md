@@ -222,6 +222,13 @@ npx tsc --noEmit         # TypeScript type check
 - **Split panes not yet implemented:** ARCHITECTURE.md specifies split panes (7.4) but Phase 7 shipped without them. Nav stack, inline title, and live preview were prioritized. Split panes are next.
 - **Investigate: watcher self-write suppression vs IPC cache.** Verify that the file watcher's self-write suppression actually prevents `fs:change` emission to the frontend after Onyx's own saves. If it doesn't, the IPC cache (5s TTL) is being cleared on every auto-save and is effectively useless. Fix the watcher suppression if so.
 - **Investigate: mtime map `.clear()` cap strategy.** The 500-entry cap uses `.clear()` which nukes all tracked mtimes. An LRU eviction would be more correct. Low severity — fallback is content comparison, not data loss. Swap to LRU if it causes issues in practice.
+- **Auto-save stale path after rename:** `Editor.tsx:142` — The debounced save closure captures `tab.path` at edit time. If the user renames the file within the 500ms window and types, the save fires at the old (deleted) path. Narrow window but can create ghost files.
+- **`unregister_directory` doesn't stop watcher:** `commands.rs:258` — `notify` watcher continues watching the removed directory. File modifications trigger reindexing with empty `dir_id`, polluting search results with orphan entries.
+- **Orphan rename fails:** `commands.rs:493` — `validate_path` checks the new path against the allowlist, but only the old path was `allow_path`'d. Renaming an orphan note returns "Access denied".
+- **Stale store in `openFileInEditor`:** `openFile.ts:29` — `getState()` snapshot goes stale across `await` boundaries. If the user switches tabs during IPC round-trips, `replaceActiveTab` can replace the wrong tab.
+- **`dirs.rs` non-atomic save:** `dirs.rs:101` — Uses `fs::write()` instead of temp+rename. Crash during save truncates `directories.json`. Low probability.
+- **Frontmatter auto-fold rAF race:** `frontmatter.ts:98` — `requestAnimationFrame` captures `view` from constructor. On rapid tab switch, the rAF fires after `setState()` loaded a different document, potentially folding the wrong range.
+- **Inline formatting inside wikilinks:** `livePreview.ts` — Bold/italic regexes match inside `[[some *emphasized* link]]`, producing overlapping decorations. Cosmetic.
 
 ## Gotchas
 

@@ -250,9 +250,14 @@ impl Database {
 
         for link in links {
             // Try to resolve target_id by matching the link target against file paths/titles
+            // Escape LIKE metacharacters so _ and % are treated as literals
+            let escaped_target = link.target
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
             let target_id: Option<i64> = tx.query_row(
-                "SELECT id FROM files WHERE path LIKE '%/' || ?1 || '.md' OR path LIKE '%/' || ?1 OR title = ?1 LIMIT 1",
-                params![link.target],
+                "SELECT id FROM files WHERE path LIKE '%/' || ?1 || '.md' ESCAPE '\\' OR path LIKE '%/' || ?1 ESCAPE '\\' OR title = ?2 LIMIT 1",
+                params![escaped_target, link.target],
                 |row| row.get(0),
             ).optional().map_err(|e| format!("Failed to resolve link target: {}", e))?;
 
@@ -358,9 +363,14 @@ impl Database {
     }
 
     pub fn resolve_by_title(&self, title: &str) -> Result<Option<String>, String> {
+        // Escape LIKE metacharacters so _ and % are treated as literals
+        let escaped = title
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
         let result = self.conn.query_row(
-            "SELECT path FROM files WHERE title = ?1 COLLATE NOCASE OR path LIKE '%/' || ?1 || '.md' ORDER BY (title = ?1 COLLATE NOCASE) DESC, path ASC LIMIT 1",
-            params![title],
+            "SELECT path FROM files WHERE title = ?1 COLLATE NOCASE OR path LIKE '%/' || ?2 || '.md' ESCAPE '\\' ORDER BY (title = ?1 COLLATE NOCASE) DESC, path ASC LIMIT 1",
+            params![title, escaped],
             |row| row.get(0),
         ).optional().map_err(|e| format!("Failed to resolve wikilink: {}", e))?;
 
