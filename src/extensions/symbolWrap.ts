@@ -17,6 +17,9 @@ const PAIRS: Record<string, string> = {
   "`": "`",
   '"': '"',
   "'": "'",
+  "_": "_",
+  "*": "*",
+  "=": "=",
 };
 
 export function symbolWrapExtension(): Extension {
