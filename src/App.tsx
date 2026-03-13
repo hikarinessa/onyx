@@ -14,6 +14,7 @@ import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
 import { registerCommand } from "./lib/commands";
 import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
 import { createNewNote } from "./lib/fileOps";
+import { navigateHistory } from "./lib/openFile";
 import { listen } from "@tauri-apps/api/event";
 import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
 
@@ -103,6 +104,20 @@ function registerCommands() {
     shortcut: "Cmd+Shift+D",
     category: "Navigate",
     execute: openTodayNote,
+  });
+  registerCommand({
+    id: "navigate.back",
+    label: "Go Back",
+    shortcut: "Cmd+[",
+    category: "Navigate",
+    execute: () => navigateHistory("back"),
+  });
+  registerCommand({
+    id: "navigate.forward",
+    label: "Go Forward",
+    shortcut: "Cmd+]",
+    category: "Navigate",
+    execute: () => navigateHistory("forward"),
   });
 
   for (const theme of getAvailableThemes()) {
@@ -253,23 +268,50 @@ export default function App() {
         const { activeTabId, toggleEditorMode } = store();
         if (activeTabId) toggleEditorMode(activeTabId);
       }
+
+      // Cmd+[ / Cmd+] — navigate back/forward (without Alt, which is sidebar/context)
+      if (meta && !alt && !e.shiftKey && e.key === "[" && !e.defaultPrevented) {
+        e.preventDefault();
+        navigateHistory("back");
+      }
+      if (meta && !alt && !e.shiftKey && e.key === "]" && !e.defaultPrevented) {
+        e.preventDefault();
+        navigateHistory("forward");
+      }
+    };
+
+    // Mouse back/forward buttons (buttons 3 and 4)
+    const handleMouseNav = (e: MouseEvent) => {
+      if (e.button === 3) {
+        e.preventDefault();
+        navigateHistory("back");
+      } else if (e.button === 4) {
+        e.preventDefault();
+        navigateHistory("forward");
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("mouseup", handleMouseNav);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("mouseup", handleMouseNav);
+    };
   }, []);
 
   return (
     <div className="app">
       <Titlebar />
-      <TabBar />
       <div className="main">
         <ErrorBoundary label="sidebar">
           <Sidebar />
         </ErrorBoundary>
-        <ErrorBoundary label="editor">
-          <Editor />
-        </ErrorBoundary>
+        <div className="editor-column">
+          <TabBar />
+          <ErrorBoundary label="editor">
+            <Editor />
+          </ErrorBoundary>
+        </div>
         <ErrorBoundary label="context panel">
           <ContextPanel />
         </ErrorBoundary>

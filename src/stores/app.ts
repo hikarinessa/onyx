@@ -2,12 +2,19 @@ import { create } from "zustand";
 
 export type EditorMode = "source" | "preview";
 
+export interface NavEntry {
+  path: string;
+  cursor: number;
+}
+
 export interface Tab {
   id: string;
   path: string;
   name: string;
   modified: boolean;
   editorMode: EditorMode;
+  navBack: NavEntry[];
+  navForward: NavEntry[];
 }
 
 /** null = use smart default, non-null = user override */
@@ -43,12 +50,16 @@ interface AppState {
   tabs: Tab[];
   activeTabId: string | null;
   openFile: (path: string, name: string) => void;
+  replaceActiveTab: (path: string, name: string) => void;
   closeTab: (id: string) => Promise<void>;
   removeTabs: (ids: string[]) => void;
   setActiveTab: (id: string) => void;
   setModified: (id: string, modified: boolean) => void;
   updateTabPath: (id: string, newPath: string, newName: string) => void;
   toggleEditorMode: (id: string) => void;
+  pushNav: (tabId: string, entry: NavEntry) => void;
+  navigateBack: (tabId: string) => NavEntry | null;
+  navigateForward: (tabId: string) => NavEntry | null;
 
   // Status bar
   cursorLine: number;
@@ -113,8 +124,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const id = path;
-    const tab: Tab = { id, path, name, modified: false, editorMode: "source" };
+    const tab: Tab = { id, path, name, modified: false, editorMode: "preview", navBack: [], navForward: [] };
     set({ tabs: [...tabs, tab], activeTabId: id });
+  },
+
+  replaceActiveTab: (path, name) => {
+    const { tabs, activeTabId } = get();
+    if (!activeTabId) return;
+    const oldTab = tabs.find((t) => t.id === activeTabId);
+    const id = path;
+    const newTab: Tab = {
+      id, path, name, modified: false,
+      editorMode: oldTab?.editorMode ?? "preview",
+      navBack: oldTab?.navBack ?? [],
+      navForward: oldTab?.navForward ?? [],
+    };
+    set({
+      tabs: tabs.map((t) => (t.id === activeTabId ? newTab : t)),
+      activeTabId: id,
+    });
   },
 
   closeTab: async (id) => {
@@ -183,6 +211,52 @@ export const useAppStore = create<AppState>((set, get) => ({
           : t
       ),
     }));
+  },
+
+  pushNav: (tabId, entry) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === tabId
+          ? { ...t, navBack: [...t.navBack, entry].slice(-50), navForward: [] }
+          : t
+      ),
+    }));
+  },
+
+  navigateBack: (tabId) => {
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab || tab.navBack.length === 0) return null;
+    const entry = tab.navBack[tab.navBack.length - 1];
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === tabId
+          ? {
+              ...t,
+              navBack: t.navBack.slice(0, -1),
+              navForward: [...t.navForward, { path: t.path, cursor: 0 }].slice(-50),
+            }
+          : t
+      ),
+    }));
+    return entry;
+  },
+
+  navigateForward: (tabId) => {
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab || tab.navForward.length === 0) return null;
+    const entry = tab.navForward[tab.navForward.length - 1];
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === tabId
+          ? {
+              ...t,
+              navForward: t.navForward.slice(0, -1),
+              navBack: [...t.navBack, { path: t.path, cursor: 0 }].slice(-50),
+            }
+          : t
+      ),
+    }));
+    return entry;
   },
 
   cursorLine: 1,

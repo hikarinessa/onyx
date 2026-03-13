@@ -340,7 +340,7 @@ export function Editor() {
     setFlushSaveHook(flushSaveForTab);
 
     // Wire wikilink follow: resolve via Rust, then open the target file
-    wikilinkFollowRef.current = async (link: string) => {
+    wikilinkFollowRef.current = async (link: string, newTab: boolean) => {
       const currentTab = useAppStore.getState().tabs.find(
         (t) => t.id === activeTabIdBox.current
       );
@@ -352,7 +352,7 @@ export function Editor() {
         });
         if (resolved) {
           const name = resolved.split("/").pop() || resolved;
-          await openFileInEditor(resolved, name);
+          await openFileInEditor(resolved, name, { replaceActive: !newTab });
         }
       } catch (err) {
         console.error("Failed to resolve wikilink:", err);
