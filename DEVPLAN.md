@@ -17,7 +17,7 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 5 (Periodic Notes) | 0.5.0 |
 | Phase 5.X (Backfill) | 0.5.X |
 | Phase 6 (Palette & Theming) | 0.6.0 |
-| Phase 7 (Preview & Panes) | 0.7.0 |
+| Phase 7 (Preview & Navigation) | 0.7.0 ✅ |
 | Phase 8 (Blocks & Tables) | 0.8.0 |
 | Phase 9 (MCP Server) | 0.9.0 |
 | Phase 10 (Tier 2) | 0.10.0 |
@@ -457,48 +457,26 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
 ---
 
-## Phase 7 — Live Preview & Split Panes
+## Phase 7 — Live Preview & Navigation ✅
 
-**Goal:** Live preview mode renders markdown inline. Split panes for side-by-side editing. The app becomes a genuine daily driver.
+**Goal:** Live preview mode renders markdown inline. Navigation and UX polish make the app a genuine daily driver.
 
-**Note:** This is the single biggest "daily driver" feature. Users will tolerate source-only editing for a while, but live preview is what makes the editor feel native and pleasant. Prioritize this over power-editing features (blocks, tables).
+### Completed
 
-### Steps
+7.0 **Viewport-aware decorations** ✅ — Wikilinks, tags, live preview all use `view.visibleRanges`
+7.1 **Live preview CM6 extension** ✅ — Headings, bold/italic/bold-italic, strikethrough, highlight, checkboxes, wikilinks. Focus-line shows raw markdown.
+7.2 **Cmd+/ editor mode toggle** ✅ — Per-tab, persisted, default is preview
+7.3 **Per-tab navigation stack** ✅ — Cmd+[/], mouse 3/4, 50-entry cap
+7.4 **Inline editable title** ✅ — Editable H1 above editor, renames file on commit
+7.5 **Editor polish** ✅ — Italic uses `_`, symbol wrap extended, outliner Option+Up/Down, layout restructure
 
-7.1 **Live preview CM6 extension**
-- Render headings (hide `#` when not focused on that line)
-- Render bold/italic inline
-- Render checkboxes as interactive widgets
-- Render wikilinks as styled clickable elements
-- Render tags as styled chips
-- Render `![[embed]]` as full inline content (read-only, 2 levels deep)
-- **Prerequisite:** Debt item #11 (full-doc decoration scan) should be addressed before or during this step — switch wikilink/tag extensions to viewport-aware iteration, since live preview adds significantly more decorations
+### Deferred
 
-7.2 **Cmd+/ — Editor mode toggle**
-- Toggle between Live Preview and Source mode
-- Persist per-tab preference in session
-
-7.3 **Outline section in context panel**
-- Collapsible accordion section showing document headings (H1–H6)
-- Click heading → scroll editor to that position
-- Updates live as user edits
-
-7.4 **Split panes**
-- Cmd+click opens in horizontal split
-- Draggable divider
-- Each pane has own tab bar
-- Cmd+W closes pane if last tab
-
-7.5 **Per-tab navigation stack**
-- Back/forward history per tab (Cmd+[ / Cmd+])
-- Maintained when following wikilinks
-- Capped at 50 entries per tab (drop oldest)
-
-7.6 **Linting**
-- Inline lint decorations in CM6
-- Rules from ARCHITECTURE.md
-- Auto-fix on save configurable via `config.json` linting section (`enabled`, `fixOnSave`, `rules`)
-- Status bar indicator
+- **Split panes** — Cmd+click opens in split, draggable divider, per-pane tab bar
+- **Outline section** — Heading outline in context panel with click-to-scroll
+- **Linting** — Inline lint decorations, auto-fix on save, status bar indicator
+- **Embeds** — `![[note]]` rendered inline (read-only, 2-level depth cap)
+- **Tag chips** — Tags rendered as styled chips in live preview
 
 **Milestone:** The editor looks and feels great. Live preview makes writing pleasant. The app is genuinely usable as a daily driver.
 
