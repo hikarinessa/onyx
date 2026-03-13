@@ -14,6 +14,7 @@ pub struct Config {
     pub appearance: AppearanceConfig,
     pub behavior: BehaviorConfig,
     pub style: StyleConfig,
+    pub linting: LintingConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +47,22 @@ pub struct BehaviorConfig {
     pub new_note_location: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LintingConfig {
+    pub enabled: bool,
+    pub autofix_on_save: bool,
+}
+
+impl Default for LintingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            autofix_on_save: false,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -53,6 +70,7 @@ impl Default for Config {
             appearance: AppearanceConfig::default(),
             behavior: BehaviorConfig::default(),
             style: StyleConfig::default(),
+            linting: LintingConfig::default(),
         }
     }
 }
@@ -168,6 +186,15 @@ pub struct StyleConfig {
     // Spacing
     pub paragraph_spacing: u32,
     pub list_indent: u32,
+
+    // Syntax highlighting
+    pub syntax_markup: String,
+    pub syntax_hr: String,
+    pub syntax_meta: String,
+    pub syntax_comment: String,
+    pub syntax_list_marker: String,
+    pub syntax_strikethrough: String,
+    pub syntax_highlight_bg: String,
 }
 
 impl Default for StyleConfig {
@@ -201,6 +228,13 @@ impl Default for StyleConfig {
             tag_text: String::new(),
             paragraph_spacing: 0,
             list_indent: 24,
+            syntax_markup: String::new(),
+            syntax_hr: String::new(),
+            syntax_meta: String::new(),
+            syntax_comment: String::new(),
+            syntax_list_marker: String::new(),
+            syntax_strikethrough: String::new(),
+            syntax_highlight_bg: String::new(),
         }
     }
 }

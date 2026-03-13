@@ -117,6 +117,11 @@ interface AppState {
   // Save conflict — set when write_file detects external modification
   saveConflictPath: string | null;
   setSaveConflictPath: (path: string | null) => void;
+
+  // Lint counts
+  lintErrors: number;
+  lintWarnings: number;
+  setLintCounts: (errors: number, warnings: number) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -344,6 +349,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   saveConflictPath: null,
   setSaveConflictPath: (path) => set({ saveConflictPath: path }),
+
+  lintErrors: 0,
+  lintWarnings: 0,
+  setLintCounts: (errors, warnings) => set({ lintErrors: errors, lintWarnings: warnings }),
 }));
 
 // ── Memoized selectors ──

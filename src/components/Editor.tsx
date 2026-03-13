@@ -24,9 +24,11 @@ import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension, togglePreviewEffect, previewModeField } from "../extensions/livePreview";
+import { lintingExtension, autofixContent } from "../extensions/linting";
+import { lintKeymap, forEachDiagnostic } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
 import { renameFile } from "../lib/fileOps";
-import { getAutoSaveMs, setRemeasureHook } from "../lib/configBridge";
+import { getAutoSaveMs, setRemeasureHook, isAutofixOnSave } from "../lib/configBridge";
 
 // ---------------------------------------------------------------------------
 // Module-level caches
@@ -68,6 +70,12 @@ const onyxHighlightStyle = HighlightStyle.define([
   { tag: tags.link, color: "var(--link-color)" },
   { tag: tags.url, color: "var(--link-color)" },
   { tag: tags.quote, color: "var(--text-tertiary)", fontStyle: "italic" },
+  { tag: tags.strikethrough, color: "var(--syntax-strikethrough)", textDecoration: "line-through" },
+  { tag: tags.meta, color: "var(--syntax-meta)" },
+  { tag: tags.comment, color: "var(--syntax-comment)" },
+  { tag: tags.contentSeparator, color: "var(--syntax-hr)" },
+
+  { tag: tags.processingInstruction, color: "var(--syntax-markup)" },
 ]);
 
 const onyxTheme = EditorView.theme({
@@ -118,7 +126,7 @@ function buildExtensions(): Extension[] {
     const tabId = activeTabIdBox.current;
     if (!tabId) return;
 
-    const { setCursorInfo, setModified, setWordCount, setCharCount } = useAppStore.getState();
+    const { setCursorInfo, setModified, setWordCount, setCharCount, setLintCounts } = useAppStore.getState();
 
     // Cursor position — always update (cheap)
     const pos = update.state.selection.main.head;
@@ -136,6 +144,15 @@ function buildExtensions(): Extension[] {
       setWordCount(words);
       setCharCount(content.length);
 
+      // Update lint counts
+      let errors = 0;
+      let warnings = 0;
+      forEachDiagnostic(update.state, (d) => {
+        if (d.severity === "error") errors++;
+        else if (d.severity === "warning") warnings++;
+      });
+      setLintCounts(errors, warnings);
+
       // Debounced auto-save
       clearTimeout(saveTimer);
       if (isModified) {
@@ -143,8 +160,22 @@ function buildExtensions(): Extension[] {
         if (tab) {
           saveTimer = setTimeout(async () => {
             try {
-              await invoke("write_file", { path: tab.path, content });
-              lastSavedContent.set(tabId, content);
+              let saveContent = content;
+              if (isAutofixOnSave()) {
+                const fixed = autofixContent(content);
+                if (fixed !== content) {
+                  saveContent = fixed;
+                  // Update editor state with fixed content
+                  const view = _liveViewRef;
+                  if (view && activeTabIdBox.current === tabId) {
+                    view.dispatch({
+                      changes: { from: 0, to: view.state.doc.length, insert: fixed },
+                    });
+                  }
+                }
+              }
+              await invoke("write_file", { path: tab.path, content: saveContent });
+              lastSavedContent.set(tabId, saveContent);
               setModified(tabId, false);
               useAppStore.getState().bumpSaveVersion();
               // Clear conflict if save succeeds for this path
@@ -202,6 +233,8 @@ function buildExtensions(): Extension[] {
     autocompleteExtension(),
     symbolWrapExtension(),
     livePreviewExtension(),
+    keymap.of(lintKeymap),
+    ...lintingExtension(),
   ];
 }
 
