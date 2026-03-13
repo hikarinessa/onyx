@@ -16,13 +16,14 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 7.5 (Hardening & CSS Architecture):** Complete
 - **Phase 7.6 (Settings Window):** Complete
 - **Phase 7.7 (Lucide Icons):** Complete
+- **Phase 7.8 (Polish & Deferred):** Complete
 - **Phase 8 (Split Panes):** Planned
 - **Phase 9 (Tables):** Planned
 - **Phase 10 (Per-Block Features):** Planned
 - **Phase 11 (MCP Server):** Planned
 - **Phase 12 (Tier 2 Features):** Planned
 
-**Current version:** 0.7.7
+**Current version:** 0.7.8
 
 ## Project Structure
 
@@ -58,7 +59,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── autocomplete.ts       #   96 lines — CM6: wikilink + tag autocomplete
 │   ├── livePreview.ts        #  387 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, strikethrough, highlight)
 │   ├── symbolWrap.ts         #   61 lines — CM6: wrap selection with brackets/quotes/markdown on type
-│   └── linting.ts            #  (planned) — CM6: markdown lint rules + autofix on save
+│   └── linting.ts            #  310 lines — CM6: markdown lint rules (10 autofix + 4 warning) + autofix on save
 ├── lib/
 │   ├── fileOps.ts            #  155 lines — Centralized file mutations (with link warnings)
 │   ├── openFile.ts           #   79 lines — Shared open-file-in-editor utility (with nav stack, orphan detection)
@@ -116,6 +117,9 @@ src-tauri/                    # Backend (Rust)
 - **Keybinding registry:** `src/lib/keybindings.ts` — centralized Map of command ID → binding. `parseKeyCombo(KeyboardEvent)` produces canonical strings (`Cmd+Shift+D`). Global shortcuts dispatched via keyMap lookup in App.tsx instead of hardcoded if-chains. Supports user overrides saved to `~/.onyx/keybindings.json`.
 - **Settings modal:** `Settings.tsx` — 5-section modal (General, Editor, Appearance, Keybindings, About). Loads config from Rust on mount, saves partial patches via `update_config`. Keybinding editor with click-to-capture and conflict detection.
 - **Config bridge:** `configBridge.ts` applies Rust config as CSS custom properties on `:root`. Handles theme color overrides (per dark/light/warm), heading styles (size + color for h1-h6), element styles (blockquote, links, code, tags), and spacing. Uses hook injection pattern (`setRemeasureHook`) to trigger CM6 `requestMeasure()` after font/sizing changes without circular imports.
+- **Linting:** CM6-native linter (`@codemirror/lint`). 10 autofix rules (trailing spaces, hard tabs, blank lines, ATX spacing, reversed links, etc.) + 4 warning rules (heading increment, consistent list markers, HR style, empty links). Autofix-on-save applies string transforms before `write_file`. Config: `linting.enabled`, `linting.autofix_on_save`. Lint counts shown in StatusBar.
+- **Drag-drop:** HTML5 drag-drop on the app shell. Filters for `.md` files, opens via `openFileInEditor()`. Drop overlay shown during drag.
+- **Syntax highlighting:** Full Lezer grammar coverage via CSS custom properties (`--syntax-markup`, `--syntax-hr`, `--syntax-meta`, `--syntax-comment`, `--syntax-list-marker`, `--syntax-strikethrough`, `--syntax-highlight-bg`). Configurable in Settings > Appearance > Syntax Colors.
 - **No Tailwind.** Plain CSS with custom properties.
 - **Type-only imports:** CM6 types like `Extension`, `DecorationSet` must use `import type` or `type` keyword — they don't exist at runtime.
 
@@ -147,6 +151,7 @@ src-tauri/                    # Backend (Rust)
 | `get_backlinks` | `(path: String) → Vec<BacklinkRecord>` |
 | `get_index_stats` | `() → IndexStats` |
 | `resolve_wikilink` | `(link: String, contextPath: String) → Option<String>` |
+| `reindex_file` | `(path: String) → ()` — immediately reindex a single file |
 
 ### Bookmarks (Directory)
 | Command | Signature |
