@@ -5,7 +5,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 ## Key Documents
 
 - `ARCHITECTURE.md` — Full design spec (layout, data model, editor, theming, feature tiers)
-- `DEVPLAN.md` — 10-phase implementation plan with step-by-step breakdowns
+- `DEVPLAN.md` — 12-phase implementation plan with step-by-step breakdowns
 - `GUIDELINES.md` — Development rules (surface parity, code style, error handling)
 - `DEPENDENCIES.md` — Crate/package rationale
 
@@ -13,9 +13,12 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 
 - **Phase 1–6:** Complete (skeleton → core editor → links → typed objects → file ops → hardening → periodic notes → backfill → command palette & theming)
 - **Phase 7 (Live Preview & Navigation):** Complete
-- **Phase 8 (Blocks, Tables & Power Editing):** Planned
-- **Phase 9 (MCP Server):** Planned
-- **Phase 10 (Tier 2 Features):** Planned
+- **Phase 7.5 (Hardening & CSS Architecture):** Planned
+- **Phase 8 (Split Panes):** Planned
+- **Phase 9 (Tables):** Planned
+- **Phase 10 (Per-Block Features):** Planned
+- **Phase 11 (MCP Server):** Planned
+- **Phase 12 (Tier 2 Features):** Planned
 
 **Current version:** 0.7.0
 

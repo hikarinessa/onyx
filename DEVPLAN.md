@@ -18,9 +18,12 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 5.X (Backfill) | 0.5.X |
 | Phase 6 (Palette & Theming) | 0.6.0 |
 | Phase 7 (Preview & Navigation) | 0.7.0 ✅ |
-| Phase 8 (Blocks & Tables) | 0.8.0 |
-| Phase 9 (MCP Server) | 0.9.0 |
-| Phase 10 (Tier 2) | 0.10.0 |
+| Phase 7.5 (Hardening & CSS) | 0.7.5 |
+| Phase 8 (Split Panes) | 0.8.0 |
+| Phase 9 (Tables) | 0.9.0 |
+| Phase 10 (Blocks) | 0.10.0 |
+| Phase 11 (MCP Server) | 0.11.0 |
+| Phase 12 (Tier 2) | 0.12.0 |
 
 Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
@@ -482,78 +485,257 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
 ---
 
-## Phase 8 — Blocks, Tables & Power Editing
+## Phase 7.5 — Foundation Hardening & CSS Architecture
 
-**Goal:** Block-level operations and structured editing. The editor becomes a power tool.
+**Goal:** Strengthen the foundation before complex feature work. High-impact, low-risk changes across architecture, CSS, and known gotchas.
 
-**Rationale (reordered from original plan):** Block operations and table editing are high-complexity features that touch every layer (parser, decorations, commands, file mutations). They're valuable but not blocking daily-driver usage. Building them after live preview means the editing foundation is mature and well-tested.
+**Rationale:** Research identified concrete improvements that reduce tech debt accumulation and prevent classes of bugs. These are best done now while the codebase is ~9,400 LOC — each gets harder as features layer on top.
 
-### Steps
+### Architecture
 
-8.1 **Block awareness in CM6**
-- Detect `***` separators
-- Track block boundaries (line ranges)
-- Visual: subtle separator line, block actions on hover (copy icon)
+7.5.1 **Zustand selector audit**
+- Replace any `useAppStore()` full-store subscriptions with fine-grained selectors (`s => s.tabs`, etc.)
+- Audit TabBar, Sidebar, StatusBar, ContextPanel for unnecessary re-renders
+- Use separate selectors for independent values (not object-returning selectors without `shallow`)
 
-8.2 **Block operations**
-- Copy block as markdown
-- Move block up/down (reorder across separators)
-- Delete block
-- Extract block to new note (create note with block content, replace block with wikilink)
+7.5.2 **IPC query cache**
+- Simple `Map<string, {data, timestamp}>` with TTL (5s default)
+- Cache `get_backlinks`, `get_all_tags`, `get_file_frontmatter` results
+- Invalidate on file watcher events (`file-changed`)
+- Eliminates redundant IPC when switching tabs rapidly
 
-8.3 **Table editing extension**
-- Tab to move between cells
-- Enter to move to next row
-- Auto-align columns on format
-- Add/remove rows and columns via context menu
+7.5.3 **Command pattern deepening**
+- Register all file ops, navigation actions, and panel toggles as commands
+- Menu bar items, keyboard shortcuts, and command palette all resolve by command ID
+- Every user-facing action discoverable via palette
 
-**Milestone:** The editor handles structured content — blocks can be moved, extracted, and tables can be edited inline.
+### CSS
+
+7.5.4 **`@layer` declarations**
+- Wrap existing CSS in layers: `@layer reset, tokens, base, layout, components, editor`
+- Zero visual change — establishes specificity foundation for user themes
+
+7.5.5 **`data-theme` attribute switching**
+- Move built-in theme definitions into CSS (`:root[data-theme="dark"]`, `:root[data-theme="light"]`, etc.)
+- Keep JS `setProperty()` for user theme overrides only
+- Single DOM operation to switch themes
+
+7.5.6 **CM6 theme bridge to CSS variables**
+- Single `EditorView.theme()` that uses `var()` references for all colors
+- Theme switching requires zero editor reconfiguration
+- Syntax highlighting: override `.tok-*` classes in CSS with `--syntax-*` variables
+
+7.5.7 **`prefers-reduced-motion`**
+- Blanket disable in reset.css (~5 lines)
+- Use `0.01ms` duration (not `0ms`) to avoid breaking `transitionend` listeners
+
+### Tech Stack Gotchas
+
+7.5.8 **App Nap timer stalling**
+- Auto-save 500ms debounce and session persistence stall when minimized 5+ min
+- Move auto-save timer to Rust or use `macos-app-nap` crate to disable App Nap
+
+7.5.9 **Async listener cleanup**
+- Audit all `useEffect` + `listen()` calls for the async race condition
+- Add cancellation flag pattern: track `cancelled` flag, call `unlisten` inside `.then()` if cancelled
+- Prevents listener leaks from StrictMode double-mount
+
+7.5.10 **`scroll-behavior: smooth` audit**
+- Verify no global `scroll-behavior: smooth` in CSS (breaks programmatic scrolling in WKWebView)
+- Use JS `scrollTo({ behavior: 'smooth' })` instead where needed
+
+### Note-App Gotchas
+
+7.5.11 **mtime check before write**
+- Before `write_file`, compare on-disk mtime with last-read mtime
+- If changed externally, prompt user instead of silently overwriting
+- Prevents data loss from external editors or sync tools
+
+7.5.12 **Self-write detection audit**
+- Verify the watcher reliably ignores events from Onyx's own writes
+- Audit the write-suppression window (currently documented as 2s)
+
+7.5.13 **No-op write optimization**
+- If content hasn't changed since last save, skip the write
+- Avoids spurious watcher events and preserves mtime
+
+### Deferred from Phase 7
+
+7.5.14 **Linting extension**
+- `@codemirror/lint` with markdown rules (ATX headings, consistent list markers, trailing whitespace, final newline, frontmatter validity)
+- Auto-fix on save: trim trailing whitespace, ensure final newline
+- Status bar: error/warning count or checkmark
+
+7.5.15 **Outline section in context panel**
+- Extract headings via regex, update on save + tab switch
+- Click heading → `scrollToLine(lineNumber)`
+- Indented by heading level, placed between Properties and Backlinks
+
+**Milestone:** The app is hardened — CSS is layered, themes switch cleanly, IPC is cached, timers survive App Nap, external edits don't silently overwrite. Linting and outline round out the editor experience.
 
 ---
 
-## Phase 9 — MCP Server
+## Phase 8 — Split Panes
 
-**Goal:** Claude Code can read, search, and write to your notes through Onyx.
+**Goal:** Two-pane editing with independent tab bars. Reference one note while writing another.
+
+**Rationale:** Split panes were designed in Phase 7 but deferred. The architecture groundwork exists (persistent EditorView instances, per-tab state caching). This is the biggest remaining daily-driver unlock.
 
 ### Steps
 
-9.1 **HTTP server in Rust**
+8.1 **Architecture**
+- Add to Zustand: `paneLayout: { type: 'single' | 'split'; activePaneId: 'left' | 'right' }`, `splitRatio: number`
+- Per-pane tab lists + active tab IDs
+- Extract core editor logic from `Editor.tsx` into `EditorPane.tsx` — each pane owns its own `EditorView` instance
+- Module-level caches (`editorStateCache`, `scrollCache`, `lastSavedContent`) stay shared (keyed by tab ID)
+- `Editor.tsx` becomes a layout container rendering 1 or 2 `EditorPane` components
+
+8.2 **Interactions & persistence**
+- `TabBar` accepts optional `paneId` prop for pane-specific tab list
+- Cmd+click on wikilink → open in split (or in inactive pane if already split)
+- Draggable divider: mousedown/move/up adjusts flex-basis, stored as `splitRatio`
+- Cmd+W: if last tab in split pane, close pane → single layout
+- Persist pane layout + split ratio in SessionData
+
+**Milestone:** Two-pane editing works. Cmd+click opens in split, draggable divider, independent tab bars per pane. Closing last tab in a pane collapses to single layout.
+
+---
+
+## Phase 9 — Tables
+
+**Goal:** Inline table editing that feels natural. The single hardest "simple" feature in markdown editors.
+
+**Rationale (own phase):** Research confirms tables touch cell navigation, column alignment, paste handling, and format compatibility — each with its own complexity budget. Deserves dedicated focus.
+
+### Steps
+
+9.1 **Table editing CM6 extension**
+- Tab to move to next cell, Shift+Tab to previous
+- Enter to move to next row
+- Auto-align pipe columns on edit (reformat entire table)
+- Arrow key navigation within and between cells
+
+9.2 **Table operations**
+- Add/remove rows and columns via context menu or shortcuts
+- Sort column (ascending/descending) via context menu
+
+9.3 **Paste detection**
+- Paste tabular data (TSV/CSV from clipboard) → auto-convert to markdown table
+- Paste into existing table → fill cells
+
+9.4 **Live preview table rendering**
+- Tables rendered with styled cells in preview mode
+- Cell borders, header row styling, alternating row backgrounds
+
+**Milestone:** Tables can be created, edited, and reformatted inline. Tab navigates cells, columns auto-align, pasting tabular data creates tables automatically.
+
+---
+
+## Phase 10 — Per-Block Features
+
+**Goal:** Block-level operations on top of the existing markdown editor. NOT a block-based editor switch.
+
+**TODO:** Create detailed feature design together before implementation. The candidates below are starting points for that design session.
+
+### Feature Candidates
+
+10.1 **Block awareness in CM6**
+- Detect `***` separators, track block boundaries (line ranges)
+- Visual: subtle separator line, block hover actions
+
+10.2 **Block operations**
+- Copy block as markdown
+- Move block up/down (reorder across separators)
+- Delete block
+- Extract block to new note (create note with block content, replace with wikilink)
+
+10.3 **Block references**
+- `^block-id` syntax for addressable blocks
+- Cross-note block referencing
+
+10.4 **Transclusion**
+- `![[note#^block-id]]` rendered inline (read-only)
+- 2-level depth cap with cycle detection (critical from day one)
+
+**Milestone:** Blocks are addressable and operable. Users can reference, transclude, copy, move, and extract blocks without the app becoming a block editor.
+
+---
+
+## Phase 11 — MCP Server
+
+**Goal:** Claude Code can read, search, and write to your notes through Onyx.
+
+**Rationale (moved after blocks/tables):** Shipping MCP after the app is feature-complete means the tool surface is richer — search, backlinks, tables, blocks, and split panes all land in one integration.
+
+### Steps
+
+11.1 **HTTP server in Rust**
 - Separate thread, localhost:19532
 - MCP protocol over streamable HTTP
 
-9.2 **Read-only tools**
+11.2 **Read-only tools**
 - `onyx_get_active`, `onyx_read_note`, `onyx_search`, `onyx_get_backlinks`, `onyx_get_tags`, `onyx_resolve_link`, `onyx_list_directory`, `onyx_get_properties`, `onyx_query_by_type`, `onyx_get_index_stats`, `onyx_get_object_types`, `onyx_get_periodic_config`
 
-9.3 **Write tools with confirmation**
+11.3 **Write tools with confirmation**
 - `onyx_write_note`, `onyx_insert_at_cursor`, `onyx_insert_after_heading`, `onyx_append_to_note`, `onyx_update_frontmatter`, `onyx_create_note`
 - Toast notification in Onyx UI: "Claude Code wants to write to Alice.md — Allow / Deny"
 - Cursor position snapshotted at confirmation time
 
-9.4 **State file**
+11.4 **State file**
 - Write `~/.onyx/state.json` on file switch, selection change, window focus (1s debounce)
 
-9.5 **Config**
+11.5 **Config**
 - MCP enable/disable, port, write confirmation toggle in `config.json`
 
 **Milestone:** Claude Code is vault-aware. You can ask it about your notes and it can read/write through Onyx.
 
 ---
 
-## Phase 10 — Tier 2 Features
+## Phase 12 — Tier 2 Features
 
-Build incrementally as desired:
+Build incrementally as desired. Includes original Tier 2 items plus medium-priority research findings.
 
-- 10.1 Slash commands (`/h1`, `/table`, `/template`, `/divider`)
-- 10.2 Custom keybindings (`~/.onyx/keybindings.json`)
-- 10.3 Full-text search across files (Cmd+Shift+F) — ripgrep-style in Rust
-- 10.4 Natural language dates (`@today` → `[[2026-03-11]]`)
-- 10.5 Custom sort (drag-to-reorder in sidebar)
-- 10.6 Sort by modified date (sidebar sort mode toggle)
-- 10.7 Heatmap calendar (activity visualization)
-- 10.8 Tracker widgets (inline charts from frontmatter data)
-- 10.9 Text extraction / OCR (images, PDFs)
-- 10.10 Print / PDF export
-- 10.11 Canvas read-only viewer (parse `.canvas` JSON, render visual)
+### Core Tier 2
+
+- 12.1 Slash commands (`/h1`, `/table`, `/template`, `/divider`)
+- 12.2 Custom keybindings (`~/.onyx/keybindings.json`)
+- 12.3 Full-text search across files (Cmd+Shift+F) — ripgrep-style in Rust
+- 12.4 Natural language dates (`@today` → `[[2026-03-11]]`)
+- 12.5 Custom sort (drag-to-reorder in sidebar)
+- 12.6 Sort by modified date (sidebar sort mode toggle)
+- 12.7 Heatmap calendar (activity visualization)
+- 12.8 Tracker widgets (inline charts from frontmatter data)
+- 12.9 Text extraction / OCR (images, PDFs)
+- 12.10 Print / PDF export
+- 12.11 Canvas read-only viewer (parse `.canvas` JSON, render visual)
+
+### Architecture (when hitting pain points)
+
+- 12.A1 Sidebar virtualization (react-vtree) — when file tree > 2,000 nodes
+- 12.A2 Zustand store splitting — when `app.ts` > 600 lines
+- 12.A3 Composition root extraction — when `App.tsx` wiring > 100 lines
+- 12.A4 External file conflict detection UI — when users report data loss
+- 12.A5 Search result streaming (Tauri channels) — when search > 300ms
+- 12.A6 External change → apply as CM6 transaction (preserves undo history)
+
+### CSS & Theming (medium term)
+
+- 12.C1 OKLCH primitive color tokens — accent color picker derives variants from one hue
+- 12.C2 JSON theme format — `base` inheritance, `colors` + `syntax` sections, `~/.onyx/themes/`
+- 12.C3 User typography preferences — font family, size, line height, content width in `~/.onyx/preferences.json`
+- 12.C4 Theme editor/preview — live preview, contrast ratio warnings
+
+### Deferred Gotchas (when scale demands)
+
+- 12.G1 Incremental startup indexing (track mtime, skip unchanged) — needed at 10K+ files
+- 12.G2 IPC pagination for large result sets — needed when vaults grow
+- 12.G3 Memory profiling during extended sessions
+- 12.G4 IME/dead key testing with non-Latin keyboards
+
+### Deferred from Phase 7
+
+- 12.D1 Embeds — `![[note]]` rendered inline (read-only, 2-level depth cap)
+- 12.D2 Tag chips — Tags rendered as styled chips in live preview
 
 ---
 
