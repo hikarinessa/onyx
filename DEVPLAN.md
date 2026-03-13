@@ -559,14 +559,31 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 - If content hasn't changed since last save, skip the write
 - Avoids spurious watcher events and preserves mtime
 
+### Orphan Notes & External File Opening
+
+7.5.14 **Orphan notes sidebar section**
+- "Orphan Notes" section in sidebar (above or below bookmarks) for files not in any registered directory
+- Zustand: `orphanPaths: string[]` + `addOrphanPath` / `removeOrphanPath` actions
+- Persist in session data, restore on launch
+- Click opens file, right-click to remove from list
+
+7.5.15 **Drag-drop `.md` files**
+- Handle Tauri `drag-drop` event on the window
+- Drop `.md` file → open in editor, add to orphan section if not in a registered directory
+- If file IS in a registered directory, just open it normally
+
+7.5.16 **Finder "Open With Onyx"**
+- Register `.md` file association in `tauri.conf.json` (`fileAssociations`)
+- Handle Tauri `open-file` event → open the file, add to orphans if needed
+
 ### Deferred from Phase 7
 
-7.5.14 **Linting extension**
+7.5.17 **Linting extension**
 - `@codemirror/lint` with markdown rules (ATX headings, consistent list markers, trailing whitespace, final newline, frontmatter validity)
 - Auto-fix on save: trim trailing whitespace, ensure final newline
 - Status bar: error/warning count or checkmark
 
-7.5.15 **Outline section in context panel**
+7.5.18 **Outline section in context panel**
 - Extract headings via regex, update on save + tab switch
 - Click heading → `scrollToLine(lineNumber)`
 - Indented by heading level, placed between Properties and Backlinks
