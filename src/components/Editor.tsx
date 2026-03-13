@@ -431,13 +431,11 @@ export function Editor() {
 
     // Restore scroll position (deferred so layout is complete)
     const savedScroll = scrollCache.get(activeTab.id);
-    if (savedScroll !== undefined) {
-      requestAnimationFrame(() => {
-        if (viewRef.current) {
-          viewRef.current.scrollDOM.scrollTop = savedScroll;
-        }
-      });
-    }
+    requestAnimationFrame(() => {
+      if (viewRef.current) {
+        viewRef.current.scrollDOM.scrollTop = savedScroll ?? 0;
+      }
+    });
 
     viewRef.current.focus();
 
