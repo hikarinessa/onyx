@@ -72,8 +72,21 @@ class CheckboxWidget extends WidgetType {
   }
 }
 
+class HRWidget extends WidgetType {
+  toDOM(): HTMLElement {
+    const hr = document.createElement("hr");
+    hr.className = "cm-preview-hr";
+    return hr;
+  }
+
+  eq(): boolean {
+    return true;
+  }
+}
+
 // ── Patterns ──
 
+const THEMATIC_BREAK_RE = /^[ ]{0,3}([-*_])[ ]*(?:\1[ ]*){2,}$/;
 const HEADING_RE = /^(#{1,6})\s+/;
 const BOLD_ITALIC_RE = /\*{3}(.+?)\*{3}/g;
 const BOLD_ITALIC_UNDER_RE = /(?<![a-zA-Z0-9])_{3}(.+?)_{3}(?![a-zA-Z0-9])/g;
@@ -169,6 +182,16 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult): Decorat
 
       // Skip the focus line — show raw markdown there
       if (i === cursorLine) continue;
+
+      // ── Thematic breaks (---, ***, ___) ──
+      if (THEMATIC_BREAK_RE.test(text)) {
+        builder.add(
+          line.from,
+          line.to,
+          Decoration.replace({ widget: new HRWidget() })
+        );
+        continue;
+      }
 
       // ── Headings ──
       const headingMatch = text.match(HEADING_RE);
@@ -374,6 +397,11 @@ const previewTheme = EditorView.theme({
   ".cm-preview-strikethrough": {
     textDecoration: "line-through",
     opacity: "0.7",
+  },
+  ".cm-preview-hr": {
+    border: "none",
+    borderTop: "1px solid var(--border-subtle)",
+    margin: "0.15em 0",
   },
   ".cm-preview-highlight": {
     background: "rgba(255, 204, 0, 0.3)",
