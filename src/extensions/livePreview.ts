@@ -76,9 +76,11 @@ class CheckboxWidget extends WidgetType {
 
 const HEADING_RE = /^(#{1,6})\s+/;
 const BOLD_ITALIC_RE = /\*{3}(.+?)\*{3}/g;
+const BOLD_ITALIC_UNDER_RE = /(?<![a-zA-Z0-9])_{3}(.+?)_{3}(?![a-zA-Z0-9])/g;
 const BOLD_RE = /\*{2}(.+?)\*{2}/g;
+const BOLD_UNDER_RE = /(?<![a-zA-Z0-9_])__([^_]+?)__(?![a-zA-Z0-9_])/g;
 const ITALIC_STAR_RE = /(?<!\*)\*([^*]+)\*(?!\*)/g;
-const ITALIC_UNDER_RE = /(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])/g;
+const ITALIC_UNDER_RE = /(?<![a-zA-Z0-9_])_([^_]+)_(?![a-zA-Z0-9_])/g;
 const STRIKETHROUGH_RE = /~~(.+?)~~/g;
 const HIGHLIGHT_RE = /==(.+?)==/g;
 const CHECKBOX_RE = /^(\s*[-*+]\s)\[([ x])\]\s/;
@@ -257,7 +259,9 @@ function addInlineDecorations(
 
   // Order matters: longer markers first to prevent partial matches
   matchInline(BOLD_ITALIC_RE, 3, DECO_BOLD_ITALIC, false);
+  matchInline(BOLD_ITALIC_UNDER_RE, 3, DECO_BOLD_ITALIC, false);
   matchInline(BOLD_RE, 2, DECO_BOLD);
+  matchInline(BOLD_UNDER_RE, 2, DECO_BOLD);
   matchInline(ITALIC_STAR_RE, 1, DECO_ITALIC);
   matchInline(ITALIC_UNDER_RE, 1, DECO_ITALIC);
   matchInline(STRIKETHROUGH_RE, 2, DECO_STRIKETHROUGH);
@@ -330,6 +334,9 @@ const livePreviewPlugin = ViewPlugin.fromClass(
 const previewTheme = EditorView.theme({
   ".cm-preview-heading": {
     fontWeight: "600",
+  },
+  ".cm-preview-heading *": {
+    color: "inherit !important",
   },
   ".cm-preview-h1": {
     fontSize: "var(--heading-1-size, 1.6em)",
