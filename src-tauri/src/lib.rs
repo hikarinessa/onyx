@@ -244,6 +244,7 @@ pub fn run() {
             commands::count_incoming_links,
             commands::allow_path,
             commands::disallow_path,
+            commands::reindex_file,
             commands::get_config,
             commands::update_config,
             commands::get_keybindings,

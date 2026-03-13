@@ -1005,6 +1005,21 @@ pub fn disallow_path(path: String, state: State<AppState>) -> Result<(), String>
     Ok(())
 }
 
+// ── Reindex ──
+
+#[tauri::command]
+pub fn reindex_file(path: String, state: State<AppState>) -> Result<(), String> {
+    let file_path = PathBuf::from(&path);
+    validate_path(&file_path, &state)?;
+    let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+    let dir_id = dirs.list().iter()
+        .find(|d| file_path.starts_with(&d.path))
+        .map(|d| d.id.clone())
+        .unwrap_or_default();
+    drop(dirs);
+    crate::indexer::Indexer::reindex_file(&file_path, &dir_id, &state.db)
+}
+
 // ── Config ──
 
 #[tauri::command]
