@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/app";
+import { useAppStore, selectActiveTabPath } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 
 interface BookmarkRecord {
@@ -21,7 +21,7 @@ interface DisplayBookmark {
 }
 
 export function BookmarkStrip() {
-  const activeTabPath = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.path);
+  const activeTabPath = useAppStore(selectActiveTabPath);
   const bookmarkVersion = useAppStore((s) => s.bookmarkVersion);
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const [bookmarks, setBookmarks] = useState<DisplayBookmark[]>([]);

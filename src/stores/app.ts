@@ -321,3 +321,34 @@ export const useAppStore = create<AppState>((set, get) => ({
     orphanPaths: s.orphanPaths.filter((p) => p !== path),
   })),
 }));
+
+// ── Memoized selectors ──
+// Avoids running Array.find on every store update (cursor moves, word counts, etc.)
+// Recomputes only when tabs or activeTabId actually change.
+
+let _memoTabs: Tab[] = [];
+let _memoActiveId: string | null = null;
+let _memoActiveTab: Tab | undefined = undefined;
+
+/** Memoized selector: returns the active Tab without scanning on every store update */
+export function selectActiveTab(s: { tabs: Tab[]; activeTabId: string | null }): Tab | undefined {
+  if (s.tabs === _memoTabs && s.activeTabId === _memoActiveId) {
+    return _memoActiveTab;
+  }
+  _memoTabs = s.tabs;
+  _memoActiveId = s.activeTabId;
+  _memoActiveTab = s.tabs.find((t) => t.id === s.activeTabId);
+  return _memoActiveTab;
+}
+
+export function selectActiveTabPath(s: { tabs: Tab[]; activeTabId: string | null }): string | undefined {
+  return selectActiveTab(s)?.path;
+}
+
+export function selectActiveTabName(s: { tabs: Tab[]; activeTabId: string | null }): string | undefined {
+  return selectActiveTab(s)?.name;
+}
+
+export function selectActiveEditorMode(s: { tabs: Tab[]; activeTabId: string | null }): EditorMode | undefined {
+  return selectActiveTab(s)?.editorMode;
+}

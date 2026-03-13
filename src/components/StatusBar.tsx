@@ -1,9 +1,9 @@
-import { useAppStore } from "../stores/app";
+import { useAppStore, selectActiveTabPath, selectActiveEditorMode } from "../stores/app";
 
 export function StatusBar() {
   const activeTabId = useAppStore((s) => s.activeTabId);
-  const activeTabPath = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.path);
-  const activeEditorMode = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.editorMode);
+  const activeTabPath = useAppStore(selectActiveTabPath);
+  const activeEditorMode = useAppStore(selectActiveEditorMode);
   const cursorLine = useAppStore((s) => s.cursorLine);
   const cursorCol = useAppStore((s) => s.cursorCol);
   const wordCount = useAppStore((s) => s.wordCount);

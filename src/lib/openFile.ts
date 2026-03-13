@@ -3,6 +3,16 @@ import { useAppStore } from "../stores/app";
 import { loadFileIntoCache } from "../components/Editor";
 import { recordRecentDoc } from "./recentDocs";
 
+/** Check if a file path is under any registered directory */
+async function isUnderRegisteredDir(filePath: string): Promise<boolean> {
+  try {
+    const dirs = await invoke<{ path: string }[]>("get_registered_directories");
+    return dirs.some((d) => filePath.startsWith(d.path + "/") || filePath === d.path);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Open a file in the editor.
  * - If the tab already exists, switch to it.
@@ -31,6 +41,12 @@ export async function openFileInEditor(
 
   const content = await invoke<string>("read_file", { path });
   loadFileIntoCache(path, content);
+
+  // Track files outside registered directories as orphan notes
+  const underDir = await isUnderRegisteredDir(path);
+  if (!underDir) {
+    useAppStore.getState().addOrphanPath(path);
+  }
 
   if (opts?.replaceActive && store.activeTabId) {
     // Push current location to nav stack before replacing

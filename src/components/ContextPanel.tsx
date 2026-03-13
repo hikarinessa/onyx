@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, type AccordionState } from "../stores/app";
+import { useAppStore, selectActiveTabPath, selectActiveTabName, type AccordionState } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import { replaceTabContent } from "./Editor";
 import { Calendar } from "./Calendar";
@@ -420,8 +420,8 @@ function useAccordionSection(
 export function ContextPanel() {
   const visible = useAppStore((s) => s.contextPanelVisible);
   const activeTabId = useAppStore((s) => s.activeTabId);
-  const activeTabPath = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.path);
-  const activeTabName = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.name);
+  const activeTabPath = useAppStore(selectActiveTabPath);
+  const activeTabName = useAppStore(selectActiveTabName);
   const saveVersion = useAppStore((s) => s.saveVersion);
 
   const [backlinks, setBacklinks] = useState<BacklinkRecord[]>([]);
@@ -439,19 +439,20 @@ export function ContextPanel() {
 
   // Fetch backlinks (with IPC cache)
   useEffect(() => {
+    let stale = false;
+
     if (!activeTabPath) {
       setBacklinks([]);
-      return;
+      return () => { stale = true; };
     }
 
     const cacheKey = `backlinks:${activeTabPath}`;
     const cached = getCached<BacklinkRecord[]>(cacheKey);
     if (cached) {
       setBacklinks(cached);
-      return;
+      return () => { stale = true; };
     }
 
-    let stale = false;
     invoke<BacklinkRecord[]>("get_backlinks", { path: activeTabPath })
       .then((results) => {
         if (stale) return;
@@ -462,9 +463,7 @@ export function ContextPanel() {
         if (stale) return;
         setBacklinks([]);
       });
-    return () => {
-      stale = true;
-    };
+    return () => { stale = true; };
   }, [activeTabId]);
 
   // Check bookmark state (directory bookmark OR global bookmark)
