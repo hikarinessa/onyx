@@ -21,8 +21,7 @@ interface DisplayBookmark {
 }
 
 export function BookmarkStrip() {
-  const activeTabId = useAppStore((s) => s.activeTabId);
-  const tabs = useAppStore((s) => s.tabs);
+  const activeTabPath = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.path);
   const bookmarkVersion = useAppStore((s) => s.bookmarkVersion);
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const [bookmarks, setBookmarks] = useState<DisplayBookmark[]>([]);
@@ -83,8 +82,7 @@ export function BookmarkStrip() {
         </div>
       ) : (
         bookmarks.map((bookmark) => {
-          const activeTab = tabs.find((t) => t.id === activeTabId);
-          const isActive = activeTab?.path === bookmark.path;
+          const isActive = activeTabPath === bookmark.path;
           return (
             <div
               key={bookmark.path}

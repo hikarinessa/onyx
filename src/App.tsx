@@ -17,6 +17,7 @@ import { createNewNote } from "./lib/fileOps";
 import { navigateHistory } from "./lib/openFile";
 import { listen } from "@tauri-apps/api/event";
 import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
+import { invalidateCache } from "./lib/ipcCache";
 
 // ---------------------------------------------------------------------------
 // Shared action functions — called by commands, menu events, and shortcuts
@@ -142,9 +143,60 @@ function registerCommands() {
 
   registerCommand({
     id: "editor.foldFrontmatter",
-    label: "Fold Frontmatter",
+    label: "Toggle Frontmatter Fold",
     category: "Editor",
     execute: () => foldFrontmatter(),
+  });
+
+  registerCommand({
+    id: "navigate.nextTab",
+    label: "Next Tab",
+    shortcut: "Ctrl+Tab",
+    category: "Navigate",
+    execute: () => {
+      const { tabs, activeTabId, setActiveTab } = store();
+      if (tabs.length <= 1) return;
+      const idx = tabs.findIndex((t) => t.id === activeTabId);
+      const next = (idx + 1) % tabs.length;
+      setActiveTab(tabs[next].id);
+    },
+  });
+
+  registerCommand({
+    id: "navigate.prevTab",
+    label: "Previous Tab",
+    shortcut: "Ctrl+Shift+Tab",
+    category: "Navigate",
+    execute: () => {
+      const { tabs, activeTabId, setActiveTab } = store();
+      if (tabs.length <= 1) return;
+      const idx = tabs.findIndex((t) => t.id === activeTabId);
+      const prev = (idx - 1 + tabs.length) % tabs.length;
+      setActiveTab(tabs[prev].id);
+    },
+  });
+
+  registerCommand({
+    id: "file.revealInFinder",
+    label: "Reveal in Finder",
+    category: "File",
+    execute: async () => {
+      const tab = store().tabs.find((t) => t.id === store().activeTabId);
+      if (tab) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("reveal_in_finder", { path: tab.path });
+      }
+    },
+  });
+
+  registerCommand({
+    id: "file.copyPath",
+    label: "Copy File Path",
+    category: "File",
+    execute: () => {
+      const tab = store().tabs.find((t) => t.id === store().activeTabId);
+      if (tab) navigator.clipboard.writeText(tab.path).catch(() => {});
+    },
   });
 
   registerCommand({
@@ -166,7 +218,10 @@ export default function App() {
     registerCommands();
     restoreTheme();
 
+    let cancelled = false;
+
     const unlisten = listen<string>("menu:action", (event) => {
+      if (cancelled) return;
       const store = useAppStore.getState;
       switch (event.payload) {
         case "new_note":
@@ -195,8 +250,16 @@ export default function App() {
       }
     });
 
+    // Invalidate IPC cache on file system changes
+    const unlistenFsChange = listen("fs:change", () => {
+      if (cancelled) return;
+      invalidateCache();
+    });
+
     return () => {
+      cancelled = true;
       unlisten.then((fn) => fn());
+      unlistenFsChange.then((fn) => fn());
     };
   }, []);
 
@@ -267,6 +330,16 @@ export default function App() {
         e.preventDefault();
         const { activeTabId, toggleEditorMode } = store();
         if (activeTabId) toggleEditorMode(activeTabId);
+      }
+
+      // Ctrl+Tab / Ctrl+Shift+Tab — cycle tabs
+      if (e.ctrlKey && e.key === "Tab") {
+        e.preventDefault();
+        const { tabs, activeTabId, setActiveTab } = store();
+        if (tabs.length <= 1) return;
+        const idx = tabs.findIndex((t) => t.id === activeTabId);
+        const next = e.shiftKey ? (idx - 1 + tabs.length) % tabs.length : (idx + 1) % tabs.length;
+        setActiveTab(tabs[next].id);
       }
 
       // Cmd+[ / Cmd+] — navigate back/forward (without Alt, which is sidebar/context)

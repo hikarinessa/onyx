@@ -2,18 +2,18 @@ import { useAppStore } from "../stores/app";
 
 export function StatusBar() {
   const activeTabId = useAppStore((s) => s.activeTabId);
-  const tabs = useAppStore((s) => s.tabs);
+  const activeTabPath = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.path);
+  const activeEditorMode = useAppStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.editorMode);
   const cursorLine = useAppStore((s) => s.cursorLine);
   const cursorCol = useAppStore((s) => s.cursorCol);
   const wordCount = useAppStore((s) => s.wordCount);
   const charCount = useAppStore((s) => s.charCount);
 
   const toggleEditorMode = useAppStore((s) => s.toggleEditorMode);
-  const activeTab = tabs.find((t) => t.id === activeTabId);
 
   const handlePathClick = () => {
-    if (activeTab?.path) {
-      navigator.clipboard.writeText(activeTab.path).catch(() => {});
+    if (activeTabPath) {
+      navigator.clipboard.writeText(activeTabPath).catch(() => {});
     }
   };
 
@@ -21,7 +21,7 @@ export function StatusBar() {
     <div className="statusbar">
       <div className="statusbar-left">
         <span>Onyx v{__APP_VERSION__}</span>
-        {activeTab && (
+        {activeTabPath && (
           <span
             className="statusbar-path"
             title="Click to copy path"
@@ -30,7 +30,7 @@ export function StatusBar() {
             onClick={handlePathClick}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePathClick(); } }}
           >
-            {activeTab.path}
+            {activeTabPath}
           </span>
         )}
       </div>
@@ -49,7 +49,7 @@ export function StatusBar() {
               onClick={() => { if (activeTabId) toggleEditorMode(activeTabId); }}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (activeTabId) toggleEditorMode(activeTabId); } }}
             >
-              {activeTab?.editorMode === "preview" ? "Preview" : "Source"}
+              {activeEditorMode === "preview" ? "Preview" : "Source"}
             </span>
           </>
         )}

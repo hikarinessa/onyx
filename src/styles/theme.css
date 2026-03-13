@@ -1,63 +1,117 @@
-:root {
-  /* Fonts */
-  --font-ui: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-editor: "Literata", Georgia, serif;
-  --font-mono: "IBM Plex Mono", "SF Mono", monospace;
+@layer reset, tokens, base, layout, components, editor;
 
-  /* Background layers */
-  --bg-base: #0e0e12;
-  --bg-surface: #141418;
-  --bg-elevated: #1a1a20;
-  --bg-hover: #222228;
-  --bg-active: #2a2a32;
+@layer tokens {
+  :root {
+    /* Fonts */
+    --font-ui: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-editor: "Literata", Georgia, serif;
+    --font-mono: "IBM Plex Mono", "SF Mono", monospace;
 
-  /* Text */
-  --text-primary: #e8e8ec;
-  --text-secondary: #9898a4;
-  --text-tertiary: #5c5c68;
-  --text-accent: #8b7cf6;
+    /* Background layers */
+    --bg-base: #0e0e12;
+    --bg-surface: #141418;
+    --bg-elevated: #1a1a20;
+    --bg-hover: #222228;
+    --bg-active: #2a2a32;
 
-  /* Borders */
-  --border-subtle: #1e1e26;
-  --border-default: #2a2a34;
-  --border-strong: #3a3a46;
+    /* Text */
+    --text-primary: #e8e8ec;
+    --text-secondary: #9898a4;
+    --text-tertiary: #5c5c68;
+    --text-accent: #8b7cf6;
 
-  /* Accent */
-  --accent: #8b7cf6;
-  --accent-hover: #9d90f8;
-  --accent-muted: rgba(139, 124, 246, 0.15);
+    /* Borders */
+    --border-subtle: #1e1e26;
+    --border-default: #2a2a34;
+    --border-strong: #3a3a46;
 
-  /* Status */
-  --status-modified: #e8a44a;
-  --status-error: #e85454;
-  --status-success: #4ae88a;
+    /* Accent */
+    --accent: #8b7cf6;
+    --accent-hover: #9d90f8;
+    --accent-muted: rgba(139, 124, 246, 0.15);
 
-  /* Semantic */
-  --tag-bg: rgba(139, 124, 246, 0.12);
-  --tag-text: #a89cf8;
-  --link-color: #7ca8f6;
-  --link-broken: #e87474;
+    /* Status */
+    --status-modified: #e8a44a;
+    --status-error: #e85454;
+    --status-success: #4ae88a;
 
-  /* Layout dimensions */
-  --titlebar-height: 38px;
-  --tabbar-height: 36px;
-  --statusbar-height: 24px;
-  --sidebar-width: 240px;
-  --context-panel-width: 280px;
+    /* Semantic */
+    --tag-bg: rgba(139, 124, 246, 0.12);
+    --tag-text: #a89cf8;
+    --link-color: #7ca8f6;
+    --link-broken: #e87474;
 
-  /* Transitions */
-  --transition-fast: 120ms ease;
-  --transition-normal: 200ms ease;
+    /* Layout dimensions */
+    --titlebar-height: 38px;
+    --tabbar-height: 36px;
+    --statusbar-height: 24px;
+    --sidebar-width: 240px;
+    --context-panel-width: 280px;
 
-  /* Radius */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+    /* Transitions */
+    --transition-fast: 120ms ease;
+    --transition-normal: 200ms ease;
 
-  /* Directory accent colors */
-  --dir-color-1: #8b7cf6;
-  --dir-color-2: #f67c7c;
-  --dir-color-3: #7cf6b8;
-  --dir-color-4: #f6d47c;
-  --dir-color-5: #7cb8f6;
+    /* Radius */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+
+    /* Directory accent colors */
+    --dir-color-1: #8b7cf6;
+    --dir-color-2: #f67c7c;
+    --dir-color-3: #7cf6b8;
+    --dir-color-4: #f6d47c;
+    --dir-color-5: #7cb8f6;
+  }
+
+  :root[data-theme="light"] {
+    --bg-base: #ffffff;
+    --bg-surface: #f5f5f7;
+    --bg-elevated: #eeeef0;
+    --bg-hover: #e6e6ea;
+    --bg-active: #dddde2;
+    --text-primary: #1d1d1f;
+    --text-secondary: #6e6e73;
+    --text-tertiary: #9a9aa0;
+    --text-accent: #6b5ce7;
+    --border-subtle: #e5e5ea;
+    --border-default: #d2d2d7;
+    --border-strong: #c6c6cc;
+    --accent: #6b5ce7;
+    --accent-hover: #7d6ff0;
+    --accent-muted: rgba(107, 92, 231, 0.12);
+    --status-modified: #d4851a;
+    --status-error: #d32f2f;
+    --status-success: #2e7d32;
+    --tag-bg: rgba(107, 92, 231, 0.08);
+    --tag-text: #6b5ce7;
+    --link-color: #3366cc;
+    --link-broken: #d32f2f;
+  }
+
+  :root[data-theme="warm"] {
+    --bg-base: #1c1917;
+    --bg-surface: #221f1c;
+    --bg-elevated: #292523;
+    --bg-hover: #332e2b;
+    --bg-active: #3d3733;
+    --text-primary: #ede8e3;
+    --text-secondary: #a8a09a;
+    --text-tertiary: #6b635d;
+    --text-accent: #d4a574;
+    --border-subtle: #2a2522;
+    --border-default: #38322e;
+    --border-strong: #483f3a;
+    --accent: #d4a574;
+    --accent-hover: #deb88a;
+    --accent-muted: rgba(212, 165, 116, 0.15);
+    --status-modified: #e8a44a;
+    --status-error: #e85454;
+    --status-success: #4ae88a;
+    --tag-bg: rgba(212, 165, 116, 0.12);
+    --tag-text: #d4a574;
+    --link-color: #7eb8d0;
+    --link-broken: #e87474;
+  }
 }

@@ -97,14 +97,45 @@ pub fn read_file(path: String, state: State<AppState>) -> Result<String, String>
     let file_path = PathBuf::from(&path);
     validate_path(&file_path, &state)?;
 
-    std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read file: {}", e))
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // Record mtime so write_file can detect external modifications
+    if let Ok(meta) = std::fs::metadata(&file_path) {
+        if let Ok(mtime) = meta.modified() {
+            let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
+            mtimes.insert(path.clone(), mtime);
+        }
+    }
+
+    Ok(content)
 }
 
 #[tauri::command]
 pub fn write_file(path: String, content: String, state: State<AppState>) -> Result<(), String> {
     let target = PathBuf::from(&path);
     validate_path(&target, &state)?;
+
+    // No-op write optimization: skip write if content unchanged (preserves mtime, avoids watcher events)
+    if let Ok(existing) = std::fs::read_to_string(&target) {
+        if existing == content {
+            return Ok(());
+        }
+    }
+
+    // mtime check: detect external modifications since last read_file call
+    {
+        let mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
+        if let Some(&last_read) = mtimes.get(&path) {
+            if let Ok(meta) = std::fs::metadata(&target) {
+                if let Ok(current_mtime) = meta.modified() {
+                    if current_mtime != last_read {
+                        return Err("File was modified externally. Reload before saving.".to_string());
+                    }
+                }
+            }
+        }
+    }
 
     let dir = target.parent().ok_or("Invalid file path")?;
     let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -126,6 +157,14 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
             let _ = std::fs::remove_file(&temp_path);
             format!("Failed to rename temp file: {}", e)
         })?;
+
+    // Update mtime tracking after successful write
+    if let Ok(meta) = std::fs::metadata(&target) {
+        if let Ok(mtime) = meta.modified() {
+            let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
+            mtimes.insert(path.clone(), mtime);
+        }
+    }
 
     // Reindex immediately so frontmatter/links/tags stay current
     // (the self-write guard suppresses the watcher, so we must reindex here)

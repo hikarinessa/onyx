@@ -16,6 +16,7 @@ interface SessionData {
   collapsedDirs?: string[];
   themeId?: string;
   accordionState?: AccordionState;
+  orphanPaths?: string[];
   timestamp: number;
 }
 
@@ -29,6 +30,7 @@ function getSessionData(): SessionData {
     collapsedDirs: state.collapsedDirs,
     themeId: getActiveThemeId(),
     accordionState: state.accordionState,
+    orphanPaths: state.orphanPaths,
     timestamp: Date.now(),
   };
 }
@@ -119,6 +121,13 @@ export async function restoreSession(): Promise<void> {
   if (data.accordionState) {
     for (const [key, val] of Object.entries(data.accordionState)) {
       state.setAccordionExpanded(key as keyof AccordionState, val);
+    }
+  }
+
+  // Restore orphan paths
+  if (data.orphanPaths && data.orphanPaths.length > 0) {
+    for (const p of data.orphanPaths) {
+      state.addOrphanPath(p);
     }
   }
 
