@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, selectActiveTabPath, selectActiveEditorMode } from "../stores/app";
-import { loadFileIntoCache } from "./Editor";
+import { replaceTabContent } from "./Editor";
 
 export function StatusBar() {
   const activeTabId = useAppStore((s) => s.activeTabId);
@@ -20,7 +20,8 @@ export function StatusBar() {
     if (!saveConflictPath) return;
     try {
       const content = await invoke<string>("read_file", { path: saveConflictPath });
-      loadFileIntoCache(saveConflictPath, content);
+      replaceTabContent(saveConflictPath, content);
+      useAppStore.getState().setModified(saveConflictPath, false);
       useAppStore.getState().setSaveConflictPath(null);
     } catch (err) {
       console.error("Failed to reload file:", err);
