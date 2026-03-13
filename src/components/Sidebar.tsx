@@ -77,7 +77,9 @@ interface TreeNodeProps {
 }
 
 function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion, onFileClick, onContextMenu, onRenameSubmit, onRenameCancel }: TreeNodeProps) {
-  const [expanded, setExpanded] = useState(false);
+  const expandedSubdirs = useAppStore((s) => s.expandedSubdirs);
+  const toggleSubdirExpanded = useAppStore((s) => s.toggleSubdirExpanded);
+  const expanded = entry.is_dir && expandedSubdirs.includes(entry.path);
   const [children, setChildren] = useState<DirEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -89,6 +91,15 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
         .catch(() => { setChildren([]); setLoaded(false); });
     }
   }, [fileTreeVersion]); // eslint-disable-line -- only re-fetch on version bump
+
+  // Load children when first expanded (from persisted state or user click)
+  useEffect(() => {
+    if (expanded && !loaded && entry.is_dir) {
+      invoke<DirEntry[]>("list_directory", { path: entry.path })
+        .then((entries) => { setChildren(entries); setLoaded(true); })
+        .catch(() => {});
+    }
+  }, [expanded, loaded, entry.is_dir, entry.path]);
 
   const toggle = async (e: React.MouseEvent) => {
     if (!entry.is_dir) {
@@ -107,7 +118,7 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
         console.error("Failed to list directory:", err);
       }
     }
-    setExpanded(!expanded);
+    toggleSubdirExpanded(entry.path);
   };
 
   const isActive = entry.path === activeFilePath;

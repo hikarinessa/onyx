@@ -70,20 +70,29 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
   const today = useToday();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
-  const [datesWithNotes, setDatesWithNotes] = useState<Set<number>>(new Set());
+  // Note indicators keyed by "YYYY-MM" → Set of day numbers
+  const [notesByMonth, setNotesByMonth] = useState<Map<string, Set<number>>>(new Map());
   const [weeksWithNotes, setWeeksWithNotes] = useState<Set<string>>(new Set());
 
   const fetchNoteIndicators = useCallback(async () => {
-    // Fetch daily note indicators
-    try {
-      const days = await invoke<number[]>("get_dates_with_notes", {
-        year: viewYear,
-        month: viewMonth + 1,
-      });
-      setDatesWithNotes(new Set(days));
-    } catch {
-      setDatesWithNotes(new Set());
-    }
+    // Fetch daily note indicators for current month + adjacent months (visible in grid)
+    const monthsToFetch: { year: number; month: number }[] = [
+      { year: viewMonth === 0 ? viewYear - 1 : viewYear, month: viewMonth === 0 ? 11 : viewMonth - 1 },
+      { year: viewYear, month: viewMonth },
+      { year: viewMonth === 11 ? viewYear + 1 : viewYear, month: viewMonth === 11 ? 0 : viewMonth + 1 },
+    ];
+    const newMap = new Map<string, Set<number>>();
+    await Promise.all(
+      monthsToFetch.map(async ({ year, month }) => {
+        try {
+          const days = await invoke<number[]>("get_dates_with_notes", { year, month: month + 1 });
+          newMap.set(`${year}-${month}`, new Set(days));
+        } catch {
+          newMap.set(`${year}-${month}`, new Set());
+        }
+      })
+    );
+    setNotesByMonth(newMap);
 
     // Compute visible week strings and fetch weekly note indicators
     try {
@@ -222,7 +231,8 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
               {week.map((cell, ci) => {
                 const cellDate = new Date(cell.year, cell.month, cell.day);
                 const isToday = isSameDay(cellDate, today);
-                const hasNote = cell.isCurrentMonth && datesWithNotes.has(cell.day);
+                const monthKey = `${cell.year}-${cell.month}`;
+                const hasNote = notesByMonth.get(monthKey)?.has(cell.day) ?? false;
                 const isPast = cell.isCurrentMonth && cellDate < today && !isToday;
                 const classes = [
                   "calendar-day",

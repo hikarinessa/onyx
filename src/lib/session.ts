@@ -14,6 +14,7 @@ interface SessionData {
   sidebarVisible: boolean;
   contextPanelVisible: boolean;
   collapsedDirs?: string[];
+  expandedSubdirs?: string[];
   themeId?: string;
   accordionState?: AccordionState;
   orphanPaths?: string[];
@@ -28,6 +29,7 @@ function getSessionData(): SessionData {
     sidebarVisible: state.sidebarVisible,
     contextPanelVisible: state.contextPanelVisible,
     collapsedDirs: state.collapsedDirs,
+    expandedSubdirs: state.expandedSubdirs,
     themeId: getActiveThemeId(),
     accordionState: state.accordionState,
     orphanPaths: state.orphanPaths,
@@ -114,6 +116,13 @@ export async function restoreSession(): Promise<void> {
   if (data.collapsedDirs && data.collapsedDirs.length > 0) {
     for (const dirId of data.collapsedDirs) {
       state.toggleDirCollapsed(dirId);
+    }
+  }
+
+  // Restore expanded subdirectories
+  if (data.expandedSubdirs && data.expandedSubdirs.length > 0) {
+    for (const path of data.expandedSubdirs) {
+      state.toggleSubdirExpanded(path);
     }
   }
 
