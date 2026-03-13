@@ -137,11 +137,47 @@ fn extract_frontmatter(content: &str) -> Option<String> {
     serde_json::to_string(&value).ok()
 }
 
+/// Check if a line is inside a fenced code block.
+/// Returns an iterator of (line_idx, line, in_code_block) tuples, skipping frontmatter.
+fn lines_outside_code_blocks(content: &str) -> Vec<(usize, &str, bool)> {
+    let mut result = Vec::new();
+    let mut in_code_block = false;
+    let mut in_frontmatter = false;
+    let mut fm_started = false;
+
+    for (line_idx, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+
+        // Track frontmatter (only at start of file)
+        if line_idx == 0 && trimmed == "---" {
+            fm_started = true;
+            in_frontmatter = true;
+            continue;
+        }
+        if in_frontmatter && fm_started && trimmed == "---" {
+            in_frontmatter = false;
+            continue;
+        }
+        if in_frontmatter { continue; }
+
+        // Track code fences
+        if trimmed.starts_with("```") {
+            in_code_block = !in_code_block;
+            continue;
+        }
+
+        result.push((line_idx, line, in_code_block));
+    }
+
+    result
+}
+
 /// Extract wikilinks [[target]] from content, with line numbers and context
 fn extract_wikilinks(content: &str) -> Vec<LinkRecord> {
     let mut links = Vec::new();
 
-    for (line_idx, line) in content.lines().enumerate() {
+    for (line_idx, line, in_code_block) in lines_outside_code_blocks(content) {
+        if in_code_block { continue; }
         for cap in RE_WIKILINK.captures_iter(line) {
             let target = cap.get(1).unwrap().as_str();
 
@@ -171,7 +207,8 @@ fn extract_wikilinks(content: &str) -> Vec<LinkRecord> {
 fn extract_tags(content: &str) -> Vec<String> {
     let mut tags: Vec<String> = Vec::new();
 
-    for line in content.lines() {
+    for (_, line, in_code_block) in lines_outside_code_blocks(content) {
+        if in_code_block { continue; }
         for cap in RE_TAG.captures_iter(line) {
             let tag = cap.get(1).unwrap().as_str().to_string();
             if !tags.contains(&tag) {

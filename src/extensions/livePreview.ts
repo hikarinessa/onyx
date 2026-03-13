@@ -152,20 +152,21 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult): Decorat
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
 
-      // Skip the focus line — show raw markdown there
-      if (i === cursorLine) continue;
-
       const text = line.text;
 
       // Skip frontmatter
       if (fmEnd > 0 && i <= fmEnd) continue;
 
-      // Track code blocks
+      // Track code blocks (must run even on cursor line to keep state correct)
       if (text.trimStart().startsWith("```")) {
         inCodeBlock = !inCodeBlock;
+        if (i === cursorLine) continue;
         continue;
       }
       if (inCodeBlock) continue;
+
+      // Skip the focus line — show raw markdown there
+      if (i === cursorLine) continue;
 
       // ── Headings ──
       const headingMatch = text.match(HEADING_RE);
@@ -206,6 +207,12 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult): Decorat
             line.to,
             DECO_CHECKED
           );
+        }
+        // Process inline decorations on text after the checkbox marker
+        const afterCb = text.slice(cbMatch[0].length);
+        if (afterCb.length > 0) {
+          const cbContentLine = { from: line.from + cbMatch[0].length, to: line.to };
+          addInlineDecorations(builder, cbContentLine, afterCb);
         }
         continue;
       }
@@ -325,19 +332,31 @@ const previewTheme = EditorView.theme({
     fontWeight: "600",
   },
   ".cm-preview-h1": {
-    fontSize: "1.6em",
+    fontSize: "var(--heading-1-size, 1.6em)",
+    color: "var(--heading-1-color, inherit)",
     lineHeight: "1.3",
   },
   ".cm-preview-h2": {
-    fontSize: "1.3em",
+    fontSize: "var(--heading-2-size, 1.3em)",
+    color: "var(--heading-2-color, inherit)",
     lineHeight: "1.3",
   },
   ".cm-preview-h3": {
-    fontSize: "1.1em",
+    fontSize: "var(--heading-3-size, 1.1em)",
+    color: "var(--heading-3-color, inherit)",
     lineHeight: "1.4",
   },
-  ".cm-preview-h4, .cm-preview-h5, .cm-preview-h6": {
-    fontSize: "1em",
+  ".cm-preview-h4": {
+    fontSize: "var(--heading-4-size, 1.05em)",
+    color: "var(--heading-4-color, inherit)",
+  },
+  ".cm-preview-h5": {
+    fontSize: "var(--heading-5-size, 1.0em)",
+    color: "var(--heading-5-color, inherit)",
+  },
+  ".cm-preview-h6": {
+    fontSize: "var(--heading-6-size, 0.9em)",
+    color: "var(--heading-6-color, inherit)",
   },
   ".cm-preview-bold": {
     fontWeight: "700",
@@ -367,13 +386,12 @@ const previewTheme = EditorView.theme({
   ".cm-preview-wikilink": {
     color: "var(--link-color)",
     cursor: "pointer",
-    textDecoration: "none",
-    borderBottom: "1px solid var(--link-color)",
-    paddingBottom: "1px",
+    textDecoration: "var(--link-underline, underline)",
+    textUnderlineOffset: "2px",
   },
   ".cm-preview-tag": {
-    background: "var(--accent-muted)",
-    color: "var(--accent)",
+    background: "var(--tag-bg)",
+    color: "var(--tag-text)",
     borderRadius: "3px",
     padding: "1px 4px",
     fontSize: "0.9em",
