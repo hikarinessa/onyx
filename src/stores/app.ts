@@ -73,9 +73,11 @@ interface AppState {
   // Tab reorder
   reorderTabs: (fromIndex: number, toIndex: number) => void;
 
-  // Collapsed directories
+  // Collapsed root directories (by dir ID) + expanded subdirectories (by path)
   collapsedDirs: string[];
   toggleDirCollapsed: (dirId: string) => void;
+  expandedSubdirs: string[];
+  toggleSubdirExpanded: (path: string) => void;
 
   // Quick open
   quickOpenVisible: boolean;
@@ -291,6 +293,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { collapsedDirs: s.collapsedDirs.filter((d) => d !== dirId) };
     }
     return { collapsedDirs: [...s.collapsedDirs, dirId] };
+  }),
+  expandedSubdirs: [],
+  toggleSubdirExpanded: (path) => set((s) => {
+    const idx = s.expandedSubdirs.indexOf(path);
+    if (idx >= 0) {
+      return { expandedSubdirs: s.expandedSubdirs.filter((d) => d !== path) };
+    }
+    return { expandedSubdirs: [...s.expandedSubdirs, path] };
   }),
 
   quickOpenVisible: false,
