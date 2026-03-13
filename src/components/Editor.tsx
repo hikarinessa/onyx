@@ -26,8 +26,7 @@ import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension, togglePreviewEffect, previewModeField } from "../extensions/livePreview";
 import { openFileInEditor } from "../lib/openFile";
 import { renameFile } from "../lib/fileOps";
-
-const SAVE_DEBOUNCE_MS = 500;
+import { getAutoSaveMs } from "../lib/configBridge";
 
 // ---------------------------------------------------------------------------
 // Module-level caches
@@ -159,7 +158,7 @@ function buildExtensions(): Extension[] {
               }
               console.error("Failed to save:", err);
             }
-          }, SAVE_DEBOUNCE_MS);
+          }, getAutoSaveMs());
         }
       }
     }

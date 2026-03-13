@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { getAvailableThemes, applyTheme, getActiveThemeId } from "../lib/themes";
+import { applyConfig } from "../lib/configBridge";
+import { getAllCommands } from "../lib/commands";
 import {
   getAllBindings,
   setUserOverride,
@@ -55,6 +57,35 @@ function formatMs(ms: number): string {
   return `${ms}ms`;
 }
 
+// ── Debounced config save ──
+
+let configSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingPartial: Record<string, unknown> = {};
+
+function deepMergePartials(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...base };
+  for (const [key, val] of Object.entries(patch)) {
+    if (
+      typeof val === "object" &&
+      val !== null &&
+      !Array.isArray(val) &&
+      typeof result[key] === "object" &&
+      result[key] !== null
+    ) {
+      result[key] = deepMergePartials(
+        result[key] as Record<string, unknown>,
+        val as Record<string, unknown>,
+      );
+    } else {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
 // ── Main component ──
 
 export function Settings() {
@@ -87,8 +118,14 @@ export function Settings() {
 
   const updateConfig = useCallback(
     (partial: Record<string, unknown>) => {
-      invoke("update_config", { json: JSON.stringify(partial) }).catch(console.error);
-      // Optimistic local update
+      // Accumulate partials and debounce the disk write
+      pendingPartial = deepMergePartials(pendingPartial, partial);
+      if (configSaveTimer) clearTimeout(configSaveTimer);
+      configSaveTimer = setTimeout(() => {
+        invoke("update_config", { json: JSON.stringify(pendingPartial) }).catch(console.error);
+        pendingPartial = {};
+      }, 300);
+      // Optimistic local update + apply to live UI
       setConfig((prev) => {
         if (!prev) return prev;
         const next = JSON.parse(JSON.stringify(prev));
@@ -99,6 +136,7 @@ export function Settings() {
             next[key] = val;
           }
         }
+        applyConfig(next);
         return next;
       });
     },
@@ -348,7 +386,7 @@ function EditorSection({
         </select>
       </SettingRow>
 
-      <SettingRow label="Show line numbers">
+      <SettingRow label="Show line numbers" description="Takes effect on restart">
         <Toggle
           checked={config.editor.show_line_numbers}
           onChange={(v) =>
@@ -357,7 +395,7 @@ function EditorSection({
         />
       </SettingRow>
 
-      <SettingRow label="Tab size">
+      <SettingRow label="Tab size" description="Takes effect on restart">
         <select
           className="settings-select"
           value={config.editor.tab_size}
@@ -518,6 +556,14 @@ function KeybindingsSection() {
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
   const captureRef = useRef<HTMLDivElement>(null);
 
+  const commandLabels = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const cmd of getAllCommands()) {
+      map.set(cmd.id, cmd.label);
+    }
+    return map;
+  }, []);
+
   useEffect(() => {
     setBindings(getAllBindings());
     // Load user overrides from disk
@@ -532,11 +578,15 @@ function KeybindingsSection() {
   }, []);
 
   const filtered = search.trim()
-    ? bindings.filter(
-        (b) =>
-          b.id.toLowerCase().includes(search.toLowerCase()) ||
-          b.key.toLowerCase().includes(search.toLowerCase())
-      )
+    ? bindings.filter((b) => {
+        const label = commandLabels.get(b.id) ?? b.id;
+        const q = search.toLowerCase();
+        return (
+          b.id.toLowerCase().includes(q) ||
+          label.toLowerCase().includes(q) ||
+          b.key.toLowerCase().includes(q)
+        );
+      })
     : bindings;
 
   const saveOverrides = useCallback(() => {
@@ -638,7 +688,7 @@ function KeybindingsSection() {
           return (
             <div key={b.id} className="settings-keybind-row">
               <span className="settings-keybind-col-cmd" title={b.id}>
-                {b.id}
+                {commandLabels.get(b.id) ?? b.id}
               </span>
               <span className="settings-keybind-col-cat">
                 {getCategory(b.id)}
