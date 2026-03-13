@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { EditorState, type Extension } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
 import { searchKeymap } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
@@ -15,6 +15,7 @@ import {
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
+import { TabBar } from "./TabBar";
 import { setLiveViewRef, getLiveViewRef, flushSaveForTab, registerViewForTab, unregisterViewForTab } from "../lib/editorBridge";
 import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab } from "../extensions/frontmatter";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
@@ -94,6 +95,11 @@ const onyxTheme = EditorView.theme({
   "&.cm-focused": {
     outline: "none",
   },
+  ".cm-gutters": {
+    background: "var(--bg-surface)",
+    borderRight: "1px solid var(--border-subtle)",
+    color: "var(--text-tertiary)",
+  },
   ".cm-activeLineGutter": {
     background: "transparent",
   },
@@ -163,7 +169,21 @@ function buildExtensions(): Extension[] {
     }
   });
 
+  // Cmd+/ must be intercepted before defaultKeymap (which binds toggleComment)
+  // Use viewTabIdMap to toggle the correct pane's tab, not the global activeTabId
+  const editorModeKeymap = keymap.of([
+    {
+      key: "Mod-/",
+      run: (view) => {
+        const tabId = viewTabIdMap.get(view);
+        if (tabId) useAppStore.getState().toggleEditorMode(tabId);
+        return true;
+      },
+    },
+  ]);
+
   return [
+    editorModeKeymap, // must come before defaultKeymap
     keymap.of([
       ...defaultKeymap,
       ...historyKeymap,
@@ -177,6 +197,7 @@ function buildExtensions(): Extension[] {
     syntaxHighlighting(onyxHighlightStyle),
     codeFolding(),
     foldGutter(),
+    lineNumbers(),
     onyxTheme,
     EditorView.lineWrapping,
     updateListener,
@@ -247,11 +268,23 @@ export function Editor() {
   const viewTabIdRef = useRef<string | null>(null);
   const rightViewTabIdRef = useRef<string | null>(null);
 
-  const activeTabId = useAppStore((s) => s.activeTabId);
   const tabs = useAppStore((s) => s.tabs);
-  const activeTab = tabs.find((t) => t.id === activeTabId);
-  const editorMode = activeTab?.editorMode ?? "source";
   const paneLayout = useAppStore((s) => s.paneLayout);
+  const globalActiveTabId = useAppStore((s) => s.activeTabId);
+
+  // Derive per-pane tab IDs. In single mode, left pane shows activeTabId.
+  const leftActiveTabId = paneLayout.type === "split"
+    ? paneLayout.leftActiveTabId
+    : globalActiveTabId;
+  const rightActiveTabId = paneLayout.type === "split"
+    ? paneLayout.rightActiveTabId
+    : null;
+
+  const leftTab = tabs.find((t) => t.id === leftActiveTabId);
+  const rightTab = tabs.find((t) => t.id === rightActiveTabId);
+
+  const leftEditorMode = leftTab?.editorMode ?? "source";
+  const rightEditorMode = rightTab?.editorMode ?? "source";
 
   // Draggable divider state
   const [dragging, setDragging] = useState(false);
@@ -276,7 +309,10 @@ export function Editor() {
     setFlushSaveHook(flushSaveForTab);
 
     // Wire wikilink follow: resolve via Rust, then open the target file
-    wikilinkFollowRef.current = async (link: string) => {
+    // Normal click → follow in current tab
+    // Cmd+click → newTab
+    // Cmd+Opt+click → split
+    wikilinkFollowRef.current = async (link: string, opts?: { newTab?: boolean; split?: boolean }) => {
       const currentTab = useAppStore.getState().tabs.find(
         (t) => t.id === activeTabIdBox.current
       );
@@ -288,7 +324,19 @@ export function Editor() {
         });
         if (resolved) {
           const name = resolved.split("/").pop() || resolved;
-          await openFileInEditor(resolved, name);
+          if (opts?.split) {
+            // Load content into cache first, then split
+            const content = await invoke<string>("read_file", { path: resolved });
+            const { loadFileIntoCache } = await import("../lib/editorBridge");
+            loadFileIntoCache(resolved, content);
+            useAppStore.getState().splitPane(resolved, name);
+          } else if (opts?.newTab) {
+            // Open in a new tab (don't replace current)
+            await openFileInEditor(resolved, name);
+          } else {
+            // Follow in current tab (replace current tab content)
+            await openFileInEditor(resolved, name);
+          }
         }
       } catch (err) {
         console.error("Failed to resolve wikilink:", err);
@@ -302,35 +350,40 @@ export function Editor() {
     };
   }, []);
 
-  // Create or swap the EditorView when the active tab changes
+  // Create or swap the left EditorView when left tab changes
   useEffect(() => {
-    activeTabIdBox.current = activeTabId;
+    if (!containerRef.current || !leftTab) return;
 
-    if (!containerRef.current || !activeTab) return;
+    // Update activeTabIdBox for the active pane
+    if (paneLayout.type === "single" || paneLayout.activePaneId === "left") {
+      activeTabIdBox.current = leftTab.id;
+    }
 
     // Save current tab state before switching
-    if (viewRef.current && viewTabIdRef.current && viewTabIdRef.current !== activeTab.id) {
+    if (viewRef.current && viewTabIdRef.current && viewTabIdRef.current !== leftTab.id) {
       editorStateCache.set(viewTabIdRef.current, viewRef.current.state);
       scrollCache.set(viewTabIdRef.current, viewRef.current.scrollDOM.scrollTop);
     }
 
     if (viewRef.current) {
-      swapViewToTab(viewRef.current, activeTab.id, activeTab.editorMode);
+      swapViewToTab(viewRef.current, leftTab.id, leftTab.editorMode);
     } else {
-      let state = editorStateCache.get(activeTab.id);
+      let state = editorStateCache.get(leftTab.id);
       if (!state) {
         state = createStateWithExtensions("");
-        editorStateCache.set(activeTab.id, state);
+        editorStateCache.set(leftTab.id, state);
       }
       viewRef.current = new EditorView({
         state,
         parent: containerRef.current,
       });
-      swapViewToTab(viewRef.current, activeTab.id, activeTab.editorMode);
+      swapViewToTab(viewRef.current, leftTab.id, leftTab.editorMode);
     }
 
-    setLiveViewRef(viewRef.current);
-    viewTabIdRef.current = activeTab.id;
+    if (paneLayout.type === "single" || paneLayout.activePaneId === "left") {
+      setLiveViewRef(viewRef.current);
+    }
+    viewTabIdRef.current = leftTab.id;
 
     viewRef.current.focus();
 
@@ -348,7 +401,7 @@ export function Editor() {
     return () => {
       // Don't clear per-tab timers here — they need to fire even after tab switch
     };
-  }, [activeTab?.id, activeTab?.path]); // eslint-disable-line -- CM6 manages its own state
+  }, [leftActiveTabId, leftTab?.path]); // eslint-disable-line -- CM6 manages its own state
 
   // Handle right pane in split mode
   useEffect(() => {
@@ -370,8 +423,8 @@ export function Editor() {
     if (!rightContainerRef.current) return;
 
     const rightTabId = paneLayout.rightActiveTabId;
-    const rightTab = tabs.find((t) => t.id === rightTabId);
-    if (!rightTab) return;
+    const rTab = tabs.find((t) => t.id === rightTabId);
+    if (!rTab) return;
 
     // Save state of previous right tab
     if (rightViewRef.current && rightViewTabIdRef.current && rightViewTabIdRef.current !== rightTabId) {
@@ -380,7 +433,7 @@ export function Editor() {
     }
 
     if (rightViewRef.current) {
-      swapViewToTab(rightViewRef.current, rightTabId, rightTab.editorMode);
+      swapViewToTab(rightViewRef.current, rightTabId, rTab.editorMode);
     } else {
       let state = editorStateCache.get(rightTabId);
       if (!state) {
@@ -391,7 +444,7 @@ export function Editor() {
         state,
         parent: rightContainerRef.current,
       });
-      swapViewToTab(rightViewRef.current, rightTabId, rightTab.editorMode);
+      swapViewToTab(rightViewRef.current, rightTabId, rTab.editorMode);
     }
 
     rightViewTabIdRef.current = rightTabId;
@@ -403,17 +456,29 @@ export function Editor() {
     }
   }, [paneLayout.type, paneLayout.rightActiveTabId, paneLayout.activePaneId]);
 
-  // Sync live preview mode when editorMode changes
+  // Sync live preview mode when editorMode changes for left pane
   useEffect(() => {
     if (!viewRef.current) return;
-    const isPreview = editorMode === "preview";
+    const isPreview = leftEditorMode === "preview";
     const current = viewRef.current.state.field(previewModeField);
     if (current !== isPreview) {
       viewRef.current.dispatch({
         effects: togglePreviewEffect.of(isPreview),
       });
     }
-  }, [editorMode]);
+  }, [leftEditorMode]);
+
+  // Sync live preview mode when editorMode changes for right pane
+  useEffect(() => {
+    if (!rightViewRef.current || paneLayout.type !== "split") return;
+    const isPreview = rightEditorMode === "preview";
+    const current = rightViewRef.current.state.field(previewModeField);
+    if (current !== isPreview) {
+      rightViewRef.current.dispatch({
+        effects: togglePreviewEffect.of(isPreview),
+      });
+    }
+  }, [rightEditorMode, paneLayout.type]);
 
   // Destroy views on unmount
   useEffect(() => {
@@ -524,7 +589,63 @@ export function Editor() {
     }
   }, [paneLayout]);
 
-  if (!activeTab) {
+  // Per-pane tab bar handlers
+  const handleLeftTabActivate = useCallback((tabId: string) => {
+    const store = useAppStore.getState();
+    const layout = { ...store.paneLayout, leftActiveTabId: tabId };
+    // Also set global activeTabId if left pane is active
+    if (store.paneLayout.activePaneId === "left") {
+      store.setActiveTab(tabId);
+    }
+    useAppStore.setState({ paneLayout: layout });
+  }, []);
+
+  const handleRightTabActivate = useCallback((tabId: string) => {
+    const store = useAppStore.getState();
+    const layout = { ...store.paneLayout, rightActiveTabId: tabId };
+    if (store.paneLayout.activePaneId === "right") {
+      store.setActiveTab(tabId);
+    }
+    useAppStore.setState({ paneLayout: layout });
+  }, []);
+
+  const handleLeftTabClose = useCallback((tabId: string) => {
+    // Snapshot + flush first
+    const { snapshotAndFlush } = getSnapshotFlush();
+    snapshotAndFlush(tabId).then(() => {
+      useAppStore.getState().closeTabInPane(tabId, "left");
+    });
+  }, []);
+
+  const handleRightTabClose = useCallback((tabId: string) => {
+    const { snapshotAndFlush } = getSnapshotFlush();
+    snapshotAndFlush(tabId).then(() => {
+      useAppStore.getState().closeTabInPane(tabId, "right");
+    });
+  }, []);
+
+  // Helper to get snapshot+flush logic without circular deps
+  function getSnapshotFlush() {
+    return {
+      snapshotAndFlush: async (id: string) => {
+        if (viewRef.current && viewTabIdRef.current === id) {
+          editorStateCache.set(id, viewRef.current.state);
+          scrollCache.set(id, viewRef.current.scrollDOM.scrollTop);
+        }
+        if (rightViewRef.current && rightViewTabIdRef.current === id) {
+          editorStateCache.set(id, rightViewRef.current.state);
+          scrollCache.set(id, rightViewRef.current.scrollDOM.scrollTop);
+        }
+        await flushSaveForTab(id);
+      },
+    };
+  }
+
+  // Determine editor mode CSS class for each pane
+  const leftModeClass = leftEditorMode === "source" ? "source-mode" : "preview-mode";
+  const rightModeClass = rightEditorMode === "source" ? "source-mode" : "preview-mode";
+
+  if (!leftTab && paneLayout.type !== "split") {
     return (
       <div className="editor-area">
         <div className="editor-empty">Open a file to start editing</div>
@@ -540,7 +661,14 @@ export function Editor() {
           style={{ flexBasis: `${paneLayout.splitRatio * 100}%` }}
           onClick={handleLeftClick}
         >
-          <div className="editor-container" ref={containerRef} />
+          <TabBar
+            paneId="left"
+            tabIds={paneLayout.leftTabs}
+            activeTabId={paneLayout.leftActiveTabId}
+            onActivate={handleLeftTabActivate}
+            onClose={handleLeftTabClose}
+          />
+          <div className={`editor-container ${leftModeClass}`} ref={containerRef} />
         </div>
         <div
           className="editor-divider"
@@ -556,7 +684,14 @@ export function Editor() {
           style={{ flexBasis: `${(1 - paneLayout.splitRatio) * 100}%` }}
           onClick={handleRightClick}
         >
-          <div className="editor-container" ref={rightContainerRef} />
+          <TabBar
+            paneId="right"
+            tabIds={paneLayout.rightTabs}
+            activeTabId={paneLayout.rightActiveTabId}
+            onActivate={handleRightTabActivate}
+            onClose={handleRightTabClose}
+          />
+          <div className={`editor-container ${rightModeClass}`} ref={rightContainerRef} />
         </div>
       </div>
     );
@@ -564,7 +699,7 @@ export function Editor() {
 
   return (
     <div className="editor-area">
-      <div className="editor-container" ref={containerRef} />
+      <div className={`editor-container ${leftModeClass}`} ref={containerRef} />
     </div>
   );
 }

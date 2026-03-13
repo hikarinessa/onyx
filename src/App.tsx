@@ -361,10 +361,12 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const isSplit = useAppStore((s) => s.paneLayout.type === "split");
+
   return (
     <div className="app">
       <Titlebar />
-      <TabBar />
+      <TabBar hidden={isSplit} />
       <div className="main">
         <ErrorBoundary label="sidebar">
           <Sidebar />

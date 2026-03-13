@@ -1,24 +1,45 @@
 import { useState, useRef } from "react";
-import { useAppStore } from "../stores/app";
+import { useAppStore, type PaneId } from "../stores/app";
 
-export function TabBar() {
-  const tabs = useAppStore((s) => s.tabs);
-  const activeTabId = useAppStore((s) => s.activeTabId);
+interface TabBarProps {
+  /** If set, render in per-pane mode with only these tab IDs */
+  paneId?: PaneId;
+  tabIds?: string[];
+  activeTabId?: string | null;
+  onActivate?: (tabId: string) => void;
+  onClose?: (tabId: string) => void;
+  hidden?: boolean;
+}
+
+export function TabBar(props: TabBarProps) {
+  const allTabs = useAppStore((s) => s.tabs);
+  const globalActiveTabId = useAppStore((s) => s.activeTabId);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const closeTab = useAppStore((s) => s.closeTab);
   const reorderTabs = useAppStore((s) => s.reorderTabs);
+
+  const isPaneMode = props.paneId !== undefined;
+  const displayTabs = isPaneMode
+    ? allTabs.filter((t) => props.tabIds?.includes(t.id))
+    : allTabs;
+  const currentActiveId = isPaneMode ? props.activeTabId : globalActiveTabId;
+  const handleActivate = isPaneMode
+    ? (id: string) => props.onActivate?.(id)
+    : (id: string) => setActiveTab(id);
+  const handleClose = isPaneMode
+    ? (id: string) => props.onClose?.(id)
+    : (id: string) => closeTab(id);
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const dragStartRef = useRef<number | null>(null);
 
-  if (tabs.length === 0) return null;
+  if (props.hidden || displayTabs.length === 0) return null;
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     dragStartRef.current = index;
     setDragIndex(index);
     e.dataTransfer.effectAllowed = "move";
-    // Needed for Firefox
     e.dataTransfer.setData("text/plain", String(index));
   };
 
@@ -31,7 +52,7 @@ export function TabBar() {
   const handleDrop = (e: React.DragEvent, toIndex: number) => {
     e.preventDefault();
     const fromIndex = dragStartRef.current;
-    if (fromIndex !== null && fromIndex !== toIndex) {
+    if (fromIndex !== null && fromIndex !== toIndex && !isPaneMode) {
       reorderTabs(fromIndex, toIndex);
     }
     setDragIndex(null);
@@ -46,15 +67,15 @@ export function TabBar() {
   };
 
   return (
-    <div className="tabbar">
-      {tabs.map((tab, i) => (
+    <div className={`tabbar ${isPaneMode ? "tabbar-pane" : ""}`}>
+      {displayTabs.map((tab, i) => (
         <div
           key={tab.id}
-          className={`tab ${tab.id === activeTabId ? "active" : ""} ${
+          className={`tab ${tab.id === currentActiveId ? "active" : ""} ${
             dragIndex === i ? "dragging" : ""
           } ${dropIndex === i && dragIndex !== i ? "drop-target" : ""}`}
-          draggable
-          onClick={() => setActiveTab(tab.id)}
+          draggable={!isPaneMode}
+          onClick={() => handleActivate(tab.id)}
           onDragStart={(e) => handleDragStart(e, i)}
           onDragOver={(e) => handleDragOver(e, i)}
           onDrop={(e) => handleDrop(e, i)}
@@ -62,7 +83,7 @@ export function TabBar() {
           onMouseDown={(e) => {
             if (e.button === 1) {
               e.preventDefault();
-              closeTab(tab.id);
+              handleClose(tab.id);
             }
           }}
         >
@@ -72,7 +93,7 @@ export function TabBar() {
             className="tab-close"
             onClick={(e) => {
               e.stopPropagation();
-              closeTab(tab.id);
+              handleClose(tab.id);
             }}
           >
             ×

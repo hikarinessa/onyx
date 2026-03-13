@@ -133,6 +133,17 @@ export async function restoreSession(): Promise<void> {
     )
   );
 
+  // Restore per-tab editor mode (must happen after tabs are created)
+  const store = useAppStore.getState();
+  for (const tab of data.tabs) {
+    if (tab.editorMode && tab.editorMode !== "source") {
+      const existing = store.tabs.find((t) => t.path === tab.path);
+      if (existing) {
+        store.toggleEditorMode(existing.id);
+      }
+    }
+  }
+
   // Switch to the previously active tab
   if (data.activeTabPath) {
     const existing = useAppStore.getState().tabs.find(

@@ -127,6 +127,7 @@ interface AppState {
   openInPane: (path: string, name: string, paneId: PaneId) => void;
   splitPane: (path: string, name: string) => void;
   closeSplit: () => void;
+  closeTabInPane: (tabId: string, paneId: PaneId) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -352,18 +353,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   splitPane: (path, name) => {
     const s = get();
-    // Ensure tab exists
+    // Build final tabs list atomically (avoid stale snapshot)
     const existing = s.tabs.find((t) => t.path === path);
-    if (!existing) {
-      const tab: Tab = { id: path, path, name, modified: false, editorMode: "source", navBack: [], navForward: [] };
-      set({ tabs: [...s.tabs, tab] });
-    }
+    const updatedTabs = existing
+      ? s.tabs
+      : [...s.tabs, { id: path, path, name, modified: false, editorMode: "source" as EditorMode, navBack: [], navForward: [] }];
 
     const layout = { ...s.paneLayout };
     if (layout.type === "single") {
       // Move current tabs to left pane, open target in right
       layout.type = "split";
-      layout.leftTabs = s.tabs.map((t) => t.id);
+      layout.leftTabs = updatedTabs.filter((t) => t.id !== path).map((t) => t.id);
       layout.leftActiveTabId = s.activeTabId;
       layout.rightTabs = [path];
       layout.rightActiveTabId = path;
@@ -380,7 +380,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       layout.activePaneId = targetPane;
     }
-    set({ paneLayout: layout, activeTabId: path });
+    set({ tabs: updatedTabs, paneLayout: layout, activeTabId: path });
   },
 
   closeSplit: () => {
@@ -397,5 +397,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     layout.rightActiveTabId = null;
     layout.activePaneId = "left";
     set({ paneLayout: layout });
+  },
+
+  closeTabInPane: (tabId, paneId) => {
+    const s = get();
+    const layout = { ...s.paneLayout };
+
+    if (paneId === "left") {
+      layout.leftTabs = layout.leftTabs.filter((id) => id !== tabId);
+      if (layout.leftActiveTabId === tabId) {
+        layout.leftActiveTabId = layout.leftTabs[layout.leftTabs.length - 1] ?? null;
+      }
+    } else {
+      layout.rightTabs = layout.rightTabs.filter((id) => id !== tabId);
+      if (layout.rightActiveTabId === tabId) {
+        layout.rightActiveTabId = layout.rightTabs[layout.rightTabs.length - 1] ?? null;
+      }
+    }
+
+    // If the closed tab's pane is now empty, close the split
+    if (layout.type === "split" && (layout.leftTabs.length === 0 || layout.rightTabs.length === 0)) {
+      const remainingTabs = layout.leftTabs.length > 0 ? layout.leftTabs : layout.rightTabs;
+      const remainingActive = layout.leftTabs.length > 0 ? layout.leftActiveTabId : layout.rightActiveTabId;
+      layout.type = "single";
+      layout.leftTabs = remainingTabs;
+      layout.rightTabs = [];
+      layout.leftActiveTabId = remainingActive;
+      layout.rightActiveTabId = null;
+      layout.activePaneId = "left";
+      set({ paneLayout: layout, activeTabId: remainingActive });
+    } else {
+      // Update activeTabId to reflect current pane's active tab
+      const newActiveTabId = paneId === "left" ? layout.leftActiveTabId : layout.rightActiveTabId;
+      set({ paneLayout: layout, activeTabId: newActiveTabId });
+    }
   },
 }));

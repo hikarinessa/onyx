@@ -16,7 +16,7 @@ import type { Extension } from "@codemirror/state";
  */
 
 /** Inject a follow-link handler from the parent component */
-export const wikilinkFollowRef = { current: null as ((link: string) => void) | null };
+export const wikilinkFollowRef = { current: null as ((link: string, opts?: { newTab?: boolean; split?: boolean }) => void) | null };
 
 const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
 
@@ -86,10 +86,14 @@ const wikilinkDecorations = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations }
 );
 
-/** DOM click handler — Cmd+click on a .cm-wikilink span follows the link */
+/**
+ * DOM click handler for wikilinks:
+ * - Normal click → follow in current tab
+ * - Cmd+click → open in new tab
+ * - Cmd+Opt+click → open in split pane
+ */
 const wikilinkClickHandler = EditorView.domEventHandlers({
   click(event, _view) {
-    if (!event.metaKey) return false;
     const target = event.target as HTMLElement;
     const el =
       target.classList.contains("cm-wikilink")
@@ -99,8 +103,14 @@ const wikilinkClickHandler = EditorView.domEventHandlers({
 
     const text = el.textContent ?? "";
     const linkText = extractLinkText(text);
-    if (linkText && wikilinkFollowRef.current) {
-      event.preventDefault();
+    if (!linkText || !wikilinkFollowRef.current) return false;
+
+    event.preventDefault();
+    if (event.metaKey && event.altKey) {
+      wikilinkFollowRef.current(linkText, { split: true });
+    } else if (event.metaKey) {
+      wikilinkFollowRef.current(linkText, { newTab: true });
+    } else {
       wikilinkFollowRef.current(linkText);
     }
     return true;
