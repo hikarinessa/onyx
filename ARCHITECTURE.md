@@ -1,7 +1,7 @@
 # Onyx — Architecture Document
 
-**Version:** 0.3 (Design Phase)
-**Date:** 2026-03-09
+**Version:** 0.7 (Phase 7 Complete)
+**Date:** 2026-03-13
 
 ---
 
@@ -359,36 +359,43 @@ For the existing Templater `tp.` syntax in your templates: Onyx won't execute it
 
 The editor is CodeMirror 6 with custom extensions layered on:
 
-| Extension | Purpose |
-|-----------|---------|
-| **Wikilink syntax** | Highlight `[[links]]`, autocomplete from file index |
-| **Tag syntax** | Highlight `#tags`, autocomplete from tag index |
-| **Frontmatter** | YAML block detection, fold by default, syntax highlight |
-| **Block awareness** | Detect `---` separators, enable block operations |
-| **Live preview** | Render markdown inline (headings, bold, links, checkboxes) |
-| **Embed preview** | Render `![[note]]` embeds inline (read-only preview) |
-| **URL paste** | When pasting a URL with text selected, create `[text](url)` |
-| **Natural language dates** | `@today`, `@tomorrow`, `@next tuesday` → date links |
-| **Table editing** | Tab/Enter navigation in tables, auto-alignment |
-| **Outliner** | Tab/Shift-Tab to indent/outdent list items, move items up/down |
+| Extension | File | Status | Purpose |
+|-----------|------|--------|---------|
+| **Wikilink syntax** | `wikilinks.ts` | Done | Highlight `[[links]]`, click/Cmd+click follow, autocomplete from file index |
+| **Tag syntax** | `tags.ts` | Done | Highlight `#tags`, viewport-aware, autocomplete from tag index |
+| **Frontmatter** | `frontmatter.ts` | Done | YAML block detection, fold by default, syntax highlight, fold command |
+| **Live preview** | `livePreview.ts` | Done | Viewport-aware inline rendering (headings, bold/italic, checkboxes, wikilinks, strikethrough, highlight) |
+| **Formatting** | `formatting.ts` | Done | Cmd+B bold (`**`), Cmd+I italic (`_`), Cmd+Shift+C code, multi-cursor safe |
+| **Symbol wrap** | `symbolWrap.ts` | Done | Wrap selection with `()`, `[]`, `{}`, `` ` ``, `""`, `''`, `_`, `*`, `=`, `~` on type |
+| **Outliner** | `outliner.ts` | Done | Tab/Shift-Tab indent/outdent, Option+Up/Down move items, Enter/Backspace |
+| **URL paste** | `urlPaste.ts` | Done | When pasting a URL with text selected, create `[text](url)` |
+| **Autocomplete** | `autocomplete.ts` | Done | Wikilink (`[[`) + tag (`#`) autocomplete |
+| **Linting** | — | Planned | Markdown lint rules, autofix on save |
+| **Block awareness** | — | Planned (Phase 8) | Detect `***` separators, enable block operations |
+| **Table editing** | — | Planned (Phase 8) | Tab/Enter navigation in tables, auto-alignment |
+| **Natural language dates** | — | Planned (Phase 10) | `@today`, `@tomorrow`, `@next tuesday` → date links |
+| **Embed preview** | — | Planned | Render `![[note]]` embeds inline (read-only preview) |
 
 ### 6.2 Editor Modes
 
-Two modes, toggled with `Cmd+/`:
+Two modes, toggled with `Cmd+/`. Per-tab, persisted in session. Default: **Preview**.
 
-1. **Live Preview** (default): Markdown is rendered inline. Clicking a heading shows the `#` syntax; moving away renders it. Similar to Obsidian's live preview.
-2. **Source**: Raw markdown with syntax highlighting. No rendering.
+1. **Preview** (default): Markdown is rendered inline via CM6 decorations. The "focus line" (cursor's line) shows raw markdown; all other lines render inline. Similar to Obsidian's live preview.
+2. **Source**: Raw markdown with syntax highlighting. No inline rendering.
 
-No separate "reading" mode. Live preview serves that purpose.
+No separate "reading" mode. Preview serves that purpose.
+
+**Implementation:** `StateField<boolean>` in CM6 controls preview mode. `ViewPlugin` builds decorations only when active. Zustand is the source of truth; CM6 field is a sync target. StatusBar shows clickable mode indicator.
 
 ### 6.3 Formatting
 
 Available via:
-- Keyboard shortcuts (Cmd+B bold, Cmd+I italic, etc.)
-- Context menu on selection
-- Slash commands (`/h1`, `/code`, `/table`, `/divider`)
+- Keyboard shortcuts: `Cmd+B` bold (`**`), `Cmd+I` italic (`_`), `Cmd+Shift+C` inline code
+- Symbol wrap: typing `(`, `[`, `{`, `` ` ``, `"`, `'`, `_`, `*`, `=`, `~` with text selected wraps it
+- Command palette
+- Slash commands (`/h1`, `/code`, `/table`, `/divider`) — planned
 
-No floating toolbar — it adds visual noise. Keyboard-first, with slash commands as the discovery mechanism.
+No floating toolbar — it adds visual noise. Keyboard-first.
 
 ### 6.4 Linting
 
@@ -411,24 +418,23 @@ Auto-fix on save (configurable). Lint status in status bar. No separate lint pan
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  Traffic lights              Tab bar              Actions        │
-│  ● ● ●         [Daily.md] [Mihai.md ●] [+]      ☆  ⚙         │
+│  ● ● ●                     (drag region)                         │
 ├────────────┬─────────────────────────────────────┬───────────────┤
-│            │                                     │  Mar 2026     │
-│  SIDEBAR   │          EDITOR                     │  < TODAY >    │
+│            │  [Daily.md] [Mihai.md ●] [+]        │  Mar 2026     │
+│  SIDEBAR   ├─────────────────────────────────────┤  < TODAY >    │
 │            │                                     │  M T W T F S S│
-│  ▾ Zettel  │  ---                                │  . . . . . 1 2│
-│    ▾ Cal   │  Full Name: Mihai Banulescu         │  3 4 5 6 ⑦ 8 9│
+│  ▾ Zettel  │  Mihai Banulescu       (inline H1)  │  . . . . . 1 2│
+│    ▾ Cal   │                                     │  3 4 5 6 ⑦ 8 9│
 │      2026/ │  ---                                │  ...          │
-│    ▸ Notes │  # Log                              │               │
-│    ▸ Peop  │  - Good to Great - book...          │  Backlinks    │
-│    ▸ Work  │                                     │  ─────────    │
-│            │  ---                                │  2024-10-02   │
+│    ▸ Notes │  Full Name: Mihai Banulescu         │               │
+│    ▸ Peop  │  ---                                │  Backlinks    │
+│    ▸ Work  │  # Log                              │  ─────────    │
+│            │  - Good to Great - book...          │  2024-10-02   │
 │  ▾ Work    │                                     │    "Call with │
-│    ▸ docs  │  Falcon                             │     Mihai..." │
-│            │  Open space...                      │               │
-│  ────────  │                                     │  Properties   │
-│  ☆ Starred │                                     │  ─────────    │
+│    ▸ docs  │  ---                                │     Mihai..." │
+│            │                                     │               │
+│  ────────  │  Falcon                             │  Properties   │
+│  ☆ Starred │  Open space...                      │  ─────────    │
 │  - Daily   │                                     │  Type: Person │
 │  - Mihai   │                                     │  Full Name:   │
 │            │                                     │  [Mihai B.  ] │
@@ -437,9 +443,15 @@ Auto-fix on save (configurable). Lint status in status bar. No separate lint pan
 │            │                                     │  ─────────    │
 │            │                                     │  Log          │
 ├────────────┴─────────────────────────────────────┴───────────────┤
-│  Ln 12, Col 4  │  324 words  │  Live Preview  │  ✓ No issues   │
+│  Ln 12, Col 4  │  324 words  │  Preview  │  ✓  │  path/Mihai.md│
 └──────────────────────────────────────────────────────────────────┘
 ```
+
+**Key layout decisions:**
+- Sidebar and context panel span full window height (top to bottom)
+- Tab bar is scoped to the editor column, not the full window width
+- Inline title (editable H1) sits between tab bar and editor content
+- Titlebar is a minimal drag region with traffic lights only
 
 ### Sidebar (left, toggle with `Cmd+Option+[`)
 
@@ -752,23 +764,38 @@ Claude responds with suggestions and can onyx_insert_at_cursor to add links
 
 ### Global shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Cmd+O` | Quick open (fuzzy file search across all registered dirs) |
-| `Cmd+N` | New note in current directory |
-| `Cmd+S` | Save current tab |
-| `Cmd+W` | Close current tab |
-| `Cmd+Option+[` | Toggle sidebar (left) |
-| `Cmd+Option+]` | Toggle context panel (right) |
-| `Cmd+P` | Command palette |
-| `Cmd+/` | Toggle source / live preview |
-| `Cmd+Shift+D` | Open today's daily note |
-| `Cmd+F` | Find in current file |
-| `Cmd+Shift+F` | Search across all files |
-| `Cmd+Enter` | Follow link under cursor |
-| `Cmd+[` / `Cmd+]` | Navigate back / forward (link history) |
-| `Cmd+Shift+N` | New note from template |
-| `Cmd+K` | Insert wikilink |
+| Shortcut | Action | Status |
+|----------|--------|--------|
+| `Cmd+O` | Quick open (fuzzy file search across all registered dirs) | Done |
+| `Cmd+N` | New note in current directory | Done |
+| `Cmd+S` | Save current tab | Done |
+| `Cmd+W` | Close current tab | Done |
+| `Cmd+Option+[` | Toggle sidebar (left) | Done |
+| `Cmd+Option+]` | Toggle context panel (right) | Done |
+| `Cmd+P` | Command palette | Done |
+| `Cmd+/` | Toggle source / live preview | Done |
+| `Cmd+Shift+D` | Open today's daily note | Done |
+| `Cmd+F` | Find in current file | Done |
+| `Cmd+Enter` | Follow link under cursor | Done |
+| `Cmd+[` / `Cmd+]` | Navigate back / forward (per-tab history) | Done |
+| Mouse 3/4 | Navigate back / forward (per-tab history) | Done |
+| `Cmd+B` | Bold (`**selection**`) | Done |
+| `Cmd+I` | Italic (`_selection_`) | Done |
+| `Cmd+Shift+C` | Inline code (`` `selection` ``) | Done |
+| `Option+Up/Down` | Move list item up/down (macOS) | Done |
+| `Tab` / `Shift+Tab` | Indent/outdent list item | Done |
+| `Cmd+Shift+F` | Search across all files | Planned |
+| `Cmd+Shift+N` | New note from template | Planned |
+| `Cmd+K` | Insert wikilink | Done |
+
+### Click behavior
+
+| Action | Behavior |
+|--------|----------|
+| Click file in sidebar | Replace current tab |
+| Cmd+click file in sidebar | Open in new tab |
+| Click wikilink (preview mode) | Replace current tab |
+| Cmd+click wikilink (preview or source) | Open in new tab |
 
 ### Command Palette (`Cmd+P`)
 
@@ -972,6 +999,14 @@ Decisions made during the design phase:
 2. **Canvas editing** — Read-only in v1. Basic editing (move/add cards) is a Tier 3 goal, only if read-only proves useful enough to warrant investment.
 3. **Search scope** — Ripgrep-style direct file search via Rust. No full-text index in SQLite. Simpler, no stale index risk, fast enough for vaults under 50k files. If performance becomes an issue, full-text indexing can be added later without changing the UX.
 4. **Periodic note navigation** — Calendar widget in the context panel is the sole navigation mechanism. No prev/next buttons in the editor header — keeps the editor chrome minimal.
+5. **Live preview architecture** — CM6 `ViewPlugin` + `StateField<boolean>`. Viewport-aware from day one. "Focus line" (cursor's line) always shows raw markdown; all other lines render inline. Decorations rebuilt on `docChanged || viewportChanged || selectionSet || mode toggle`. Pre-scan caches frontmatter end and code-block states per visible range.
+6. **Inline title** — Editable `<input>` above the editor displaying the filename without `.md`. Renaming commits on blur/Enter. Strips file-unsafe characters (`/`, `\0`, `:`). Reads active tab from Zustand store directly (not React closure) to avoid stale-closure races during rename.
+7. **Default editor mode** — Preview, not source. New tabs open in preview mode. Session restore toggles tabs saved as "source".
+8. **Click semantics** — Click replaces current tab (both sidebar and wikilinks). Cmd+click opens in new tab. Matches browser link behavior. Wikilinks in preview mode use `mousedown` (not `click`) to fire before CM6 moves cursor and removes focus-line decorations.
+9. **Navigation history** — Per-tab back/forward stacks (50-entry cap). Mouse buttons 3/4 (back/forward) supported via `auxclick` handler. `Cmd+[`/`Cmd+]` keyboard shortcuts. `replaceActiveTab` preserves nav history from the replaced tab.
+10. **Italic marker** — `_` (underscore), not `*` (asterisk). Avoids ambiguity with bold (`**`) and bold-italic (`***`).
+11. **CM6 keymap priority** — Custom keymaps (`formattingKeymap`, `outlinerKeymap`) are registered in separate `keymap.of()` calls placed before `defaultKeymap` in the extensions array. This ensures they take priority over CM6's defaults and WebKit's text system.
+12. **WKWebView keyboard constraints** — Tauri uses WebKit (not Chromium). Some shortcuts like `Cmd+Shift+Arrow` are consumed by the Cocoa text system before reaching JS. Outliner uses `Alt-ArrowUp/Down` on macOS via CM6's `mac` property on keybindings.
 
 ---
 
@@ -1002,7 +1037,7 @@ Decisions made during the design phase:
 
 10. **Bookmark desync on reindex.** If a file is deleted and re-created, `ON DELETE CASCADE` removes old bookmarks. The UI won't update until the user switches tabs. Consider listening for `fs:change` events to refresh bookmark state.
 
-11. **Full-doc decoration scan.** Wikilink and tag extensions iterate every line on every `docChanged`. Fine for <500 line notes, but should switch to viewport-aware iteration before adding live preview decorations. **Must be addressed before or during Phase 7 (live preview).**
+11. ~~**Full-doc decoration scan.**~~ Fixed Phase 7: wikilinks, tags, and live preview all use viewport-aware iteration (`view.visibleRanges`). Pre-scan from line 1 to first visible line for code block state tracking.
 
 12. **Bookmark toggle on unindexed file fails silently.** `toggle_bookmark` returns "File not indexed" error which the frontend catches but doesn't surface. Needs a toast/notification system before this can be user-visible.
 

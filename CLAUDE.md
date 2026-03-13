@@ -11,83 +11,86 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 
 ## Current Status
 
-- **Phase 1 (Skeleton):** Complete
-- **Phase 2 (Core Editor):** Complete
-- **Phase 3 (Links & Connections):** Complete
-- **Phase 4 (Typed Objects & Properties):** Complete
-- **Phase 4.5 (File Operations & Cache Integrity):** Complete
-- **Phase 4.6 (Hardening):** Complete
-- **Phase 5 (Periodic Notes & Calendar):** Complete
-- **Phase 5.X (Backfill):** Complete
-- **Phase 6 (Command Palette, Theming & Editor Polish):** Complete
-- **Phase 7 (Live Preview & Split Panes):** Planned
+- **Phase 1–6:** Complete (skeleton → core editor → links → typed objects → file ops → hardening → periodic notes → backfill → command palette & theming)
+- **Phase 7 (Live Preview & Navigation):** Complete
 - **Phase 8 (Blocks, Tables & Power Editing):** Planned
 - **Phase 9 (MCP Server):** Planned
 - **Phase 10 (Tier 2 Features):** Planned
+
+**Current version:** 0.7.0
 
 ## Project Structure
 
 ```
 src/                          # Frontend (React + TypeScript)
 ├── main.tsx                  #   12 lines — React entry point
-├── App.tsx                   #  210 lines — Root component, shortcuts, command registration, menu events
+├── App.tsx                   #  324 lines — Root component, shortcuts, command registration, menu events
 ├── stores/
-│   └── app.ts                #  200 lines — Zustand store (tabs, panels, cursor, themes, commands)
+│   └── app.ts                #  309 lines — Zustand store (tabs, panes, nav stack, panels, commands)
 ├── components/
-│   ├── Titlebar.tsx          #   25 lines — Custom titlebar with traffic lights spacer
-│   ├── TabBar.tsx            #   80 lines — Tab strip with drag-to-reorder
-│   ├── Sidebar.tsx           #  460 lines — File tree, collapsible dirs, inline rename
-│   ├── BookmarkStrip.tsx     #   80 lines — Bookmarks section pinned at sidebar bottom
-│   ├── SidebarContextMenu.tsx#  130 lines — Right-click context menu for file tree
-│   ├── ErrorBoundary.tsx     #   35 lines — React error boundary
-│   ├── Editor.tsx            #  460 lines — CM6 editor with all extensions
-│   ├── ContextPanel.tsx      #  590 lines — Calendar, backlinks, properties, recent docs
-│   ├── Calendar.tsx          #  130 lines — Month-grid calendar widget
-│   ├── StatusBar.tsx         #   40 lines — Cursor, word count, char count, file path
-│   ├── QuickOpen.tsx         #  256 lines — Cmd+O fuzzy search + type: prefix queries
-│   └── CommandPalette.tsx    #  120 lines — Cmd+P fuzzy command search
+│   ├── Titlebar.tsx          #    8 lines — Custom titlebar with traffic lights spacer
+│   ├── TabBar.tsx            #   84 lines — Tab strip with drag-to-reorder
+│   ├── Sidebar.tsx           #  458 lines — File tree, collapsible dirs, inline rename
+│   ├── BookmarkStrip.tsx     #  106 lines — Bookmarks section pinned at sidebar bottom
+│   ├── SidebarContextMenu.tsx#  120 lines — Right-click context menu for file tree
+│   ├── ErrorBoundary.tsx     #   50 lines — React error boundary
+│   ├── Editor.tsx            #  566 lines — CM6 editor, inline title, live preview sync
+│   ├── ContextPanel.tsx      #  611 lines — Calendar, backlinks, properties, outline, recent docs
+│   ├── Calendar.tsx          #  178 lines — Month-grid calendar widget
+│   ├── StatusBar.tsx         #   59 lines — Cursor, word count, lint status, editor mode, file path
+│   ├── QuickOpen.tsx         #  264 lines — Cmd+O fuzzy search + type: prefix queries
+│   └── CommandPalette.tsx    #  123 lines — Cmd+P fuzzy command search
 ├── extensions/
-│   ├── frontmatter.ts        #  136 lines — CM6: frontmatter detection, styling, auto-fold
-│   ├── wikilinks.ts          #  136 lines — CM6: wikilink syntax highlighting, Cmd+Enter follow
-│   ├── tags.ts               #   98 lines — CM6: #tag syntax highlighting
-│   ├── formatting.ts         #   70 lines — CM6: Cmd+B/I/Shift+C toggle wrap
-│   ├── outliner.ts           #  130 lines — CM6: list item indent/outdent/move/enter
+│   ├── frontmatter.ts        #  153 lines — CM6: frontmatter detection, styling, auto-fold, fold command
+│   ├── wikilinks.ts          #  157 lines — CM6: wikilink syntax highlighting, click/Cmd+click follow
+│   ├── tags.ts               #  109 lines — CM6: #tag syntax highlighting (viewport-aware)
+│   ├── formatting.ts         #  118 lines — CM6: Cmd+B/I/Shift+C toggle wrap (multi-cursor safe)
+│   ├── outliner.ts           #  160 lines — CM6: list item indent/outdent/move/enter
 │   ├── urlPaste.ts           #   30 lines — CM6: URL paste → markdown link
-│   └── autocomplete.ts       #   95 lines — CM6: wikilink + tag autocomplete
+│   ├── autocomplete.ts       #   96 lines — CM6: wikilink + tag autocomplete
+│   ├── livePreview.ts        #  387 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, strikethrough, highlight)
+│   ├── symbolWrap.ts         #   61 lines — CM6: wrap selection with brackets/quotes/markdown on type
+│   └── linting.ts            #  (planned) — CM6: markdown lint rules + autofix on save
 ├── lib/
-│   ├── fileOps.ts            #  130 lines — Centralized file mutations (with link warnings)
-│   ├── openFile.ts           #   22 lines — Shared open-file-in-editor utility
-│   ├── periodicNotes.ts      #   32 lines — Create/open periodic notes utility
+│   ├── fileOps.ts            #  155 lines — Centralized file mutations (with link warnings)
+│   ├── openFile.ts           #   63 lines — Shared open-file-in-editor utility (with nav stack)
+│   ├── periodicNotes.ts      #   31 lines — Create/open periodic notes utility
 │   ├── recentDocs.ts         #   50 lines — Recent documents tracking (localStorage ring buffer)
-│   ├── session.ts            #   85 lines — Tab/panel state persistence (~/.onyx/session.json via Rust)
-│   ├── commands.ts           #   45 lines — Command registry for palette + menu bar
-│   └── themes.ts             #  120 lines — Theme system (dark/light/warm)
+│   ├── session.ts            #  176 lines — Tab/panel/pane state persistence (~/.onyx/session.json)
+│   ├── commands.ts           #   33 lines — Command registry for palette + menu bar
+│   └── themes.ts             #  138 lines — Theme system (dark/light/warm)
 └── styles/
     ├── reset.css             #   56 lines — CSS reset
     ├── theme.css             #   63 lines — CSS custom properties (dark theme)
-    └── layout.css            #  779 lines — All component styles
+    └── layout.css            # 1165 lines — All component styles
 
 src-tauri/                    # Backend (Rust)
 ├── Cargo.toml                # Dependencies
 ├── tauri.conf.json           # Window config, dev URL, CSP
 └── src/
     ├── main.rs               #    6 lines — Entry point
-    ├── lib.rs                #  185 lines — Tauri setup, native menu bar (app+file+edit+view+go+format+window+help), AppState, plugins
-    ├── commands.rs           #  540 lines — Tauri commands (file ops, search, bookmarks, autocomplete)
-    ├── db.rs                 #  550 lines — SQLite (WAL, files/links/tags/bookmarks + tag/title queries)
+    ├── lib.rs                #  208 lines — Tauri setup, native menu bar, AppState, plugins
+    ├── commands.rs           #  838 lines — Tauri commands (file ops, search, bookmarks, autocomplete)
+    ├── db.rs                 #  555 lines — SQLite (WAL, files/links/tags/bookmarks + tag/title queries)
     ├── dirs.rs               #  117 lines — Directory registration (~/.onyx/directories.json)
-    ├── indexer.rs            #  224 lines — Background indexer (frontmatter, wikilinks, tags)
-    ├── watcher.rs            #  173 lines — File watcher with debounced reindex
+    ├── indexer.rs            #  235 lines — Background indexer (frontmatter, wikilinks, tags)
+    ├── watcher.rs            #  195 lines — File watcher with debounced reindex
     ├── object_types.rs       #  135 lines — Type registry (~/.onyx/object-types.json)
-    └── periodic.rs           #  320 lines — Periodic notes config, template engine, date formatting
+    ├── periodic.rs           #  451 lines — Periodic notes config, template engine, date formatting
+    └── plugins/
+        └── mac_rounded_corners.rs # 217 lines — macOS window corner radius fix
 ```
 
-**Total:** ~7,200 lines (3,700 TS/TSX + 2,100 Rust + 1,100 CSS)
+**Total:** ~9,400 lines (5,200 TS/TSX + 3,000 Rust + 1,300 CSS)
 
 ## Architecture Essentials
 
-- **State split:** Zustand owns UI state (tabs, panels). CM6 owns editor state (content, undo, cursor). Rust owns file data + index.
+- **State split:** Zustand owns UI state (tabs, panels, nav stacks). CM6 owns editor state (content, undo, cursor). Rust owns file data + index.
 - **Editor pattern:** Single persistent `EditorView`, state swapped via `setState()` on tab switch. `EditorState` cached per tab (preserves undo/cursor/scroll). Module-level `activeTabIdBox` object for cross-closure communication.
+- **Inline title:** Editable `<input>` above the editor showing the filename (without `.md`). Renaming commits on blur/Enter via `fileOps.renameFile`. Strips file-unsafe characters (`/`, `\0`, `:`).
+- **Live preview:** CM6 `ViewPlugin` + `StateField<boolean>`. Viewport-aware decorations. "Focus line" shows raw markdown; all other lines render inline. Elements: headings, bold/italic/bold-italic, strikethrough, highlight, checkboxes (interactive), wikilinks (clickable).
+- **Editor modes:** "preview" (default) renders markdown inline. "source" shows raw markdown. Per-tab, persisted in session. Toggled via `Cmd+/`.
+- **Navigation:** Per-tab back/forward stack (50-entry cap). Click replaces current tab; Cmd+click opens new tab. Mouse buttons 3/4 navigate history.
 - **File mutations:** All through `src/lib/fileOps.ts` which owns the full sequence: disk → DB → tabs → editor caches → tree refresh. Components never call `invoke("rename_file")` etc. directly.
 - **File I/O:** All through Rust commands. Atomic writes (temp + rename). Auto-save 500ms debounce.
 - **Indexing:** Background thread walks directories, extracts frontmatter/wikilinks/tags, stores in SQLite. File watcher triggers 3s debounced reindex.
@@ -175,24 +178,25 @@ cargo test               # Rust unit tests
 npx tsc --noEmit         # TypeScript type check
 ```
 
-## Known Debt (from Phase 5.X + 6 + 7 review)
+## Known Debt
 
-- **Editor↔QuickOpen coupling:** `QuickOpen` imports `insertAtCursor` from `Editor.tsx`. Extract into `lib/editorBridge.ts` when adding more consumers.
 - **Focus trapping:** Command palette and QuickOpen overlays don't trap Tab focus. Keyboard-only users can Tab behind the overlay.
 - **Tab reorder accessibility:** Drag-to-reorder is mouse-only. Add Cmd+Shift+Left/Right for keyboard users.
 - **ARIA on command palette:** Category headers need `role="separator"` or group wrapping for screen readers.
 - **Autocomplete scaling:** `get_all_titles` fetches all indexed files on `[[` with empty prefix. Cache with short TTL for vaults >5k files.
 - **Multi-cursor formatting:** `toggleWrap` in `formatting.ts` offset drift fixed, but needs multi-cursor integration test.
-- **Duplicate preview sync:** Editor.tsx syncs `previewModeField` in both the tab-switch effect and a separate `useEffect(editorMode)`. Zustand is the source of truth; the CM6 `previewModeField` is a sync target only. Consider consolidating to a single sync point.
-- **Code-block pre-scan scaling:** `tags.ts` and `livePreview.ts` scan from line 1 to the first visible line on every viewport change to compute `inCodeBlock` state. O(n) from top of doc. Could cache per doc version. Not a problem under ~50K lines.
-- **Heading line decorations not hoisted:** `Decoration.line()` in `buildPreviewDecorations` is called with a dynamic class per heading level (h1-h6), so it can't be trivially hoisted. Could pre-build 6 constants.
+- **Duplicate preview sync:** Editor.tsx syncs `previewModeField` in both the tab-switch effect and a separate `useEffect(editorMode)`. Consider consolidating to a single sync point.
+- **Code-block pre-scan scaling:** `tags.ts` and `livePreview.ts` scan from line 1 to the first visible line on every viewport change. O(n) from top of doc. Could cache per doc version. Not a problem under ~50K lines.
+- **Heading line decorations not hoisted:** `Decoration.line()` in `buildPreviewDecorations` uses a dynamic class per heading level (h1-h6). Could pre-build 6 constants.
+- **Split panes not yet implemented:** ARCHITECTURE.md specifies split panes (7.4) but Phase 7 shipped without them. Nav stack, inline title, and live preview were prioritized. Split panes are next.
 
 ## Gotchas
 
 - **Kill `cargo tauri dev` before making Rust changes.** The dev server watches Rust files and auto-rebuilds + relaunches the app on every save, causing repeated open/close cycles during multi-file edits. Stop the dev process first, make all backend changes, verify with `cargo check`, then relaunch once when ready to test.
+- **`sharedExtensions` is cached at module level.** Built once on first Editor mount. HMR cannot rebuild them — changes to extension code (keymaps, decorations) require full app restart (`kill cargo tauri dev` + relaunch).
 - `getCurrentWindow()` must be called lazily (in handlers), not at module/component level
-- `sharedExtensions` initialized once on first Editor mount — `loadFileIntoCache` before mount creates bare states (auto-detected and rebuilt)
 - File watcher has `Drop` impl that signals shutdown and joins the debounce thread
 - `unchecked_transaction` in db.rs is safe because all DB access is behind a Mutex
 - File mutations must go through `fileOps.ts`, never direct `invoke()` — otherwise editor caches, tabs, and sidebar fall out of sync
 - `replaceTabContent()` must be called after external writes (e.g. property panel) to sync CM6 state
+- **WKWebView keyboard limitations:** Tauri uses WebKit, not Chromium. Some keyboard shortcuts (e.g. `Cmd+Shift+Arrow`) are consumed by the Cocoa text system before reaching JavaScript. Use the `mac` property on CM6 keybindings for platform-specific alternatives.
