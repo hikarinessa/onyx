@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Titlebar } from "./components/Titlebar";
 import { TabBar } from "./components/TabBar";
 import { Sidebar } from "./components/Sidebar";
@@ -21,8 +21,9 @@ import {
   getGlobalKeyMap,
 } from "./lib/keybindings";
 import { createNewNote } from "./lib/fileOps";
-import { navigateHistory } from "./lib/openFile";
+import { navigateHistory, openFileInEditor } from "./lib/openFile";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
 import { invalidateCache } from "./lib/ipcCache";
 import { loadAndApplyConfig } from "./lib/configBridge";
@@ -251,6 +252,8 @@ function registerCommands() {
 // ---------------------------------------------------------------------------
 
 export default function App() {
+  const [dragOver, setDragOver] = useState(false);
+
   // Register commands, restore theme, listen for native menu events
   useEffect(() => {
     registerCommands();
@@ -298,10 +301,30 @@ export default function App() {
       invalidateCache();
     });
 
+    // Tauri 2 native drag-drop (HTML5 File.path doesn't exist in Tauri 2)
+    const unlistenDragDrop = getCurrentWebview().onDragDropEvent((event) => {
+      if (cancelled) return;
+      const { type } = event.payload;
+      if (type === "enter" || type === "over") {
+        setDragOver(true);
+      } else if (type === "leave") {
+        setDragOver(false);
+      } else if (type === "drop") {
+        setDragOver(false);
+        for (const filePath of event.payload.paths) {
+          if (filePath.endsWith(".md")) {
+            const name = filePath.split("/").pop() || filePath;
+            openFileInEditor(filePath, name).catch(console.error);
+          }
+        }
+      }
+    });
+
     return () => {
       cancelled = true;
       unlisten.then((fn) => fn());
       unlistenFsChange.then((fn) => fn());
+      unlistenDragDrop.then((fn) => fn());
     };
   }, []);
 
@@ -383,6 +406,7 @@ export default function App() {
       <QuickOpen />
       <CommandPalette />
       <Settings />
+      {dragOver && <div className="drop-overlay">Drop to open</div>}
     </div>
   );
 }

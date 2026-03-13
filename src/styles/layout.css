@@ -2083,6 +2083,26 @@
     margin-left: 8px !important;
   }
 
+  /* ── Drop overlay ── */
+
+  .drop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border: 2px dashed var(--accent);
+    border-radius: 10px;
+    pointer-events: none;
+  }
+
   /* ── Lint gutter & tooltip theming ── */
 
   .cm-lint-marker {
@@ -2123,3 +2143,7 @@
   .cm-panel.cm-panel-lint {
     background: var(--bg-elevated) !important;
     border-top: 1px solid var(--border-default) !important;
+    color: var(--text-secondary) !important;
+    font-family: var(--font-ui) !important;
+    font-size: 12px !important;
+  }
