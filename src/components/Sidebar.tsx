@@ -70,7 +70,7 @@ interface TreeNodeProps {
   activeFilePath: string | null;
   renamingPath: string | null;
   fileTreeVersion: number;
-  onFileClick: (path: string, name: string) => void;
+  onFileClick: (path: string, name: string, metaKey: boolean) => void;
   onContextMenu: (e: React.MouseEvent, entry: DirEntry) => void;
   onRenameSubmit: (entry: DirEntry, newName: string) => void;
   onRenameCancel: () => void;
@@ -90,9 +90,9 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
     }
   }, [fileTreeVersion]); // eslint-disable-line -- only re-fetch on version bump
 
-  const toggle = async () => {
+  const toggle = async (e: React.MouseEvent) => {
     if (!entry.is_dir) {
-      onFileClick(entry.path, entry.name);
+      onFileClick(entry.path, entry.name, e.metaKey);
       return;
     }
 
@@ -261,11 +261,11 @@ export function Sidebar() {
     };
   }, [loadDirectories]);
 
-  const handleFileClick = async (path: string, name: string) => {
+  const handleFileClick = async (path: string, name: string, metaKey: boolean) => {
     if (!name.endsWith(".md")) return;
 
     try {
-      await openFileInEditor(path, name);
+      await openFileInEditor(path, name, { replaceActive: !metaKey });
     } catch (err) {
       console.error("Failed to open file:", err);
     }
