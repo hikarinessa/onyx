@@ -1733,7 +1733,7 @@
   }
 
   .editor-container .cm-content .cm-line + .cm-line {
-    margin-top: var(--paragraph-spacing, 0px);
+    padding-top: var(--paragraph-spacing, 0px);
   }
 
   .editor-container .cm-content ul,
