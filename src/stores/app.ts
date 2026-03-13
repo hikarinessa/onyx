@@ -89,6 +89,10 @@ interface AppState {
   commandPaletteVisible: boolean;
   setCommandPaletteVisible: (v: boolean) => void;
 
+  // Settings
+  settingsVisible: boolean;
+  setSettingsVisible: (v: boolean) => void;
+
   // Bookmark refresh signal — bump to trigger re-fetch in Sidebar
   bookmarkVersion: number;
   bumpBookmarkVersion: () => void;
@@ -310,6 +314,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   commandPaletteVisible: false,
   setCommandPaletteVisible: (v) => set({ commandPaletteVisible: v }),
+
+  settingsVisible: false,
+  setSettingsVisible: (v) => set({ settingsVisible: v }),
 
   bookmarkVersion: 0,
   bumpBookmarkVersion: () => set((s) => ({ bookmarkVersion: s.bookmarkVersion + 1 })),

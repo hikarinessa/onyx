@@ -1,4 +1,5 @@
 mod commands;
+mod config;
 mod db;
 mod dirs;
 mod indexer;
@@ -45,11 +46,13 @@ pub struct AppState {
     pub last_read_mtimes: Mutex<std::collections::HashMap<String, std::time::SystemTime>>,
     /// Paths explicitly allowed outside registered directories (orphan notes opened by the user)
     pub allowed_paths: Mutex<std::collections::HashSet<String>>,
+    pub config: Mutex<config::Config>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let dir_manager = dirs::DirectoryManager::new().expect("Failed to initialize directory manager");
+    let app_config = config::load_config();
 
     // Initialize SQLite database at ~/.onyx/cache/index.db
     let db_path = dirs_next::home_dir()
@@ -198,6 +201,7 @@ pub fn run() {
             db,
             last_read_mtimes: Mutex::new(std::collections::HashMap::new()),
             allowed_paths: Mutex::new(std::collections::HashSet::new()),
+            config: Mutex::new(app_config),
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_directory,
@@ -237,6 +241,10 @@ pub fn run() {
             commands::count_incoming_links,
             commands::allow_path,
             commands::disallow_path,
+            commands::get_config,
+            commands::update_config,
+            commands::get_keybindings,
+            commands::save_keybindings,
             plugins::mac_rounded_corners::enable_rounded_corners,
             plugins::mac_rounded_corners::enable_modern_window_style,
             plugins::mac_rounded_corners::reposition_traffic_lights,

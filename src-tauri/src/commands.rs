@@ -974,3 +974,31 @@ pub fn disallow_path(path: String, state: State<AppState>) -> Result<(), String>
     allowed.remove(&canonical.to_string_lossy().to_string());
     Ok(())
 }
+
+// ── Config ──
+
+#[tauri::command]
+pub fn get_config(state: State<AppState>) -> Result<crate::config::Config, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?;
+    Ok(config.clone())
+}
+
+#[tauri::command]
+pub fn update_config(json: String, state: State<AppState>) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    let updated = crate::config::update_config(&config, &json)?;
+    *config = updated;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_keybindings() -> Result<Vec<crate::config::KeyBinding>, String> {
+    crate::config::load_keybindings()
+}
+
+#[tauri::command]
+pub fn save_keybindings(json: String) -> Result<(), String> {
+    let bindings: Vec<crate::config::KeyBinding> = serde_json::from_str(&json)
+        .map_err(|e| format!("Invalid keybindings JSON: {}", e))?;
+    crate::config::save_keybindings(&bindings)
+}
