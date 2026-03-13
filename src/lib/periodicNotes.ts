@@ -12,6 +12,7 @@ interface CreatePeriodicNoteResult {
 export async function createOrOpenPeriodicNote(
   periodType: "daily" | "weekly" | "monthly",
   date: string,
+  opts?: { newTab?: boolean },
 ): Promise<void> {
   const result = await invoke<CreatePeriodicNoteResult>(
     "create_periodic_note",
@@ -19,13 +20,18 @@ export async function createOrOpenPeriodicNote(
   );
 
   const name = result.path.split("/").pop() || result.path;
+  const replaceActive = !(opts?.newTab);
 
   if (result.created) {
     const content = await invoke<string>("read_file", { path: result.path });
     loadFileIntoCache(result.path, content);
-    useAppStore.getState().openFile(result.path, name);
+    if (replaceActive && useAppStore.getState().activeTabId) {
+      useAppStore.getState().replaceActiveTab(result.path, name);
+    } else {
+      useAppStore.getState().openFile(result.path, name);
+    }
     useAppStore.getState().bumpFileTreeVersion();
   } else {
-    await openFileInEditor(result.path, name);
+    await openFileInEditor(result.path, name, { replaceActive });
   }
 }
