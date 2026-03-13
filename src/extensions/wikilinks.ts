@@ -15,8 +15,9 @@ import type { Extension } from "@codemirror/state";
  * - Cmd+Enter to follow the link under the cursor
  */
 
-/** Inject a follow-link handler from the parent component */
-export const wikilinkFollowRef = { current: null as ((link: string) => void) | null };
+/** Inject a follow-link handler from the parent component.
+ *  newTab: true = open in new tab, false = replace current tab */
+export const wikilinkFollowRef = { current: null as ((link: string, newTab: boolean) => void) | null };
 
 const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
 
@@ -86,22 +87,38 @@ const wikilinkDecorations = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations }
 );
 
-/** DOM click handler — Cmd+click on a .cm-wikilink span follows the link */
+/**
+ * DOM event handlers for wikilinks.
+ *
+ * Preview mode (.cm-preview-wikilink): mousedown to catch before CM6 moves
+ * the cursor (which would remove the decoration on the focus line).
+ * Source mode (.cm-wikilink): Cmd+click only.
+ */
 const wikilinkClickHandler = EditorView.domEventHandlers({
+  mousedown(event, _view) {
+    const target = event.target as HTMLElement;
+    const el = target.closest(".cm-preview-wikilink");
+    if (!el) return false;
+
+    const text = el.textContent ?? "";
+    const linkText = text.trim();
+    if (linkText && wikilinkFollowRef.current) {
+      event.preventDefault();
+      wikilinkFollowRef.current(linkText, event.metaKey);
+    }
+    return true;
+  },
   click(event, _view) {
     if (!event.metaKey) return false;
     const target = event.target as HTMLElement;
-    const el =
-      target.classList.contains("cm-wikilink")
-        ? target
-        : target.closest(".cm-wikilink");
+    const el = target.closest(".cm-wikilink");
     if (!el) return false;
 
     const text = el.textContent ?? "";
     const linkText = extractLinkText(text);
     if (linkText && wikilinkFollowRef.current) {
       event.preventDefault();
-      wikilinkFollowRef.current(linkText);
+      wikilinkFollowRef.current(linkText, true);
     }
     return true;
   },
@@ -115,7 +132,7 @@ const wikilinkKeymap = keymap.of([
       const pos = view.state.selection.main.head;
       const linkText = wikilinkAtPos(view, pos);
       if (linkText && wikilinkFollowRef.current) {
-        wikilinkFollowRef.current(linkText);
+        wikilinkFollowRef.current(linkText, false);
         return true;
       }
       return false;
