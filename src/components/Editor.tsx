@@ -507,22 +507,25 @@ export function Editor() {
   }, [activeTab?.id, activeTab?.name]); // eslint-disable-line
 
   const handleTitleCommit = useCallback(async () => {
-    if (!activeTab) return;
-    const trimmed = titleValue.trim();
-    const oldName = activeTab.name.replace(/\.md$/, "");
+    const tab = useAppStore.getState().tabs.find(
+      (t) => t.id === useAppStore.getState().activeTabId
+    );
+    if (!tab) return;
+    const trimmed = titleValue.trim().replace(/[/\0:]/g, "");
+    const oldName = tab.name.replace(/\.md$/, "");
     if (!trimmed || trimmed === oldName) {
       setTitleValue(oldName);
       return;
     }
-    const dir = activeTab.path.substring(0, activeTab.path.lastIndexOf("/"));
+    const dir = tab.path.substring(0, tab.path.lastIndexOf("/"));
     const newPath = `${dir}/${trimmed}.md`;
     try {
-      await renameFile(activeTab.path, newPath);
+      await renameFile(tab.path, newPath);
     } catch (err) {
       console.error("Failed to rename:", err);
-      setTitleValue(oldName); // revert on failure
+      setTitleValue(oldName);
     }
-  }, [activeTab, titleValue]);
+  }, [titleValue]);
 
   if (!activeTab) {
     return (
@@ -548,7 +551,10 @@ export function Editor() {
             titleRef.current?.blur();
           }
           if (e.key === "Escape") {
-            setTitleValue(activeTab.name.replace(/\.md$/, ""));
+            const tab = useAppStore.getState().tabs.find(
+              (t) => t.id === useAppStore.getState().activeTabId
+            );
+            setTitleValue(tab?.name.replace(/\.md$/, "") ?? "");
             titleRef.current?.blur();
           }
         }}
