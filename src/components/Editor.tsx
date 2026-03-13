@@ -502,7 +502,7 @@ export function Editor() {
     );
   }
 
-  const modeClass = editorMode === "source" ? "source-mode" : "preview-mode";
+  const modeClass = activeTab.editorMode === "source" ? "source-mode" : "preview-mode";
 
   return (
     <div className="editor-area">

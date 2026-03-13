@@ -2,6 +2,7 @@ import {
   ViewPlugin,
   Decoration,
   type DecorationSet,
+  type ViewUpdate,
   EditorView,
   WidgetType,
 } from "@codemirror/view";
@@ -74,10 +75,20 @@ class CheckboxWidget extends WidgetType {
 // ── Patterns ──
 
 const HEADING_RE = /^(#{1,6})\s+/;
-const BOLD_RE = /\*\*([^*]+)\*\*/g;
+const BOLD_ITALIC_RE = /\*{3}(.+?)\*{3}/g;
+const BOLD_RE = /\*{2}(.+?)\*{2}/g;
 const ITALIC_RE = /(?<!\*)\*([^*]+)\*(?!\*)/g;
 const CHECKBOX_RE = /^(\s*[-*+]\s)\[([ x])\]\s/;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+
+// ── Hoisted decoration objects (immutable, reused across calls) ──
+
+const DECO_REPLACE = Decoration.replace({});
+const DECO_BOLD = Decoration.mark({ class: "cm-preview-bold" });
+const DECO_ITALIC = Decoration.mark({ class: "cm-preview-italic" });
+const DECO_BOLD_ITALIC = Decoration.mark({ class: "cm-preview-bold cm-preview-italic" });
+const DECO_WIKILINK = Decoration.mark({ class: "cm-preview-wikilink" });
+const DECO_CHECKED = Decoration.mark({ class: "cm-preview-checked" });
 
 // ── Pre-scan cache ──
 
@@ -159,7 +170,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult): Decorat
         builder.add(
           line.from,
           line.from + headingMatch[0].length,
-          Decoration.replace({})
+          DECO_REPLACE
         );
         // Style the whole line
         builder.add(
@@ -189,7 +200,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult): Decorat
           builder.add(
             bracketStart + 4,
             line.to,
-            Decoration.mark({ class: "cm-preview-checked" })
+            DECO_CHECKED
           );
         }
         continue;
@@ -209,84 +220,67 @@ function addInlineDecorations(
   line: { from: number; to: number },
   text: string,
 ): void {
-  // Collect all inline ranges to avoid overlapping decorations
   const ranges: { from: number; to: number; deco: Decoration }[] = [];
+  // Track claimed text spans to prevent overlapping matches
+  const claimed: { from: number; to: number }[] = [];
 
-  // Bold
-  BOLD_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = BOLD_RE.exec(text)) !== null) {
-    const from = line.from + m.index;
-    // Hide opening **
-    ranges.push({ from, to: from + 2, deco: Decoration.replace({}) });
-    // Style content
-    ranges.push({
-      from: from + 2,
-      to: from + m[0].length - 2,
-      deco: Decoration.mark({ class: "cm-preview-bold" }),
-    });
-    // Hide closing **
-    ranges.push({
-      from: from + m[0].length - 2,
-      to: from + m[0].length,
-      deco: Decoration.replace({}),
-    });
+  function isClaimed(from: number, to: number): boolean {
+    return claimed.some((c) => from < c.to && to > c.from);
   }
 
-  // Italic (must not be inside bold)
+  let m: RegExpExecArray | null;
+
+  // Bold+Italic (***text***) — must come before bold/italic
+  BOLD_ITALIC_RE.lastIndex = 0;
+  while ((m = BOLD_ITALIC_RE.exec(text)) !== null) {
+    const from = line.from + m.index;
+    const to = from + m[0].length;
+    ranges.push({ from, to: from + 3, deco: DECO_REPLACE });
+    ranges.push({ from: from + 3, to: to - 3, deco: DECO_BOLD_ITALIC });
+    ranges.push({ from: to - 3, to, deco: DECO_REPLACE });
+    claimed.push({ from, to });
+  }
+
+  // Bold (**text**)
+  BOLD_RE.lastIndex = 0;
+  while ((m = BOLD_RE.exec(text)) !== null) {
+    const from = line.from + m.index;
+    const to = from + m[0].length;
+    if (isClaimed(from, to)) continue;
+    ranges.push({ from, to: from + 2, deco: DECO_REPLACE });
+    ranges.push({ from: from + 2, to: to - 2, deco: DECO_BOLD });
+    ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
+    claimed.push({ from, to });
+  }
+
+  // Italic (*text*)
   ITALIC_RE.lastIndex = 0;
   while ((m = ITALIC_RE.exec(text)) !== null) {
     const from = line.from + m.index;
-    // Check if this overlaps with any bold range
-    const overlaps = ranges.some(
-      (r) => from < r.to && from + m![0].length > r.from
-    );
-    if (overlaps) continue;
-    ranges.push({ from, to: from + 1, deco: Decoration.replace({}) });
-    ranges.push({
-      from: from + 1,
-      to: from + m[0].length - 1,
-      deco: Decoration.mark({ class: "cm-preview-italic" }),
-    });
-    ranges.push({
-      from: from + m[0].length - 1,
-      to: from + m[0].length,
-      deco: Decoration.replace({}),
-    });
+    const to = from + m[0].length;
+    if (isClaimed(from, to)) continue;
+    ranges.push({ from, to: from + 1, deco: DECO_REPLACE });
+    ranges.push({ from: from + 1, to: to - 1, deco: DECO_ITALIC });
+    ranges.push({ from: to - 1, to, deco: DECO_REPLACE });
+    claimed.push({ from, to });
   }
 
   // Wikilinks
   WIKILINK_RE.lastIndex = 0;
   while ((m = WIKILINK_RE.exec(text)) !== null) {
     const from = line.from + m.index;
-    // Hide [[ and ]]
-    ranges.push({ from, to: from + 2, deco: Decoration.replace({}) });
-    // If there's an alias (|), hide from the | to ]]
+    const to = from + m[0].length;
+    ranges.push({ from, to: from + 2, deco: DECO_REPLACE });
     if (m[2]) {
       const pipeIdx = m[0].indexOf("|");
-      ranges.push({
-        from: from + 2,
-        to: from + pipeIdx + 1,
-        deco: Decoration.replace({}),
-      });
+      ranges.push({ from: from + 2, to: from + pipeIdx + 1, deco: DECO_REPLACE });
     }
-    // Style the display text
     const displayFrom = m[2] ? from + m[0].indexOf("|") + 1 : from + 2;
-    const displayTo = from + m[0].length - 2;
-    ranges.push({
-      from: displayFrom,
-      to: displayTo,
-      deco: Decoration.mark({ class: "cm-preview-wikilink" }),
-    });
-    // Hide ]]
-    ranges.push({
-      from: from + m[0].length - 2,
-      to: from + m[0].length,
-      deco: Decoration.replace({}),
-    });
+    ranges.push({ from: displayFrom, to: to - 2, deco: DECO_WIKILINK });
+    ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
   }
 
-  // Sort by from position and add to builder
+  // Sort by position and add to builder
   ranges.sort((a, b) => a.from - b.from || a.to - b.to);
   for (const r of ranges) {
     if (r.from < r.to) {
@@ -310,13 +304,7 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         : Decoration.none;
     }
 
-    update(update: {
-      docChanged: boolean;
-      viewportChanged: boolean;
-      selectionSet: boolean;
-      view: EditorView;
-      startState: { field: typeof update.view.state.field };
-    }) {
+    update(update: ViewUpdate) {
       const active = update.view.state.field(previewModeField);
       if (!active) {
         this.decorations = Decoration.none;

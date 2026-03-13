@@ -25,7 +25,10 @@ export function StatusBar() {
           <span
             className="statusbar-path"
             title="Click to copy path"
+            role="button"
+            tabIndex={0}
             onClick={handlePathClick}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePathClick(); } }}
           >
             {activeTab.path}
           </span>
@@ -41,7 +44,10 @@ export function StatusBar() {
             <span
               className="statusbar-mode"
               title="Toggle preview (Cmd+/)"
+              role="button"
+              tabIndex={0}
               onClick={() => { if (activeTabId) toggleEditorMode(activeTabId); }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (activeTabId) toggleEditorMode(activeTabId); } }}
             >
               {activeTab?.editorMode === "preview" ? "Preview" : "Source"}
             </span>

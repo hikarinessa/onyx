@@ -175,14 +175,17 @@ cargo test               # Rust unit tests
 npx tsc --noEmit         # TypeScript type check
 ```
 
-## Known Debt (from Phase 5.X + 6 review)
+## Known Debt (from Phase 5.X + 6 + 7 review)
 
 - **Editor↔QuickOpen coupling:** `QuickOpen` imports `insertAtCursor` from `Editor.tsx`. Extract into `lib/editorBridge.ts` when adding more consumers.
 - **Focus trapping:** Command palette and QuickOpen overlays don't trap Tab focus. Keyboard-only users can Tab behind the overlay.
 - **Tab reorder accessibility:** Drag-to-reorder is mouse-only. Add Cmd+Shift+Left/Right for keyboard users.
 - **ARIA on command palette:** Category headers need `role="separator"` or group wrapping for screen readers.
 - **Autocomplete scaling:** `get_all_titles` fetches all indexed files on `[[` with empty prefix. Cache with short TTL for vaults >5k files.
-- **Multi-cursor formatting:** `toggleWrap` in `formatting.ts` has offset drift on multi-cursor unwrap. Single-cursor is correct.
+- **Multi-cursor formatting:** `toggleWrap` in `formatting.ts` offset drift fixed, but needs multi-cursor integration test.
+- **Duplicate preview sync:** Editor.tsx syncs `previewModeField` in both the tab-switch effect and a separate `useEffect(editorMode)`. Zustand is the source of truth; the CM6 `previewModeField` is a sync target only. Consider consolidating to a single sync point.
+- **Code-block pre-scan scaling:** `tags.ts` and `livePreview.ts` scan from line 1 to the first visible line on every viewport change to compute `inCodeBlock` state. O(n) from top of doc. Could cache per doc version. Not a problem under ~50K lines.
+- **Heading line decorations not hoisted:** `Decoration.line()` in `buildPreviewDecorations` is called with a dynamic class per heading level (h1-h6), so it can't be trivially hoisted. Could pre-build 6 constants.
 
 ## Gotchas
 
