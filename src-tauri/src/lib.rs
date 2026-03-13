@@ -74,6 +74,8 @@ pub fn run() {
             let app_menu = SubmenuBuilder::new(app, "Onyx")
                 .about(None)
                 .separator()
+                .item(&MenuItemBuilder::with_id("settings", "Settings…").accelerator("CmdOrCtrl+,").build(app)?)
+                .separator()
                 .services()
                 .separator()
                 .hide()

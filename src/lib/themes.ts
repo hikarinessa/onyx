@@ -1,3 +1,5 @@
+import { reapplyStyleOverrides } from "./configBridge";
+
 export interface Theme {
   id: string;
   name: string;
@@ -39,6 +41,7 @@ export function applyTheme(themeId: string) {
   } else {
     document.documentElement.dataset.theme = themeId;
   }
+  reapplyStyleOverrides();
 
   try {
     localStorage.setItem("onyx-theme", themeId);
