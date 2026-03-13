@@ -15,13 +15,14 @@ import {
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
-import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab } from "../extensions/frontmatter";
+import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab, foldFrontmatterCommand } from "../extensions/frontmatter";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
 import { formattingKeymap } from "../extensions/formatting";
 import { outlinerKeymap } from "../extensions/outliner";
 import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
+import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { openFileInEditor } from "../lib/openFile";
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -139,6 +140,7 @@ function buildExtensions(): Extension[] {
               await invoke("write_file", { path: tab.path, content });
               lastSavedContent.set(tabId, content);
               setModified(tabId, false);
+              useAppStore.getState().bumpSaveVersion();
             } catch (err) {
               console.error("Failed to save:", err);
             }
@@ -170,6 +172,7 @@ function buildExtensions(): Extension[] {
     tagExtension(),
     urlPasteExtension,
     autocompleteExtension(),
+    symbolWrapExtension(),
   ];
 }
 
@@ -245,6 +248,12 @@ export function clearEditorCache(path: string) {
   lastSavedContent.delete(path);
   scrollCache.delete(path);
   clearAutoFoldForTab(path);
+}
+
+/** Fold frontmatter in the active editor (for command palette) */
+export function foldFrontmatter(): boolean {
+  if (!_liveViewRef) return false;
+  return foldFrontmatterCommand(_liveViewRef);
 }
 
 /** Insert text at the current cursor position in the live editor */
