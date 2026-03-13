@@ -42,6 +42,7 @@
     border-right: 1px solid var(--border-subtle);
     display: flex;
     flex-direction: column;
+    font-size: var(--ui-font-size, 13px);
     flex-shrink: 0;
     overflow: hidden;
     transition: width var(--transition-normal);
@@ -1062,7 +1063,7 @@
 
   .settings-modal {
     width: 700px;
-    height: 500px;
+    height: 580px;
     background: var(--bg-elevated);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-lg);
@@ -1514,6 +1515,32 @@
     color: var(--text-primary);
   }
 
+  /* Custom CSS textarea (Style section) */
+
+  .settings-custom-css {
+    width: 100%;
+    min-height: 120px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    background: var(--bg-base);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    resize: vertical;
+    outline: none;
+    tab-size: 2;
+    line-height: 1.5;
+  }
+
+  .settings-custom-css::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .settings-custom-css:focus {
+    border-color: var(--accent);
+  }
+
   /* About section */
 
   .settings-about .settings-about-content {
@@ -1546,6 +1573,119 @@
     color: var(--text-tertiary);
     font-family: var(--font-mono);
   }
+
+  /* Sub-section divider */
+  .settings-subsection-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 16px 0 4px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  /* Color palette grid */
+  .settings-color-theme-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .settings-color-tab {
+    padding: 4px 14px;
+    font-size: 12px;
+    font-family: var(--font-ui);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .settings-color-tab:hover {
+    background: var(--bg-hover);
+  }
+
+  .settings-color-tab.active {
+    background: var(--bg-active);
+    color: var(--text-primary);
+    border-color: var(--accent);
+  }
+
+  .settings-color-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .settings-color-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+  }
+
+  .settings-color-input {
+    width: 28px;
+    height: 22px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: none;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .settings-color-input::-webkit-color-swatch-wrapper {
+    padding: 1px;
+  }
+
+  .settings-color-input::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
+  }
+
+  .settings-color-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .settings-color-reset {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .settings-color-reset:hover {
+    color: var(--text-primary);
+  }
+
+  /* Heading row */
+  .settings-heading-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .settings-heading-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    width: 28px;
+    flex-shrink: 0;
+  }
 }
 
 /* ── Editor styles (unlayered — must compete with CM6 runtime styles) ── */
@@ -1560,12 +1700,12 @@
   .editor-inline-title {
     display: block;
     width: 100%;
-    padding: 16px 48px 8px;
+    padding: 16px var(--editor-padding-x, 48px) 8px;
     border: none;
     outline: none;
     background: transparent;
     font-family: var(--font-body);
-    font-size: 1.8em;
+    font-size: var(--inline-title-size, 1.8em);
     font-weight: 600;
     color: var(--text-primary);
     line-height: 1.3;
@@ -1584,12 +1724,50 @@
     font-family: var(--font-editor);
     font-size: var(--editor-font-size, 16px);
     line-height: var(--editor-line-height, 1.7);
-    padding: 24px 48px;
+    padding: var(--editor-padding-y, 24px) var(--editor-padding-x, 48px);
   }
 
   .editor-container .cm-content {
     max-width: var(--editor-max-width, 720px);
     margin: 0 auto;
+  }
+
+  .editor-container .cm-content .cm-line + .cm-line {
+    margin-top: var(--paragraph-spacing, 0px);
+  }
+
+  .editor-container .cm-content ul,
+  .editor-container .cm-content ol {
+    padding-left: var(--list-indent, 24px);
+  }
+
+  .editor-container .cm-content blockquote {
+    border-left: var(--blockquote-border-width, 3px) solid var(--blockquote-border-color, var(--accent));
+    padding-left: 12px;
+    margin-left: 0;
+  }
+
+  .editor-container .cm-content pre {
+    background: var(--code-block-bg, var(--bg-elevated));
+    color: var(--code-block-text, var(--text-primary));
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    overflow-x: auto;
+  }
+
+  .editor-container .cm-content code {
+    background: var(--inline-code-bg, rgba(139, 124, 246, 0.1));
+    color: var(--inline-code-text, var(--text-primary));
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  .editor-container .cm-content pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
   }
 
   .editor-container .cm-focused {

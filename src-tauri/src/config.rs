@@ -13,6 +13,7 @@ pub struct Config {
     pub editor: EditorConfig,
     pub appearance: AppearanceConfig,
     pub behavior: BehaviorConfig,
+    pub style: StyleConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +52,7 @@ impl Default for Config {
             editor: EditorConfig::default(),
             appearance: AppearanceConfig::default(),
             behavior: BehaviorConfig::default(),
+            style: StyleConfig::default(),
         }
     }
 }
@@ -87,6 +89,118 @@ impl Default for BehaviorConfig {
             auto_save_ms: 500,
             spellcheck: true,
             new_note_location: "first_dir".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ThemeColorOverrides {
+    pub bg_base: String,
+    pub bg_surface: String,
+    pub bg_elevated: String,
+    pub text_primary: String,
+    pub text_secondary: String,
+    pub text_tertiary: String,
+    pub accent: String,
+    pub border_default: String,
+    pub border_subtle: String,
+}
+
+impl Default for ThemeColorOverrides {
+    fn default() -> Self {
+        Self {
+            bg_base: String::new(),
+            bg_surface: String::new(),
+            bg_elevated: String::new(),
+            text_primary: String::new(),
+            text_secondary: String::new(),
+            text_tertiary: String::new(),
+            accent: String::new(),
+            border_default: String::new(),
+            border_subtle: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadingStyle {
+    pub size: f64,       // em units, e.g. 2.0 for h1
+    pub color: String,   // empty = inherit
+}
+
+impl Default for HeadingStyle {
+    fn default() -> Self {
+        Self { size: 0.0, color: String::new() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StyleConfig {
+    // Existing
+    pub accent_color: String,
+    pub editor_padding_x: u32,
+    pub editor_padding_y: u32,
+    pub inline_title_size: f64,
+    pub ui_font_size: u32,
+    pub custom_css: String,
+
+    // Per-theme color overrides
+    pub theme_overrides: std::collections::HashMap<String, ThemeColorOverrides>,
+
+    // Heading styles (h1-h6)
+    pub headings: std::collections::HashMap<String, HeadingStyle>,
+
+    // Element styles
+    pub blockquote_border_color: String,
+    pub blockquote_border_width: u32,
+    pub link_color: String,
+    pub link_underline: bool,
+    pub code_block_bg: String,
+    pub code_block_text: String,
+    pub inline_code_bg: String,
+    pub inline_code_text: String,
+    pub tag_bg: String,
+    pub tag_text: String,
+
+    // Spacing
+    pub paragraph_spacing: u32,
+    pub list_indent: u32,
+}
+
+impl Default for StyleConfig {
+    fn default() -> Self {
+        let mut headings = std::collections::HashMap::new();
+        headings.insert("h1".to_string(), HeadingStyle { size: 1.6, color: String::new() });
+        headings.insert("h2".to_string(), HeadingStyle { size: 1.3, color: String::new() });
+        headings.insert("h3".to_string(), HeadingStyle { size: 1.1, color: String::new() });
+        headings.insert("h4".to_string(), HeadingStyle { size: 1.05, color: String::new() });
+        headings.insert("h5".to_string(), HeadingStyle { size: 1.0, color: String::new() });
+        headings.insert("h6".to_string(), HeadingStyle { size: 0.9, color: String::new() });
+
+        Self {
+            accent_color: String::new(),
+            editor_padding_x: 48,
+            editor_padding_y: 24,
+            inline_title_size: 1.8,
+            ui_font_size: 13,
+            custom_css: String::new(),
+            theme_overrides: std::collections::HashMap::new(),
+            headings,
+            blockquote_border_color: String::new(),
+            blockquote_border_width: 3,
+            link_color: String::new(),
+            link_underline: true,
+            code_block_bg: String::new(),
+            code_block_text: String::new(),
+            inline_code_bg: String::new(),
+            inline_code_text: String::new(),
+            tag_bg: String::new(),
+            tag_text: String::new(),
+            paragraph_spacing: 0,
+            list_indent: 24,
         }
     }
 }

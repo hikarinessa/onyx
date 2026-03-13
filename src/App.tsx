@@ -156,6 +156,20 @@ function registerCommands() {
     execute: () => foldFrontmatter(),
   });
 
+  // Editor-scope commands — dispatched by CM6 keymaps, registered here for
+  // keybinding display. execute() is a no-op since CM6 handles dispatch.
+  const editorNoop = () => {};
+  registerCommand({ id: "editor.bold", label: "Bold", shortcut: "Cmd+B", category: "Format", execute: editorNoop });
+  registerCommand({ id: "editor.italic", label: "Italic", shortcut: "Cmd+I", category: "Format", execute: editorNoop });
+  registerCommand({ id: "editor.inlineCode", label: "Inline Code", shortcut: "Cmd+Shift+C", category: "Format", execute: editorNoop });
+  registerCommand({ id: "editor.moveLineUp", label: "Move Line Up", shortcut: "Alt+Up", category: "Editor", execute: editorNoop });
+  registerCommand({ id: "editor.moveLineDown", label: "Move Line Down", shortcut: "Alt+Down", category: "Editor", execute: editorNoop });
+  registerCommand({ id: "editor.followLink", label: "Follow Link", shortcut: "Cmd+Enter", category: "Editor", execute: editorNoop });
+  registerCommand({ id: "editor.find", label: "Find", shortcut: "Cmd+F", category: "Editor", execute: editorNoop });
+  registerCommand({ id: "editor.findReplace", label: "Find and Replace", shortcut: "Cmd+H", category: "Editor", execute: editorNoop });
+  registerCommand({ id: "editor.undo", label: "Undo", shortcut: "Cmd+Z", category: "Edit", execute: editorNoop });
+  registerCommand({ id: "editor.redo", label: "Redo", shortcut: "Cmd+Shift+Z", category: "Edit", execute: editorNoop });
+
   registerCommand({
     id: "navigate.nextTab",
     label: "Next Tab",
@@ -226,7 +240,8 @@ function registerCommands() {
   // Register keybindings for every command that has a shortcut
   for (const cmd of getAllCommands()) {
     if (cmd.shortcut) {
-      registerKeybinding(cmd.id, normaliseCombo(cmd.shortcut), "global");
+      const scope = cmd.id.startsWith("editor.") ? "editor" : "global";
+      registerKeybinding(cmd.id, normaliseCombo(cmd.shortcut), scope);
     }
   }
 }

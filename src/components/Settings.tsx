@@ -16,6 +16,23 @@ import {
 
 // ── Types ──
 
+interface ThemeColorOverrides {
+  bg_base: string;
+  bg_surface: string;
+  bg_elevated: string;
+  text_primary: string;
+  text_secondary: string;
+  text_tertiary: string;
+  accent: string;
+  border_default: string;
+  border_subtle: string;
+}
+
+interface HeadingStyle {
+  size: number;
+  color: string;
+}
+
 interface Config {
   editor: {
     font_family: string;
@@ -37,6 +54,28 @@ interface Config {
     auto_save_ms: number;
     spellcheck: boolean;
     new_note_location: string;
+  };
+  style: {
+    accent_color: string;
+    editor_padding_x: number;
+    editor_padding_y: number;
+    inline_title_size: number;
+    ui_font_size: number;
+    custom_css: string;
+    theme_overrides: Record<string, ThemeColorOverrides>;
+    headings: Record<string, HeadingStyle>;
+    blockquote_border_color: string;
+    blockquote_border_width: number;
+    link_color: string;
+    link_underline: boolean;
+    code_block_bg: string;
+    code_block_text: string;
+    inline_code_bg: string;
+    inline_code_text: string;
+    tag_bg: string;
+    tag_text: string;
+    paragraph_spacing: number;
+    list_indent: number;
   };
 }
 
@@ -219,6 +258,38 @@ function Toggle({
       <span className="settings-toggle-knob" />
     </button>
   );
+}
+
+function ColorPicker({
+  value,
+  fallback,
+  onChange,
+  onReset,
+}: {
+  value: string;
+  fallback: string;
+  onChange: (v: string) => void;
+  onReset?: () => void;
+}) {
+  return (
+    <>
+      <input
+        type="color"
+        className="settings-color-input"
+        value={value || fallback}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {value && onReset && (
+        <button className="settings-keybind-reset" onClick={onReset}>
+          Reset
+        </button>
+      )}
+    </>
+  );
+}
+
+function SubSection({ title }: { title: string }) {
+  return <h3 className="settings-subsection-title">{title}</h3>;
 }
 
 // ── Section: General ──
@@ -429,14 +500,75 @@ function AppearanceSection({
 }) {
   const themes = getAvailableThemes();
   const activeTheme = getActiveThemeId();
+  const [colorTheme, setColorTheme] = useState(activeTheme);
 
   const handleThemeChange = (themeId: string) => {
     applyTheme(themeId);
     updateConfig({ appearance: { theme: themeId } });
+    setColorTheme(themeId);
+  };
+
+  // Get color overrides for the selected theme tab
+  const overrides: ThemeColorOverrides = config.style.theme_overrides[colorTheme] ?? {
+    bg_base: "", bg_surface: "", bg_elevated: "",
+    text_primary: "", text_secondary: "", text_tertiary: "",
+    accent: "", border_default: "", border_subtle: "",
+  };
+
+  const updateColorOverride = (field: keyof ThemeColorOverrides, value: string) => {
+    const current = config.style.theme_overrides[colorTheme] ?? {};
+    updateConfig({
+      style: {
+        theme_overrides: {
+          ...config.style.theme_overrides,
+          [colorTheme]: { ...current, [field]: value },
+        },
+      },
+    });
+  };
+
+  const HEADING_DEFAULTS: Record<string, number> = {
+    h1: 1.6, h2: 1.3, h3: 1.1, h4: 1.05, h5: 1.0, h6: 0.9,
+  };
+
+  const getHeading = (key: string): HeadingStyle =>
+    config.style.headings[key] ?? { size: HEADING_DEFAULTS[key] ?? 1.0, color: "" };
+
+  const updateHeading = (key: string, patch: Partial<HeadingStyle>) => {
+    const current = getHeading(key);
+    updateConfig({
+      style: {
+        headings: {
+          ...config.style.headings,
+          [key]: { ...current, ...patch },
+        },
+      },
+    });
+  };
+
+  // Color label->field mapping for the palette editor
+  const COLOR_FIELDS: { field: keyof ThemeColorOverrides; label: string; fallback: string }[] = [
+    { field: "bg_base", label: "Background", fallback: "#0e0e12" },
+    { field: "bg_surface", label: "Surface", fallback: "#141418" },
+    { field: "bg_elevated", label: "Elevated", fallback: "#1a1a20" },
+    { field: "text_primary", label: "Text", fallback: "#e8e8ec" },
+    { field: "text_secondary", label: "Text secondary", fallback: "#9898a4" },
+    { field: "text_tertiary", label: "Text muted", fallback: "#5c5c68" },
+    { field: "accent", label: "Accent", fallback: "#8b7cf6" },
+    { field: "border_default", label: "Border", fallback: "#2a2a34" },
+    { field: "border_subtle", label: "Border subtle", fallback: "#1e1e26" },
+  ];
+
+  // Adjust fallback colors based on selected colorTheme
+  const THEME_FALLBACKS: Record<string, Record<string, string>> = {
+    dark: { bg_base: "#0e0e12", bg_surface: "#141418", bg_elevated: "#1a1a20", text_primary: "#e8e8ec", text_secondary: "#9898a4", text_tertiary: "#5c5c68", accent: "#8b7cf6", border_default: "#2a2a34", border_subtle: "#1e1e26" },
+    light: { bg_base: "#ffffff", bg_surface: "#f5f5f7", bg_elevated: "#eeeef0", text_primary: "#1d1d1f", text_secondary: "#6e6e73", text_tertiary: "#9a9aa0", accent: "#6b5ce7", border_default: "#d2d2d7", border_subtle: "#e5e5ea" },
+    warm: { bg_base: "#1c1917", bg_surface: "#221f1c", bg_elevated: "#292523", text_primary: "#ede8e3", text_secondary: "#a8a09a", text_tertiary: "#6b635d", accent: "#d4a574", border_default: "#38322e", border_subtle: "#2a2522" },
   };
 
   return (
     <div className="settings-section">
+      {/* -- Theme -- */}
       <h2 className="settings-section-title">Appearance</h2>
 
       <div className="settings-row-full">
@@ -450,22 +582,10 @@ function AppearanceSection({
                 className={`settings-theme-card ${activeTheme === t.id ? "active" : ""}`}
                 onClick={() => handleThemeChange(t.id)}
               >
-                <div
-                  className="settings-theme-preview"
-                  style={{ background: sw.bg }}
-                >
-                  <div
-                    className="settings-theme-swatch-bar"
-                    style={{ background: sw.surface }}
-                  />
-                  <div
-                    className="settings-theme-swatch-accent"
-                    style={{ background: sw.accent }}
-                  />
-                  <div
-                    className="settings-theme-swatch-text"
-                    style={{ background: sw.text }}
-                  />
+                <div className="settings-theme-preview" style={{ background: sw.bg }}>
+                  <div className="settings-theme-swatch-bar" style={{ background: sw.surface }} />
+                  <div className="settings-theme-swatch-accent" style={{ background: sw.accent }} />
+                  <div className="settings-theme-swatch-text" style={{ background: sw.text }} />
                 </div>
                 <span className="settings-theme-label">{t.name}</span>
               </button>
@@ -474,75 +594,271 @@ function AppearanceSection({
         </div>
       </div>
 
-      <SettingRow
-        label="Sidebar width"
-        description={`${config.appearance.sidebar_width}px`}
-      >
-        <input
-          type="range"
-          className="settings-range"
-          min={180}
-          max={400}
-          step={10}
+      <SettingRow label="Sidebar width" description={`${config.appearance.sidebar_width}px`}>
+        <input type="range" className="settings-range" min={180} max={400} step={10}
           value={config.appearance.sidebar_width}
-          onChange={(e) =>
-            updateConfig({ appearance: { sidebar_width: Number(e.target.value) } })
-          }
+          onChange={(e) => updateConfig({ appearance: { sidebar_width: Number(e.target.value) } })}
         />
-        <span className="settings-range-value">
-          {config.appearance.sidebar_width}px
-        </span>
+        <span className="settings-range-value">{config.appearance.sidebar_width}px</span>
       </SettingRow>
 
-      <SettingRow
-        label="Context panel width"
-        description={`${config.appearance.context_panel_width}px`}
-      >
-        <input
-          type="range"
-          className="settings-range"
-          min={220}
-          max={400}
-          step={10}
+      <SettingRow label="Context panel width" description={`${config.appearance.context_panel_width}px`}>
+        <input type="range" className="settings-range" min={220} max={400} step={10}
           value={config.appearance.context_panel_width}
-          onChange={(e) =>
-            updateConfig({
-              appearance: { context_panel_width: Number(e.target.value) },
-            })
-          }
+          onChange={(e) => updateConfig({ appearance: { context_panel_width: Number(e.target.value) } })}
         />
-        <span className="settings-range-value">
-          {config.appearance.context_panel_width}px
-        </span>
+        <span className="settings-range-value">{config.appearance.context_panel_width}px</span>
       </SettingRow>
 
       <SettingRow label="UI font override">
-        <input
-          type="text"
-          className="settings-text-input"
-          value={config.appearance.ui_font ?? ""}
-          placeholder="DM Sans"
-          onChange={(e) =>
-            updateConfig({
-              appearance: { ui_font: e.target.value || null },
-            })
-          }
+        <input type="text" className="settings-text-input" value={config.appearance.ui_font ?? ""} placeholder="DM Sans"
+          onChange={(e) => updateConfig({ appearance: { ui_font: e.target.value || null } })}
         />
       </SettingRow>
 
       <SettingRow label="Mono font override">
-        <input
-          type="text"
-          className="settings-text-input"
-          value={config.appearance.mono_font ?? ""}
-          placeholder="IBM Plex Mono"
-          onChange={(e) =>
-            updateConfig({
-              appearance: { mono_font: e.target.value || null },
-            })
-          }
+        <input type="text" className="settings-text-input" value={config.appearance.mono_font ?? ""} placeholder="IBM Plex Mono"
+          onChange={(e) => updateConfig({ appearance: { mono_font: e.target.value || null } })}
         />
       </SettingRow>
+
+      {/* -- Colors -- */}
+      <SubSection title="Colors" />
+
+      <div className="settings-color-theme-tabs">
+        {["dark", "light", "warm"].map((t) => (
+          <button
+            key={t}
+            className={`settings-color-tab ${colorTheme === t ? "active" : ""}`}
+            onClick={() => setColorTheme(t)}
+          >
+            {t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      <div className="settings-color-grid">
+        {COLOR_FIELDS.map(({ field, label }) => {
+          const fb = THEME_FALLBACKS[colorTheme]?.[field] ?? "#888888";
+          return (
+            <div key={field} className="settings-color-item">
+              <input
+                type="color"
+                className="settings-color-input"
+                value={overrides[field] || fb}
+                onChange={(e) => updateColorOverride(field, e.target.value)}
+              />
+              <span className="settings-color-label">{label}</span>
+              {overrides[field] && (
+                <button
+                  className="settings-color-reset"
+                  onClick={() => updateColorOverride(field, "")}
+                  title="Reset to theme default"
+                >
+                  x
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* -- Headings -- */}
+      <SubSection title="Headings" />
+
+      {["h1", "h2", "h3", "h4", "h5", "h6"].map((key) => {
+        const h = getHeading(key);
+        const def = HEADING_DEFAULTS[key];
+        return (
+          <div key={key} className="settings-heading-row">
+            <span className="settings-heading-label">{key.toUpperCase()}</span>
+            <input
+              type="range"
+              className="settings-range"
+              min={0.7}
+              max={3.0}
+              step={0.05}
+              value={h.size}
+              onChange={(e) => updateHeading(key, { size: Number(e.target.value) })}
+            />
+            <span className="settings-range-value">{h.size.toFixed(2)}em</span>
+            <input
+              type="color"
+              className="settings-color-input"
+              value={h.color || (THEME_FALLBACKS[activeTheme]?.text_primary ?? "#e8e8ec")}
+              onChange={(e) => updateHeading(key, { color: e.target.value })}
+            />
+            {(h.size !== def || h.color) && (
+              <button
+                className="settings-color-reset"
+                onClick={() => updateHeading(key, { size: def, color: "" })}
+                title="Reset"
+              >
+                x
+              </button>
+            )}
+          </div>
+        );
+      })}
+
+      {/* -- Elements -- */}
+      <SubSection title="Elements" />
+
+      <SettingRow label="Blockquote border color">
+        <ColorPicker
+          value={config.style.blockquote_border_color}
+          fallback={THEME_FALLBACKS[activeTheme]?.accent ?? "#8b7cf6"}
+          onChange={(v) => updateConfig({ style: { blockquote_border_color: v } })}
+          onReset={() => updateConfig({ style: { blockquote_border_color: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Blockquote border width" description={`${config.style.blockquote_border_width}px`}>
+        <input type="range" className="settings-range" min={1} max={8} step={1}
+          value={config.style.blockquote_border_width}
+          onChange={(e) => updateConfig({ style: { blockquote_border_width: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.style.blockquote_border_width}px</span>
+      </SettingRow>
+
+      <SettingRow label="Link color">
+        <ColorPicker
+          value={config.style.link_color}
+          fallback="#7ca8f6"
+          onChange={(v) => updateConfig({ style: { link_color: v } })}
+          onReset={() => updateConfig({ style: { link_color: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Link underline">
+        <Toggle
+          checked={config.style.link_underline}
+          onChange={(v) => updateConfig({ style: { link_underline: v } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Code block background">
+        <ColorPicker
+          value={config.style.code_block_bg}
+          fallback={THEME_FALLBACKS[activeTheme]?.bg_elevated ?? "#1a1a20"}
+          onChange={(v) => updateConfig({ style: { code_block_bg: v } })}
+          onReset={() => updateConfig({ style: { code_block_bg: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Code block text">
+        <ColorPicker
+          value={config.style.code_block_text}
+          fallback={THEME_FALLBACKS[activeTheme]?.text_primary ?? "#e8e8ec"}
+          onChange={(v) => updateConfig({ style: { code_block_text: v } })}
+          onReset={() => updateConfig({ style: { code_block_text: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Inline code background">
+        <ColorPicker
+          value={config.style.inline_code_bg}
+          fallback="rgba(139,124,246,0.1)"
+          onChange={(v) => updateConfig({ style: { inline_code_bg: v } })}
+          onReset={() => updateConfig({ style: { inline_code_bg: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Inline code text">
+        <ColorPicker
+          value={config.style.inline_code_text}
+          fallback={THEME_FALLBACKS[activeTheme]?.text_primary ?? "#e8e8ec"}
+          onChange={(v) => updateConfig({ style: { inline_code_text: v } })}
+          onReset={() => updateConfig({ style: { inline_code_text: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Tag background">
+        <ColorPicker
+          value={config.style.tag_bg}
+          fallback="rgba(139,124,246,0.12)"
+          onChange={(v) => updateConfig({ style: { tag_bg: v } })}
+          onReset={() => updateConfig({ style: { tag_bg: "" } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Tag text">
+        <ColorPicker
+          value={config.style.tag_text}
+          fallback="#a89cf8"
+          onChange={(v) => updateConfig({ style: { tag_text: v } })}
+          onReset={() => updateConfig({ style: { tag_text: "" } })}
+        />
+      </SettingRow>
+
+      {/* -- Spacing -- */}
+      <SubSection title="Spacing" />
+
+      <SettingRow label="Editor horizontal padding" description={`${config.style.editor_padding_x}px`}>
+        <input type="range" className="settings-range" min={16} max={96} step={4}
+          value={config.style.editor_padding_x}
+          onChange={(e) => updateConfig({ style: { editor_padding_x: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.style.editor_padding_x}px</span>
+      </SettingRow>
+
+      <SettingRow label="Editor vertical padding" description={`${config.style.editor_padding_y}px`}>
+        <input type="range" className="settings-range" min={8} max={64} step={4}
+          value={config.style.editor_padding_y}
+          onChange={(e) => updateConfig({ style: { editor_padding_y: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.style.editor_padding_y}px</span>
+      </SettingRow>
+
+      <SettingRow label="Inline title size" description={`${config.style.inline_title_size.toFixed(1)}em`}>
+        <input type="range" className="settings-range" min={1.2} max={3.0} step={0.1}
+          value={config.style.inline_title_size}
+          onChange={(e) => updateConfig({ style: { inline_title_size: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.style.inline_title_size.toFixed(1)}em</span>
+      </SettingRow>
+
+      <SettingRow label="UI font size" description={`${config.style.ui_font_size}px`}>
+        <input type="range" className="settings-range" min={11} max={16} step={1}
+          value={config.style.ui_font_size}
+          onChange={(e) => updateConfig({ style: { ui_font_size: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.style.ui_font_size}px</span>
+      </SettingRow>
+
+      <SettingRow label="Paragraph spacing" description={`${config.style.paragraph_spacing}px`}>
+        <input type="range" className="settings-range" min={0} max={24} step={2}
+          value={config.style.paragraph_spacing}
+          onChange={(e) => updateConfig({ style: { paragraph_spacing: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.style.paragraph_spacing}px</span>
+      </SettingRow>
+
+      <SettingRow label="List indent" description={`${config.style.list_indent}px`}>
+        <input type="range" className="settings-range" min={12} max={48} step={4}
+          value={config.style.list_indent}
+          onChange={(e) => updateConfig({ style: { list_indent: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.style.list_indent}px</span>
+      </SettingRow>
+
+      {/* -- Custom CSS -- */}
+      <SubSection title="Custom CSS" />
+
+      <div className="settings-row-full">
+        <div className="settings-row-label">
+          <span className="settings-row-desc">
+            Advanced: inject custom styles. Applied on top of everything.
+          </span>
+        </div>
+        <textarea
+          className="settings-custom-css"
+          value={config.style.custom_css}
+          onChange={(e) => updateConfig({ style: { custom_css: e.target.value } })}
+          placeholder={`.cm-content {\n  /* your custom styles */\n}`}
+          spellCheck={false}
+        />
+      </div>
     </div>
   );
 }
