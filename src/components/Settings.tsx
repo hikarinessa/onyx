@@ -13,71 +13,7 @@ import {
   parseKeyCombo,
   type KeyBinding,
 } from "../lib/keybindings";
-
-// ── Types ──
-
-interface ThemeColorOverrides {
-  bg_base: string;
-  bg_surface: string;
-  bg_elevated: string;
-  text_primary: string;
-  text_secondary: string;
-  text_tertiary: string;
-  accent: string;
-  border_default: string;
-  border_subtle: string;
-}
-
-interface HeadingStyle {
-  size: number;
-  color: string;
-}
-
-interface Config {
-  editor: {
-    font_family: string;
-    font_size: number;
-    line_height: number;
-    content_max_width: number | null;
-    default_mode: string;
-    show_line_numbers: boolean;
-    tab_size: number;
-  };
-  appearance: {
-    theme: string;
-    sidebar_width: number;
-    context_panel_width: number;
-    ui_font: string | null;
-    mono_font: string | null;
-  };
-  behavior: {
-    auto_save_ms: number;
-    spellcheck: boolean;
-    new_note_location: string;
-  };
-  style: {
-    accent_color: string;
-    editor_padding_x: number;
-    editor_padding_y: number;
-    inline_title_size: number;
-    ui_font_size: number;
-    custom_css: string;
-    theme_overrides: Record<string, ThemeColorOverrides>;
-    headings: Record<string, HeadingStyle>;
-    blockquote_border_color: string;
-    blockquote_border_width: number;
-    link_color: string;
-    link_underline: boolean;
-    code_block_bg: string;
-    code_block_text: string;
-    inline_code_bg: string;
-    inline_code_text: string;
-    tag_bg: string;
-    tag_text: string;
-    paragraph_spacing: number;
-    list_indent: number;
-  };
-}
+import type { AppConfig, ThemeColorOverrides, HeadingStyle } from "../lib/configTypes";
 
 type Section = "general" | "editor" | "appearance" | "keybindings" | "about";
 
@@ -132,13 +68,13 @@ export function Settings() {
   const setVisible = useAppStore((s) => s.setSettingsVisible);
 
   const [section, setSection] = useState<Section>("general");
-  const [config, setConfig] = useState<Config | null>(null);
+  const [config, setConfig] = useState<AppConfig | null>(null);
 
   // Load config on open
   useEffect(() => {
     if (!visible) return;
     setSection("general");
-    invoke<Config>("get_config").then(setConfig).catch(console.error);
+    invoke<AppConfig>("get_config").then(setConfig).catch(console.error);
   }, [visible]);
 
   // Escape to close
@@ -164,17 +100,13 @@ export function Settings() {
         invoke("update_config", { json: JSON.stringify(pendingPartial) }).catch(console.error);
         pendingPartial = {};
       }, 300);
-      // Optimistic local update + apply to live UI
+      // Optimistic local update + apply to live UI (deep merge to match Rust side)
       setConfig((prev) => {
         if (!prev) return prev;
-        const next = JSON.parse(JSON.stringify(prev));
-        for (const [key, val] of Object.entries(partial)) {
-          if (typeof val === "object" && val !== null && !Array.isArray(val)) {
-            next[key] = { ...next[key], ...(val as Record<string, unknown>) };
-          } else {
-            next[key] = val;
-          }
-        }
+        const next = deepMergePartials(
+          JSON.parse(JSON.stringify(prev)),
+          partial,
+        ) as AppConfig;
         applyConfig(next);
         return next;
       });
@@ -298,7 +230,7 @@ function GeneralSection({
   config,
   updateConfig,
 }: {
-  config: Config;
+  config: AppConfig;
   updateConfig: (partial: Record<string, unknown>) => void;
 }) {
   return (
@@ -354,7 +286,7 @@ function EditorSection({
   config,
   updateConfig,
 }: {
-  config: Config;
+  config: AppConfig;
   updateConfig: (partial: Record<string, unknown>) => void;
 }) {
   const unlimited = config.editor.content_max_width === null;
@@ -495,7 +427,7 @@ function AppearanceSection({
   config,
   updateConfig,
 }: {
-  config: Config;
+  config: AppConfig;
   updateConfig: (partial: Record<string, unknown>) => void;
 }) {
   const themes = getAvailableThemes();
