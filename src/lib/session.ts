@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, type AccordionState } from "../stores/app";
+import { useAppStore, type AccordionState, type EditorMode } from "../stores/app";
 import { openFileInEditor } from "./openFile";
 import { getActiveThemeId, applyTheme } from "./themes";
 
@@ -9,7 +9,7 @@ const SESSION_BACKUP_KEY = "onyx-session-backup";
 const SESSION_LEGACY_KEY = "onyx-session";
 
 interface SessionData {
-  tabs: { path: string; name: string }[];
+  tabs: { path: string; name: string; editorMode?: EditorMode }[];
   activeTabPath: string | null;
   sidebarVisible: boolean;
   contextPanelVisible: boolean;
@@ -22,7 +22,7 @@ interface SessionData {
 function getSessionData(): SessionData {
   const state = useAppStore.getState();
   return {
-    tabs: state.tabs.map((t) => ({ path: t.path, name: t.name })),
+    tabs: state.tabs.map((t) => ({ path: t.path, name: t.name, editorMode: t.editorMode })),
     activeTabPath: state.activeTabId,
     sidebarVisible: state.sidebarVisible,
     contextPanelVisible: state.contextPanelVisible,
@@ -130,6 +130,15 @@ export async function restoreSession(): Promise<void> {
       )
     )
   );
+
+  // Restore per-tab editor mode
+  const store = useAppStore.getState();
+  for (const tab of data.tabs) {
+    if (tab.editorMode && tab.editorMode !== "source") {
+      const existing = store.tabs.find((t) => t.path === tab.path);
+      if (existing) store.toggleEditorMode(existing.id);
+    }
+  }
 
   // Switch to the previously active tab
   if (data.activeTabPath) {

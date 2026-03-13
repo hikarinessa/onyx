@@ -20,20 +20,24 @@ export const wikilinkFollowRef = { current: null as ((link: string) => void) | n
 
 const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
 
-/** Build decorations by scanning all visible lines for [[...]] patterns */
+/** Build decorations by scanning only visible lines for [[...]] patterns */
 function buildWikilinkDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
   const mark = Decoration.mark({ class: "cm-wikilink" });
 
-  for (let i = 1; i <= doc.lines; i++) {
-    const line = doc.line(i);
-    let match: RegExpExecArray | null;
-    WIKILINK_RE.lastIndex = 0;
-    while ((match = WIKILINK_RE.exec(line.text)) !== null) {
-      const from = line.from + match.index;
-      const to = from + match[0].length;
-      builder.add(from, to, mark);
+  for (const { from, to } of view.visibleRanges) {
+    const startLine = doc.lineAt(from).number;
+    const endLine = doc.lineAt(to).number;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      let match: RegExpExecArray | null;
+      WIKILINK_RE.lastIndex = 0;
+      while ((match = WIKILINK_RE.exec(line.text)) !== null) {
+        const mFrom = line.from + match.index;
+        const mTo = mFrom + match[0].length;
+        builder.add(mFrom, mTo, mark);
+      }
     }
   }
 
@@ -73,8 +77,8 @@ const wikilinkDecorations = ViewPlugin.fromClass(
       this.decorations = buildWikilinkDecorations(view);
     }
 
-    update(update: { docChanged: boolean; view: EditorView }) {
-      if (update.docChanged) {
+    update(update: { docChanged: boolean; viewportChanged: boolean; view: EditorView }) {
+      if (update.docChanged || update.viewportChanged) {
         this.decorations = buildWikilinkDecorations(update.view);
       }
     }

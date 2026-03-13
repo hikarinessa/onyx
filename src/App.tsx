@@ -115,6 +115,17 @@ function registerCommands() {
   }
 
   registerCommand({
+    id: "editor.toggleMode",
+    label: "Toggle Preview Mode",
+    shortcut: "Cmd+/",
+    category: "Editor",
+    execute: () => {
+      const { activeTabId, toggleEditorMode } = store();
+      if (activeTabId) toggleEditorMode(activeTabId);
+    },
+  });
+
+  registerCommand({
     id: "editor.foldFrontmatter",
     label: "Fold Frontmatter",
     category: "Editor",
@@ -235,6 +246,12 @@ export default function App() {
       if (meta && e.shiftKey && (e.key === "D" || e.key === "d")) {
         e.preventDefault();
         openTodayNote();
+      }
+
+      if (meta && !alt && !e.shiftKey && e.key === "/") {
+        e.preventDefault();
+        const { activeTabId, toggleEditorMode } = store();
+        if (activeTabId) toggleEditorMode(activeTabId);
       }
     };
 
