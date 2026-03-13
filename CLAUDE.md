@@ -14,7 +14,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 1–6:** Complete (skeleton → core editor → links → typed objects → file ops → hardening → periodic notes → backfill → command palette & theming)
 - **Phase 7 (Live Preview & Navigation):** Complete
 - **Phase 7.5 (Hardening & CSS Architecture):** Complete
-- **Phase 7.6 (Settings Window):** Planned
+- **Phase 7.6 (Settings Window):** Complete
 - **Phase 8 (Split Panes):** Planned
 - **Phase 9 (Tables):** Planned
 - **Phase 10 (Per-Block Features):** Planned
@@ -28,9 +28,9 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 ```
 src/                          # Frontend (React + TypeScript)
 ├── main.tsx                  #   12 lines — React entry point
-├── App.tsx                   #  397 lines — Root component, shortcuts, command registration, menu events
+├── App.tsx                   #  376 lines — Root component, keybinding dispatch, command registration, menu events
 ├── stores/
-│   └── app.ts                #  354 lines — Zustand store (tabs, panes, nav stack, panels, memoized selectors)
+│   └── app.ts                #  378 lines — Zustand store (tabs, panes, nav stack, panels, settings, memoized selectors)
 ├── components/
 │   ├── Titlebar.tsx          #    8 lines — Custom titlebar with traffic lights spacer
 │   ├── TabBar.tsx            #   84 lines — Tab strip with drag-to-reorder
@@ -43,7 +43,8 @@ src/                          # Frontend (React + TypeScript)
 │   ├── Calendar.tsx          #  261 lines — Month-grid calendar with week numbers
 │   ├── StatusBar.tsx         #   59 lines — Cursor, word count, lint status, editor mode, file path
 │   ├── QuickOpen.tsx         #  264 lines — Cmd+O fuzzy search + type: prefix queries
-│   └── CommandPalette.tsx    #  123 lines — Cmd+P fuzzy command search
+│   ├── CommandPalette.tsx    #  123 lines — Cmd+P fuzzy command search
+│   └── Settings.tsx         #  704 lines — Settings modal (config, keybindings, themes, about)
 ├── extensions/
 │   ├── frontmatter.ts        #  178 lines — CM6: frontmatter detection, styling, auto-fold, toggle-fold command
 │   ├── wikilinks.ts          #  157 lines — CM6: wikilink syntax highlighting, click to follow
@@ -63,19 +64,21 @@ src/                          # Frontend (React + TypeScript)
 │   ├── session.ts            #  185 lines — Tab/panel/pane state persistence (~/.onyx/session.json)
 │   ├── ipcCache.ts           #   40 lines — TTL-based IPC query cache (reduces redundant Rust calls)
 │   ├── commands.ts           #   33 lines — Command registry for palette + menu bar
+│   ├── keybindings.ts        #  174 lines — Keybinding registry (parse, normalise, conflict detect, global keymap)
 │   └── themes.ts             #   59 lines — Theme system (data-theme attribute switching)
 └── styles/
     ├── reset.css             #   67 lines — CSS reset (@layer reset, prefers-reduced-motion)
     ├── theme.css             #  117 lines — CSS layer order + custom properties (dark/light/warm via data-theme)
-    └── layout.css            # 1208 lines — Layout/component styles (@layer layout, components) + unlayered editor overrides
+    └── layout.css            # 1726 lines — Layout/component styles (@layer layout, components) + unlayered editor overrides
 
 src-tauri/                    # Backend (Rust)
 ├── Cargo.toml                # Dependencies
 ├── tauri.conf.json           # Window config, dev URL, CSP
 └── src/
     ├── main.rs               #    6 lines — Entry point
-    ├── lib.rs                #  240 lines — Tauri setup, native menu bar, AppState, App Nap prevention, plugins
-    ├── commands.rs           #  942 lines — Tauri commands (file ops, search, bookmarks, autocomplete, mtime conflict detection)
+    ├── lib.rs                #  254 lines — Tauri setup, native menu bar, AppState, App Nap prevention, plugins
+    ├── commands.rs           # 1004 lines — Tauri commands (file ops, search, bookmarks, autocomplete, config, keybindings)
+    ├── config.rs             #  233 lines — App config + keybinding persistence (~/.onyx/config.json, keybindings.json)
     ├── db.rs                 #  555 lines — SQLite (WAL, files/links/tags/bookmarks + tag/title queries)
     ├── dirs.rs               #  117 lines — Directory registration (~/.onyx/directories.json)
     ├── indexer.rs            #  235 lines — Background indexer (frontmatter, wikilinks, tags)
@@ -86,7 +89,7 @@ src-tauri/                    # Backend (Rust)
         └── mac_rounded_corners.rs # 217 lines — macOS window corner radius fix
 ```
 
-**Total:** ~10,000 lines (5,500 TS/TSX + 3,100 Rust + 1,400 CSS)
+**Total:** ~11,600 lines (6,400 TS/TSX + 3,300 Rust + 1,700 CSS)
 
 ## Architecture Essentials
 
@@ -104,6 +107,9 @@ src-tauri/                    # Backend (Rust)
 - **IPC cache:** `src/lib/ipcCache.ts` — TTL-based cache for expensive Rust queries (backlinks, etc.). Invalidated on `fs:change` events.
 - **Memoized selectors:** `selectActiveTab`, `selectActiveTabPath`, etc. in `app.ts` — avoids `Array.find` on every store update (cursor moves, word counts).
 - **App Nap prevention:** macOS `NSProcessInfo.beginActivityWithOptions` in `lib.rs` prevents throttling of auto-save timers.
+- **Config system:** `~/.onyx/config.json` with `Config` struct (editor, appearance, behavior sections). Deep-merge updates via `serde_json::Value`. Loaded at startup into `AppState.config`.
+- **Keybinding registry:** `src/lib/keybindings.ts` — centralized Map of command ID → binding. `parseKeyCombo(KeyboardEvent)` produces canonical strings (`Cmd+Shift+D`). Global shortcuts dispatched via keyMap lookup in App.tsx instead of hardcoded if-chains. Supports user overrides saved to `~/.onyx/keybindings.json`.
+- **Settings modal:** `Settings.tsx` — 5-section modal (General, Editor, Appearance, Keybindings, About). Loads config from Rust on mount, saves partial patches via `update_config`. Keybinding editor with click-to-capture and conflict detection.
 - **No Tailwind.** Plain CSS with custom properties.
 - **Type-only imports:** CM6 types like `Extension`, `DecorationSet` must use `import type` or `type` keyword — they don't exist at runtime.
 
@@ -185,6 +191,14 @@ src-tauri/                    # Backend (Rust)
 |---------|-----------|
 | `allow_path` | `(path: String) → ()` — whitelist a path outside registered dirs |
 | `disallow_path` | `(path: String) → ()` — remove from allowlist |
+
+### Config & Keybindings
+| Command | Signature |
+|---------|-----------|
+| `get_config` | `() → Config` — full app config |
+| `update_config` | `(json: String) → ()` — partial JSON patch, deep-merged into existing config |
+| `get_keybindings` | `() → Vec<KeyBinding>` — user keybinding overrides |
+| `save_keybindings` | `(json: String) → ()` — persist keybinding overrides |
 
 ## Build & Run
 
