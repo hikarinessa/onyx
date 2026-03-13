@@ -7,12 +7,19 @@ import { ContextPanel } from "./components/ContextPanel";
 import { StatusBar } from "./components/StatusBar";
 import { QuickOpen } from "./components/QuickOpen";
 import { CommandPalette } from "./components/CommandPalette";
+import { Settings } from "./components/Settings";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useAppStore } from "./stores/app";
 import { restoreSession, initSessionPersistence } from "./lib/session";
 import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
-import { registerCommand } from "./lib/commands";
+import { registerCommand, getAllCommands } from "./lib/commands";
 import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
+import {
+  registerKeybinding,
+  parseKeyCombo,
+  normaliseCombo,
+  getGlobalKeyMap,
+} from "./lib/keybindings";
 import { createNewNote } from "./lib/fileOps";
 import { navigateHistory } from "./lib/openFile";
 import { listen } from "@tauri-apps/api/event";
@@ -206,6 +213,21 @@ function registerCommands() {
     category: "View",
     execute: () => store().setCommandPaletteVisible(true),
   });
+
+  registerCommand({
+    id: "view.settings",
+    label: "Settings",
+    shortcut: "Cmd+,",
+    category: "View",
+    execute: () => store().setSettingsVisible(true),
+  });
+
+  // Register keybindings for every command that has a shortcut
+  for (const cmd of getAllCommands()) {
+    if (cmd.shortcut) {
+      registerKeybinding(cmd.id, normaliseCombo(cmd.shortcut), "global");
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -244,6 +266,9 @@ export default function App() {
         case "command_palette":
           store().setCommandPaletteVisible(true);
           break;
+        case "settings":
+          store().setSettingsVisible(true);
+          break;
         case "today_note":
           openTodayNote();
           break;
@@ -277,79 +302,32 @@ export default function App() {
     return cleanup;
   }, []);
 
-  // Global keyboard shortcuts — single source of truth for non-editor shortcuts.
+  // Global keyboard shortcuts — dispatched via keybinding registry.
   // Editor-specific shortcuts (formatting, outliner, search) live in CM6 keymaps.
   useEffect(() => {
+    // Build lookup once; rebuilt on next mount if bindings change.
+    const keyMap = getGlobalKeyMap();
+    const commandMap = new Map<string, () => void | Promise<void>>();
+    for (const cmd of getAllCommands()) {
+      commandMap.set(cmd.id, cmd.execute);
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      const alt = e.altKey;
-      const store = useAppStore.getState;
+      if (e.defaultPrevented) return;
+      const combo = parseKeyCombo(e);
+      if (!combo) return;
 
-      if (meta && alt && e.key === "[") {
-        e.preventDefault();
-        store().toggleSidebar();
+      // Try exact combo first, then Ctrl→Cmd fallback (preserves the
+      // original `metaKey || ctrlKey` behaviour for cross-platform support).
+      let commandId = keyMap.get(combo);
+      if (!commandId && combo.startsWith("Ctrl+") && !combo.includes("Cmd+")) {
+        commandId = keyMap.get(combo.replace("Ctrl+", "Cmd+"));
       }
 
-      if (meta && alt && e.key === "]") {
+      if (commandId) {
         e.preventDefault();
-        store().toggleContextPanel();
-      }
-
-      if (meta && !alt && !e.shiftKey && e.key === "w") {
-        e.preventDefault();
-        const { activeTabId, closeTab } = store();
-        if (activeTabId) closeTab(activeTabId);
-      }
-
-      if (meta && !alt && !e.shiftKey && e.key === "o") {
-        e.preventDefault();
-        toggleQuickOpen();
-      }
-
-      if (meta && !alt && !e.shiftKey && e.key === "p") {
-        e.preventDefault();
-        store().setCommandPaletteVisible(true);
-      }
-
-      if (meta && !alt && !e.shiftKey && e.key === "n") {
-        e.preventDefault();
-        createNewNote();
-      }
-
-      if (meta && !alt && !e.shiftKey && e.key === "k") {
-        e.preventDefault();
-        openQuickOpenForWikilink();
-      }
-
-      if (meta && e.shiftKey && (e.key === "D" || e.key === "d")) {
-        e.preventDefault();
-        openTodayNote();
-      }
-
-      if (meta && !alt && !e.shiftKey && e.key === "/" && !e.defaultPrevented) {
-        e.preventDefault();
-        const { activeTabId, toggleEditorMode } = store();
-        if (activeTabId) toggleEditorMode(activeTabId);
-      }
-
-      // Ctrl+Tab / Ctrl+Shift+Tab — cycle tabs
-      if (e.ctrlKey && e.key === "Tab") {
-        e.preventDefault();
-        const { tabs, activeTabId, setActiveTab } = store();
-        if (tabs.length <= 1) return;
-        const idx = tabs.findIndex((t) => t.id === activeTabId);
-        const next = e.shiftKey ? (idx - 1 + tabs.length) % tabs.length : (idx + 1) % tabs.length;
-        setActiveTab(tabs[next].id);
-      }
-
-      // Cmd+[ / Cmd+] — navigate back/forward (without Alt, which is sidebar/context)
-      if (meta && !alt && !e.shiftKey && e.key === "[" && !e.defaultPrevented) {
-        e.preventDefault();
-        navigateHistory("back");
-      }
-      if (meta && !alt && !e.shiftKey && e.key === "]" && !e.defaultPrevented) {
-        e.preventDefault();
-        navigateHistory("forward");
+        const execute = commandMap.get(commandId);
+        if (execute) execute();
       }
     };
 
@@ -392,6 +370,7 @@ export default function App() {
       <StatusBar />
       <QuickOpen />
       <CommandPalette />
+      <Settings />
     </div>
   );
 }
