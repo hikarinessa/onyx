@@ -71,8 +71,10 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [datesWithNotes, setDatesWithNotes] = useState<Set<number>>(new Set());
+  const [weeksWithNotes, setWeeksWithNotes] = useState<Set<string>>(new Set());
 
-  const fetchDates = useCallback(async () => {
+  const fetchNoteIndicators = useCallback(async () => {
+    // Fetch daily note indicators
     try {
       const days = await invoke<number[]>("get_dates_with_notes", {
         year: viewYear,
@@ -82,11 +84,30 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
     } catch {
       setDatesWithNotes(new Set());
     }
+
+    // Compute visible week strings and fetch weekly note indicators
+    try {
+      const firstOfMonth = new Date(viewYear, viewMonth, 1);
+      const startDay = (firstOfMonth.getDay() + 6) % 7;
+      const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
+      // Monday of first row
+      const firstMonday = new Date(viewYear, viewMonth, 1 - startDay);
+      const weekStrings: string[] = [];
+      for (let row = 0; row < 6; row++) {
+        const monday = new Date(firstMonday);
+        monday.setDate(monday.getDate() + row * 7);
+        weekStrings.push(toISOWeekString(monday));
+      }
+      const found = await invoke<string[]>("get_weeks_with_notes", { weeks: weekStrings });
+      setWeeksWithNotes(new Set(found));
+    } catch {
+      setWeeksWithNotes(new Set());
+    }
   }, [viewYear, viewMonth]);
 
   useEffect(() => {
-    fetchDates();
-  }, [fetchDates]);
+    fetchNoteIndicators();
+  }, [fetchNoteIndicators]);
 
   const prevMonth = () => {
     if (viewMonth === 0) {
@@ -179,11 +200,12 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
           const mondayDate = new Date(monday.year, monday.month, monday.day);
           const weekNum = getISOWeek(mondayDate);
           const weekStr = toISOWeekString(mondayDate);
+          const hasWeekNote = weeksWithNotes.has(weekStr);
 
           return (
             <div key={wi} className="calendar-week-row">
               <div
-                className="calendar-week-num"
+                className={`calendar-week-num ${hasWeekNote ? "has-note" : ""}`}
                 role="button"
                 tabIndex={0}
                 title={`Week ${weekNum} — click to open weekly note`}

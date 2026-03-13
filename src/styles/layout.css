@@ -977,6 +977,16 @@
   color: var(--accent);
 }
 
+.calendar-week-num.has-note::after {
+  content: "";
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin: 1px auto 0;
+}
+
 .calendar-day {
   text-align: center;
   font-size: 11px;
