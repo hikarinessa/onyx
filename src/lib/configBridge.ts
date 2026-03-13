@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 
+// Injected by Editor.tsx to avoid circular imports
+let remeasureHook: (() => void) | null = null;
+export function setRemeasureHook(fn: () => void) {
+  remeasureHook = fn;
+}
+
 let autoSaveMs = 500;
 
 export function getAutoSaveMs(): number {
@@ -229,6 +235,9 @@ export function applyConfig(config: AppConfig) {
   }
 
   lastConfig = config;
+
+  // Tell CM6 to re-measure after font/sizing changes
+  if (remeasureHook) remeasureHook();
 }
 
 /** Called by themes.ts after switching themes to re-apply per-theme color overrides. */

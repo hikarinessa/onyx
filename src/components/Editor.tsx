@@ -26,7 +26,7 @@ import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension, togglePreviewEffect, previewModeField } from "../extensions/livePreview";
 import { openFileInEditor } from "../lib/openFile";
 import { renameFile } from "../lib/fileOps";
-import { getAutoSaveMs } from "../lib/configBridge";
+import { getAutoSaveMs, setRemeasureHook } from "../lib/configBridge";
 
 // ---------------------------------------------------------------------------
 // Module-level caches
@@ -346,6 +346,9 @@ export function Editor() {
       }
     });
     setFlushSaveHook(flushSaveForTab);
+    setRemeasureHook(() => {
+      if (viewRef.current) viewRef.current.requestMeasure();
+    });
 
     // Wire wikilink follow: resolve via Rust, then open the target file
     wikilinkFollowRef.current = async (link: string, newTab: boolean) => {
