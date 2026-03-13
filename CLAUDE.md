@@ -65,7 +65,8 @@ src/                          # Frontend (React + TypeScript)
 │   ├── ipcCache.ts           #   40 lines — TTL-based IPC query cache (reduces redundant Rust calls)
 │   ├── commands.ts           #   33 lines — Command registry for palette + menu bar
 │   ├── keybindings.ts        #  174 lines — Keybinding registry (parse, normalise, conflict detect, global keymap)
-│   └── themes.ts             #   59 lines — Theme system (data-theme attribute switching)
+│   ├── themes.ts             #   59 lines — Theme system (data-theme attribute switching)
+│   └── configBridge.ts       #  257 lines — Config bridge: loads Rust config → CSS custom properties, remeasure hook
 └── styles/
     ├── reset.css             #   67 lines — CSS reset (@layer reset, prefers-reduced-motion)
     ├── theme.css             #  117 lines — CSS layer order + custom properties (dark/light/warm via data-theme)
@@ -110,6 +111,7 @@ src-tauri/                    # Backend (Rust)
 - **Config system:** `~/.onyx/config.json` with `Config` struct (editor, appearance, behavior sections). Deep-merge updates via `serde_json::Value`. Loaded at startup into `AppState.config`.
 - **Keybinding registry:** `src/lib/keybindings.ts` — centralized Map of command ID → binding. `parseKeyCombo(KeyboardEvent)` produces canonical strings (`Cmd+Shift+D`). Global shortcuts dispatched via keyMap lookup in App.tsx instead of hardcoded if-chains. Supports user overrides saved to `~/.onyx/keybindings.json`.
 - **Settings modal:** `Settings.tsx` — 5-section modal (General, Editor, Appearance, Keybindings, About). Loads config from Rust on mount, saves partial patches via `update_config`. Keybinding editor with click-to-capture and conflict detection.
+- **Config bridge:** `configBridge.ts` applies Rust config as CSS custom properties on `:root`. Handles theme color overrides (per dark/light/warm), heading styles (size + color for h1-h6), element styles (blockquote, links, code, tags), and spacing. Uses hook injection pattern (`setRemeasureHook`) to trigger CM6 `requestMeasure()` after font/sizing changes without circular imports.
 - **No Tailwind.** Plain CSS with custom properties.
 - **Type-only imports:** CM6 types like `Extension`, `DecorationSet` must use `import type` or `type` keyword — they don't exist at runtime.
 
@@ -244,3 +246,6 @@ npx tsc --noEmit         # TypeScript type check
 - **Mtime conflict on first save:** The mtime map starts empty. First save of a file falls back to content comparison (no mtime recorded yet). After the first `read_file`, mtime is tracked and subsequent writes use the cheap mtime check.
 - **Orphan files need `allow_path` before IPC.** Files outside registered directories are blocked by `validate_path`. Call `invoke("allow_path", { path })` before `read_file`/`write_file` for orphan files. `openFileInEditor` handles this automatically. On session restore, orphan paths are allowed before tab opening. On removal, `disallow_path` cleans up.
 - **Mtime conflict surfaces in StatusBar.** When `write_file` rejects due to external modification, it returns `CONFLICT:` prefix. The auto-save catches this, sets `saveConflictPath` in the store, and the StatusBar shows a clickable reload prompt. Reloading re-reads from disk and clears the conflict.
+- **CM6 cursor positioning: use padding, not margins.** `margin-top` on `.cm-line` breaks cursor calculations — CM6 doesn't account for margins in its character measurement. Use `padding-top` instead. After external CSS changes to font/sizing, call `requestMeasure()` via the `setRemeasureHook` pattern in `configBridge.ts`.
+- **CM6 syntax highlight spans override line-level colour.** `Decoration.line({ class })` sets colour on `.cm-line`, but CM6's markdown grammar wraps text in `<span class="ͼX">` with its own `color`. Child spans must use `color: inherit !important` to respect the line-level colour (see `.cm-preview-heading *` in `livePreview.ts`).
+- **Hook injection pattern for cross-module references.** When module A needs to call into module B but importing B from A would create a circular import, use the hook pattern: A exports `setXHook(fn)`, B calls it during init. Used for `setFlushSaveHook`, `setSnapshotEditorHook`, `setRemeasureHook`.
