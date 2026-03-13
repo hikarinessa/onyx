@@ -15,12 +15,17 @@ const lightTheme: Theme = {
   name: "Light",
 };
 
+const warm2Theme: Theme = {
+  id: "warm2",
+  name: "Warm 2",
+};
+
 const warmTheme: Theme = {
   id: "warm",
   name: "Warm",
 };
 
-const builtInThemes: Theme[] = [darkTheme, lightTheme, warmTheme];
+const builtInThemes: Theme[] = [darkTheme, lightTheme, warmTheme, warm2Theme];
 let activeThemeId = "dark";
 
 export function getAvailableThemes(): Theme[] {
