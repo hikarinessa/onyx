@@ -845,3 +845,48 @@ pub fn get_dates_with_notes(
     }
     Ok(days)
 }
+
+#[tauri::command]
+pub fn get_weeks_with_notes(
+    weeks: Vec<String>,
+    state: State<AppState>,
+) -> Result<Vec<String>, String> {
+    let config = periodic::load_config()?;
+
+    let weekly_config = match &config.weekly {
+        Some(c) if c.enabled && !c.directory_id.is_empty() => c,
+        _ => return Ok(Vec::new()),
+    };
+
+    let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+    let dir = match dirs.list().iter().find(|d| d.id == weekly_config.directory_id) {
+        Some(d) => d,
+        None => return Ok(Vec::new()),
+    };
+
+    let dir_path = dir.path.to_string_lossy().to_string();
+    drop(dirs);
+
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut found = Vec::new();
+
+    for week_str in &weeks {
+        // Parse YYYY-Www → Monday of that week
+        if let Some(date) = parse_week_string(week_str) {
+            let (relative, _) = periodic::generate_note_path(&weekly_config.format, date);
+            let full_path = format!("{}/{}", dir_path, relative);
+            if let Ok(Some(_)) = db.get_file_id(&full_path) {
+                found.push(week_str.clone());
+            }
+        }
+    }
+    Ok(found)
+}
+
+fn parse_week_string(s: &str) -> Option<NaiveDate> {
+    let parts: Vec<&str> = s.splitn(2, "-W").collect();
+    if parts.len() != 2 { return None; }
+    let year: i32 = parts[0].parse().ok()?;
+    let week: u32 = parts[1].parse().ok()?;
+    NaiveDate::from_isoywd_opt(year, week, chrono::Weekday::Mon)
+}

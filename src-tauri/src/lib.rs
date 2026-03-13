@@ -196,6 +196,7 @@ pub fn run() {
             commands::save_periodic_config,
             commands::create_periodic_note,
             commands::get_dates_with_notes,
+            commands::get_weeks_with_notes,
             commands::get_all_tags,
             commands::get_all_titles,
             commands::count_incoming_links,
