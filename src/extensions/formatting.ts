@@ -109,7 +109,7 @@ export const formattingKeymap = [
   },
   {
     key: "Mod-i",
-    run: (view: EditorView) => toggleWrap(view, "*"),
+    run: (view: EditorView) => toggleWrap(view, "_"),
   },
   {
     key: "Mod-Shift-c",

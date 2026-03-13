@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { EditorState, EditorSelection, type Extension } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
@@ -25,6 +25,7 @@ import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension, togglePreviewEffect, previewModeField } from "../extensions/livePreview";
 import { openFileInEditor } from "../lib/openFile";
+import { renameFile } from "../lib/fileOps";
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -170,13 +171,13 @@ function buildExtensions(): Extension[] {
 
   return [
     editorModeKeymap,
+    keymap.of(formattingKeymap),
+    keymap.of(outlinerKeymap),
     keymap.of([
       ...defaultKeymap,
       ...historyKeymap,
       ...foldKeymap,
       ...searchKeymap,
-      ...formattingKeymap,
-      ...outlinerKeymap,
     ]),
     history(),
     markdown({ base: markdownLanguage, codeLanguages: languages }),
@@ -494,6 +495,35 @@ export function Editor() {
     }
   }, [tabs]);
 
+  // Inline title — editable, renames file on change
+  const [titleValue, setTitleValue] = useState("");
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  // Sync title when active tab changes
+  useEffect(() => {
+    if (activeTab) {
+      setTitleValue(activeTab.name.replace(/\.md$/, ""));
+    }
+  }, [activeTab?.id, activeTab?.name]); // eslint-disable-line
+
+  const handleTitleCommit = useCallback(async () => {
+    if (!activeTab) return;
+    const trimmed = titleValue.trim();
+    const oldName = activeTab.name.replace(/\.md$/, "");
+    if (!trimmed || trimmed === oldName) {
+      setTitleValue(oldName);
+      return;
+    }
+    const dir = activeTab.path.substring(0, activeTab.path.lastIndexOf("/"));
+    const newPath = `${dir}/${trimmed}.md`;
+    try {
+      await renameFile(activeTab.path, newPath);
+    } catch (err) {
+      console.error("Failed to rename:", err);
+      setTitleValue(oldName); // revert on failure
+    }
+  }, [activeTab, titleValue]);
+
   if (!activeTab) {
     return (
       <div className="editor-area">
@@ -506,6 +536,24 @@ export function Editor() {
 
   return (
     <div className="editor-area">
+      <input
+        ref={titleRef}
+        className="editor-inline-title"
+        value={titleValue}
+        onChange={(e) => setTitleValue(e.target.value)}
+        onBlur={handleTitleCommit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            titleRef.current?.blur();
+          }
+          if (e.key === "Escape") {
+            setTitleValue(activeTab.name.replace(/\.md$/, ""));
+            titleRef.current?.blur();
+          }
+        }}
+        spellCheck={false}
+      />
       <div className={`editor-container ${modeClass}`} ref={containerRef} />
     </div>
   );

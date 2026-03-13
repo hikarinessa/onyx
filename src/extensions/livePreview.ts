@@ -77,7 +77,10 @@ class CheckboxWidget extends WidgetType {
 const HEADING_RE = /^(#{1,6})\s+/;
 const BOLD_ITALIC_RE = /\*{3}(.+?)\*{3}/g;
 const BOLD_RE = /\*{2}(.+?)\*{2}/g;
-const ITALIC_RE = /(?<!\*)\*([^*]+)\*(?!\*)/g;
+const ITALIC_STAR_RE = /(?<!\*)\*([^*]+)\*(?!\*)/g;
+const ITALIC_UNDER_RE = /(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])/g;
+const STRIKETHROUGH_RE = /~~(.+?)~~/g;
+const HIGHLIGHT_RE = /==(.+?)==/g;
 const CHECKBOX_RE = /^(\s*[-*+]\s)\[([ x])\]\s/;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 
@@ -87,6 +90,8 @@ const DECO_REPLACE = Decoration.replace({});
 const DECO_BOLD = Decoration.mark({ class: "cm-preview-bold" });
 const DECO_ITALIC = Decoration.mark({ class: "cm-preview-italic" });
 const DECO_BOLD_ITALIC = Decoration.mark({ class: "cm-preview-bold cm-preview-italic" });
+const DECO_STRIKETHROUGH = Decoration.mark({ class: "cm-preview-strikethrough" });
+const DECO_HIGHLIGHT = Decoration.mark({ class: "cm-preview-highlight" });
 const DECO_WIKILINK = Decoration.mark({ class: "cm-preview-wikilink" });
 const DECO_CHECKED = Decoration.mark({ class: "cm-preview-checked" });
 
@@ -252,15 +257,41 @@ function addInlineDecorations(
     claimed.push({ from, to });
   }
 
-  // Italic (*text*)
-  ITALIC_RE.lastIndex = 0;
-  while ((m = ITALIC_RE.exec(text)) !== null) {
+  // Italic (*text* and _text_)
+  for (const re of [ITALIC_STAR_RE, ITALIC_UNDER_RE]) {
+    re.lastIndex = 0;
+    while ((m = re.exec(text)) !== null) {
+      const from = line.from + m.index;
+      const to = from + m[0].length;
+      if (isClaimed(from, to)) continue;
+      ranges.push({ from, to: from + 1, deco: DECO_REPLACE });
+      ranges.push({ from: from + 1, to: to - 1, deco: DECO_ITALIC });
+      ranges.push({ from: to - 1, to, deco: DECO_REPLACE });
+      claimed.push({ from, to });
+    }
+  }
+
+  // Strikethrough (~~text~~)
+  STRIKETHROUGH_RE.lastIndex = 0;
+  while ((m = STRIKETHROUGH_RE.exec(text)) !== null) {
     const from = line.from + m.index;
     const to = from + m[0].length;
     if (isClaimed(from, to)) continue;
-    ranges.push({ from, to: from + 1, deco: DECO_REPLACE });
-    ranges.push({ from: from + 1, to: to - 1, deco: DECO_ITALIC });
-    ranges.push({ from: to - 1, to, deco: DECO_REPLACE });
+    ranges.push({ from, to: from + 2, deco: DECO_REPLACE });
+    ranges.push({ from: from + 2, to: to - 2, deco: DECO_STRIKETHROUGH });
+    ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
+    claimed.push({ from, to });
+  }
+
+  // Highlight (==text==)
+  HIGHLIGHT_RE.lastIndex = 0;
+  while ((m = HIGHLIGHT_RE.exec(text)) !== null) {
+    const from = line.from + m.index;
+    const to = from + m[0].length;
+    if (isClaimed(from, to)) continue;
+    ranges.push({ from, to: from + 2, deco: DECO_REPLACE });
+    ranges.push({ from: from + 2, to: to - 2, deco: DECO_HIGHLIGHT });
+    ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
     claimed.push({ from, to });
   }
 
@@ -352,6 +383,15 @@ const previewTheme = EditorView.theme({
   },
   ".cm-preview-italic": {
     fontStyle: "italic",
+  },
+  ".cm-preview-strikethrough": {
+    textDecoration: "line-through",
+    opacity: "0.7",
+  },
+  ".cm-preview-highlight": {
+    background: "rgba(255, 204, 0, 0.3)",
+    borderRadius: "2px",
+    padding: "1px 0",
   },
   ".cm-preview-checkbox": {
     verticalAlign: "middle",

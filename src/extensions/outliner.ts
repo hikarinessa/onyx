@@ -153,8 +153,8 @@ function backspaceOnEmptyItem(view: EditorView): boolean {
 export const outlinerKeymap = [
   { key: "Tab", run: indentListItem },
   { key: "Shift-Tab", run: outdentListItem },
-  { key: "Alt-ArrowUp", run: moveListItemUp },
-  { key: "Alt-ArrowDown", run: moveListItemDown },
+  { key: "Ctrl-Shift-ArrowUp", mac: "Alt-ArrowUp", run: moveListItemUp },
+  { key: "Ctrl-Shift-ArrowDown", mac: "Alt-ArrowDown", run: moveListItemDown },
   { key: "Enter", run: newListItem },
   { key: "Backspace", run: backspaceOnEmptyItem },
 ];
