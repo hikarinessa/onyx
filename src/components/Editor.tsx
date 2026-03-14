@@ -127,17 +127,31 @@ const onyxTheme = EditorView.theme({
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
+/** Find which tab ID a view belongs to by checking the pane registry */
+function tabIdForView(view: EditorView): string | null {
+  for (const [paneId, paneView] of paneViews) {
+    if (paneView === view) {
+      const pane = useAppStore.getState().paneState.panes.find((p) => p.id === paneId);
+      return pane?.activeTabId ?? null;
+    }
+  }
+  return activeTabIdBox.current; // fallback for single-pane
+}
+
 function buildExtensions(): Extension[] {
   const updateListener = EditorView.updateListener.of((update) => {
-    const tabId = activeTabIdBox.current;
+    const tabId = tabIdForView(update.view);
     if (!tabId) return;
 
     const { setCursorInfo, setModified, setWordCount, setCharCount } = useAppStore.getState();
+    const isActiveView = tabId === selectActivePane(useAppStore.getState()).activeTabId;
 
-    // Cursor position — always update (cheap)
-    const pos = update.state.selection.main.head;
-    const line = update.state.doc.lineAt(pos);
-    setCursorInfo(line.number, pos - line.from + 1);
+    // Cursor position — only for active pane (status bar)
+    if (isActiveView) {
+      const pos = update.state.selection.main.head;
+      const line = update.state.doc.lineAt(pos);
+      setCursorInfo(line.number, pos - line.from + 1);
+    }
 
     if (update.docChanged) {
       const content = update.state.doc.toString();
@@ -145,15 +159,22 @@ function buildExtensions(): Extension[] {
       const isModified = content !== saved;
       setModified(tabId, isModified);
 
-      // Word count + char count
-      const words = content.trim() ? content.trim().split(/\s+/).length : 0;
-      setWordCount(words);
-      setCharCount(content.length);
+      // Word count + char count (active pane only)
+      if (isActiveView) {
+        const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+        setWordCount(words);
+        setCharCount(content.length);
+      }
 
       // Debounced auto-save
       clearTimeout(saveTimer);
       if (isModified) {
-        const tab = useAppStore.getState().tabs.find((t) => t.id === tabId);
+        // Find tab across all panes (compat getter may not resolve correctly)
+        let tab: { path: string } | undefined;
+        for (const p of useAppStore.getState().paneState.panes) {
+          tab = p.tabs.find((t) => t.id === tabId);
+          if (tab) break;
+        }
         if (tab) {
           saveTimer = setTimeout(async () => {
             try {
