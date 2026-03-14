@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, selectActiveTabPath } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
@@ -66,39 +66,51 @@ export function BookmarkStrip() {
     }
   };
 
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
     <div className="sidebar-bookmarks">
-      <div className="sidebar-bookmarks-header">
-        <span className="sidebar-bookmarks-header-content"><Icon name="bookmark" size={14} /> Bookmarks</span>
+      <div
+        className="sidebar-bookmarks-header"
+        onClick={() => setCollapsed((c) => !c)}
+        style={{ cursor: "pointer" }}
+      >
+        <span className="sidebar-bookmarks-header-content">
+          <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={14} />
+          <Icon name="bookmark" size={14} />
+          Bookmarks
+        </span>
       </div>
-      {bookmarks.length === 0 ? (
-        <div
-          style={{
-            padding: "8px 12px",
-            color: "var(--text-tertiary)",
-            fontSize: "12px",
-          }}
-        >
-          No bookmarks yet
-        </div>
-      ) : (
-        bookmarks.map((bookmark) => {
-          const isActive = activeTabPath === bookmark.path;
-          return (
-            <div
-              key={bookmark.path}
-              className={`tree-item bookmark-item ${isActive ? "active" : ""}`}
-              style={{ "--indent": 0 } as React.CSSProperties}
-              onClick={(e) => handleBookmarkClick(bookmark, e.metaKey)}
-              title={bookmark.path}
-            >
-              <span className="tree-item-icon">
-                <Icon name={bookmark.global ? "bookmark-check" : "star"} size={14} />
-              </span>
-              <span className="tree-item-label">{bookmark.label}</span>
-            </div>
-          );
-        })
+      {!collapsed && (
+        bookmarks.length === 0 ? (
+          <div
+            style={{
+              padding: "8px 12px",
+              color: "var(--text-tertiary)",
+              fontSize: "12px",
+            }}
+          >
+            No bookmarks yet
+          </div>
+        ) : (
+          bookmarks.map((bookmark) => {
+            const isActive = activeTabPath === bookmark.path;
+            return (
+              <div
+                key={bookmark.path}
+                className={`tree-item bookmark-item ${isActive ? "active" : ""}`}
+                style={{ "--indent": 0 } as React.CSSProperties}
+                onClick={(e) => handleBookmarkClick(bookmark, e.metaKey)}
+                title={bookmark.path}
+              >
+                <span className="tree-item-icon">
+                  <Icon name={bookmark.global ? "bookmark-check" : "star"} size={14} />
+                </span>
+                <span className="tree-item-label">{bookmark.label}</span>
+              </div>
+            );
+          })
+        )
       )}
     </div>
   );

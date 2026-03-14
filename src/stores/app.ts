@@ -122,8 +122,10 @@ interface AppState {
 
   // Orphan notes — files not in any registered directory
   orphanPaths: string[];
+  orphanIcon: string;
   addOrphanPath: (path: string) => void;
   removeOrphanPath: (path: string) => void;
+  setOrphanIcon: (icon: string) => void;
 
   // Save conflict — set when write_file detects external modification
   saveConflictPath: string | null;
@@ -354,6 +356,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   bumpSaveVersion: () => set((s) => ({ saveVersion: s.saveVersion + 1 })),
 
   orphanPaths: [],
+  orphanIcon: "file-x",
   addOrphanPath: (path) => set((s) => {
     if (s.orphanPaths.includes(path)) return s;
     return { orphanPaths: [...s.orphanPaths, path] };
@@ -361,6 +364,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   removeOrphanPath: (path) => set((s) => ({
     orphanPaths: s.orphanPaths.filter((p) => p !== path),
   })),
+  setOrphanIcon: (icon) => set({ orphanIcon: icon }),
 
   saveConflictPath: null,
   setSaveConflictPath: (path) => set({ saveConflictPath: path }),

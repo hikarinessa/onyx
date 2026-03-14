@@ -9,6 +9,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - `docs/GUIDELINES.md` — Development rules (surface parity, code style, error handling)
 - `docs/DEPENDENCIES.md` — Crate/package rationale
 - `docs/DEBT.md` — Consolidated technical debt tracker
+- `docs/ISSUES.md` — Issue tracking labels, defaults, and creation commands
 
 ## Current Status
 

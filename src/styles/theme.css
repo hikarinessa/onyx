@@ -2,6 +2,8 @@
 
 @layer tokens {
   :root {
+    color-scheme: dark;
+
     /* Fonts */
     --font-ui: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
     --font-editor: "Literata", Georgia, serif;
@@ -82,9 +84,9 @@
     --list-indent: 24px;
 
     /* Layout dimensions */
-    --titlebar-height: 38px;
-    --tabbar-height: 36px;
-    --statusbar-height: 24px;
+    --titlebar-height: 36px;
+    --tabbar-height: 38px;
+    --statusbar-height: 32px;
     --sidebar-width: 240px;
     --context-panel-width: 280px;
 
@@ -106,6 +108,7 @@
   }
 
   :root[data-theme="light"] {
+    color-scheme: light;
     --bg-base: #ffffff;
     --bg-surface: #f5f5f7;
     --bg-elevated: #eeeef0;
