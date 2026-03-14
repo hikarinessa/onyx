@@ -396,7 +396,6 @@ export async function flushSaveForTab(id: string): Promise<void> {
 export function Editor() {
   const panes = useAppStore((s) => s.paneState.panes);
   const splitRatios = useAppStore((s) => s.paneState.splitRatios);
-  const allTabs = useAppStore((s) => selectAllTabs(s));
 
   // Initialize shared extensions once
   if (!sharedExtensions) {
@@ -454,16 +453,19 @@ export function Editor() {
 
   // Clean up caches when tabs close
   useEffect(() => {
-    const tabIds = new Set(allTabs.map((t) => t.id));
+    const allTabIds = new Set<string>();
+    for (const p of panes) {
+      for (const t of p.tabs) allTabIds.add(t.id);
+    }
     for (const key of editorStateCache.keys()) {
-      if (!tabIds.has(key)) {
+      if (!allTabIds.has(key)) {
         editorStateCache.delete(key);
         scrollCache.delete(key);
         lastSavedContent.delete(key);
         clearAutoFoldForTab(key);
       }
     }
-  }, [allTabs]);
+  }, [panes]);
 
   // Update activeTabIdBox when active pane changes
   useEffect(() => {
