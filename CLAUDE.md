@@ -19,11 +19,11 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 7.7 (Lucide Icons):** Complete
 - **Phase 7.8 (Polish & Deferred):** Complete
 - **Phase 8 (Tables):** Complete
-- **Phase 9 (Per-Block Features + Full-Text Search):** Planned
+- **Phase 9 (Per-Block Features + Full-Text Search):** Complete
 - **Phase 10 (Split Panes):** Planned
 - **Phase 11 (Tier 2 Features):** Planned
 
-**Current version:** 0.8.0
+**Current version:** 0.9.0
 
 ## Project Structure
 
@@ -48,7 +48,8 @@ src/                          # Frontend (React + TypeScript)
 │   ├── CommandPalette.tsx    #  123 lines — Cmd+P fuzzy command search
 │   ├── Settings.tsx          #  704 lines — Settings modal (config, keybindings, themes, about)
 │   ├── Icon.tsx              #   18 lines — Lucide icon wrapper: <Icon name="folder" size={16} />
-│   └── IconPicker.tsx        #  100 lines — Modal icon picker with search + categories
+│   ├── IconPicker.tsx        #  100 lines — Modal icon picker with search + categories
+│   └── SearchPanel.tsx       #  247 lines — Full-text search panel (sidebar tab)
 ├── extensions/
 │   ├── frontmatter.ts        #  178 lines — CM6: frontmatter detection, styling, auto-fold, toggle-fold command
 │   ├── wikilinks.ts          #  157 lines — CM6: wikilink syntax highlighting, click to follow
@@ -59,7 +60,10 @@ src/                          # Frontend (React + TypeScript)
 │   ├── autocomplete.ts       #   96 lines — CM6: wikilink + tag autocomplete
 │   ├── livePreview.ts        #  387 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, strikethrough, highlight)
 │   ├── symbolWrap.ts         #   61 lines — CM6: wrap selection with brackets/quotes/markdown on type
-│   └── linting.ts            #  310 lines — CM6: markdown lint rules (10 autofix + 4 warning) + autofix on save
+│   ├── linting.ts            #  310 lines — CM6: markdown lint rules (10 autofix + 4 warning) + autofix on save
+│   ├── blocks.ts             #  398 lines — CM6: block detection, hover copy button, move/delete/extract
+│   ├── tableAdapter.ts       #  187 lines — CM6: md-advanced-tables adapter (0-indexed↔1-indexed)
+│   └── tableEditor.ts        #  175 lines — CM6: table keymap (Tab/Enter) + TSV paste + command palette
 ├── lib/
 │   ├── fileOps.ts            #  155 lines — Centralized file mutations (with link warnings)
 │   ├── openFile.ts           #   79 lines — Shared open-file-in-editor utility (with nav stack, orphan detection)
