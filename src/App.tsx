@@ -294,7 +294,7 @@ function registerCommands() {
   registerCommand({
     id: "view.moveTabToNextPane",
     label: "Move Tab to Next Pane",
-    shortcut: "Cmd+Shift+\\",
+    shortcut: "Cmd+Shift+|",
     category: "View",
     execute: () => {
       const s = store();
