@@ -8,6 +8,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - `docs/DEVPLAN.md` — 12-phase implementation plan with step-by-step breakdowns
 - `docs/GUIDELINES.md` — Development rules (surface parity, code style, error handling)
 - `docs/DEPENDENCIES.md` — Crate/package rationale
+- `docs/DEBT.md` — Consolidated technical debt tracker
 
 ## Current Status
 
@@ -99,117 +100,19 @@ src-tauri/                    # Backend (Rust)
 
 ## Architecture Essentials
 
+For full architecture details, see `docs/ARCHITECTURE.md`. Key patterns an AI assistant must know:
+
 - **State split:** Zustand owns UI state (tabs, panels, nav stacks). CM6 owns editor state (content, undo, cursor). Rust owns file data + index.
 - **Editor pattern:** Single persistent `EditorView`, state swapped via `setState()` on tab switch. `EditorState` cached per tab (preserves undo/cursor/scroll). Module-level `activeTabIdBox` object for cross-closure communication.
-- **Inline title:** Editable `<input>` above the editor showing the filename (without `.md`). Renaming commits on blur/Enter via `fileOps.renameFile`. Strips file-unsafe characters (`/`, `\0`, `:`).
-- **Live preview:** CM6 `ViewPlugin` + `StateField<boolean>`. Viewport-aware decorations. "Focus line" shows raw markdown; all other lines render inline. Elements: headings, bold/italic/bold-italic, strikethrough, highlight, checkboxes (interactive), wikilinks (clickable).
-- **Editor modes:** "preview" (default) renders markdown inline. "source" shows raw markdown. Per-tab, persisted in session. Toggled via `Cmd+/`.
-- **Navigation:** Per-tab back/forward stack (50-entry cap). Click replaces current tab; Cmd+click opens new tab. Mouse buttons 3/4 navigate history.
 - **File mutations:** All through `src/lib/fileOps.ts` which owns the full sequence: disk → DB → tabs → editor caches → tree refresh. Components never call `invoke("rename_file")` etc. directly.
-- **File I/O:** All through Rust commands. Atomic writes (temp + rename). Auto-save 500ms debounce.
-- **Indexing:** Background thread walks directories, extracts frontmatter/wikilinks/tags, stores in SQLite. File watcher triggers 3s debounced reindex.
-- **CSS layers:** `@layer reset, tokens, base, layout, components` for specificity control. Editor styles are **unlayered** (must compete with CM6's unlayered runtime styles). Theming via `data-theme` attribute on `:root`.
-- **Mtime conflict detection:** `write_file` records mtime on read, checks before write. Rejects saves if file was modified externally.
-- **IPC cache:** `src/lib/ipcCache.ts` — TTL-based cache for expensive Rust queries (backlinks, etc.). Invalidated on `fs:change` events.
-- **Memoized selectors:** `selectActiveTab`, `selectActiveTabPath`, etc. in `app.ts` — avoids `Array.find` on every store update (cursor moves, word counts).
-- **App Nap prevention:** macOS `NSProcessInfo.beginActivityWithOptions` in `lib.rs` prevents throttling of auto-save timers.
-- **Config system:** `~/.onyx/config.json` with `Config` struct (editor, appearance, behavior sections). Deep-merge updates via `serde_json::Value`. Loaded at startup into `AppState.config`.
-- **Keybinding registry:** `src/lib/keybindings.ts` — centralized Map of command ID → binding. `parseKeyCombo(KeyboardEvent)` produces canonical strings (`Cmd+Shift+D`). Global shortcuts dispatched via keyMap lookup in App.tsx instead of hardcoded if-chains. Supports user overrides saved to `~/.onyx/keybindings.json`.
-- **Settings modal:** `Settings.tsx` — 5-section modal (General, Editor, Appearance, Keybindings, About). Loads config from Rust on mount, saves partial patches via `update_config`. Keybinding editor with click-to-capture and conflict detection.
-- **Config bridge:** `configBridge.ts` applies Rust config as CSS custom properties on `:root`. Handles theme color overrides (per dark/light/warm), heading styles (size + color for h1-h6), element styles (blockquote, links, code, tags), and spacing. Uses hook injection pattern (`setRemeasureHook`) to trigger CM6 `requestMeasure()` after font/sizing changes without circular imports.
-- **Linting:** CM6-native linter (`@codemirror/lint`). 10 autofix rules (trailing spaces, hard tabs, blank lines, ATX spacing, reversed links, etc.) + 4 warning rules (heading increment, consistent list markers, HR style, empty links). Autofix-on-save applies string transforms before `write_file`. Config: `linting.enabled`, `linting.autofix_on_save`. Lint counts shown in StatusBar.
-- **Drag-drop:** HTML5 drag-drop on the app shell. Filters for `.md` files, opens via `openFileInEditor()`. Drop overlay shown during drag.
-- **Syntax highlighting:** Full Lezer grammar coverage via CSS custom properties (`--syntax-markup`, `--syntax-hr`, `--syntax-meta`, `--syntax-comment`, `--syntax-list-marker`, `--syntax-strikethrough`, `--syntax-highlight-bg`). Configurable in Settings > Appearance > Syntax Colors.
-- **No Tailwind.** Plain CSS with custom properties.
+- **CSS layers vs CM6:** `@layer reset, tokens, base, layout, components` for specificity control. Editor styles are **unlayered** (must compete with CM6's unlayered runtime styles). Theming via `data-theme` attribute on `:root`.
 - **Type-only imports:** CM6 types like `Extension`, `DecorationSet` must use `import type` or `type` keyword — they don't exist at runtime.
+- **Hook injection pattern:** When module A needs to call into module B but importing B from A would create a circular import, A exports `setXHook(fn)`, B calls it during init. Used for `setFlushSaveHook`, `setSnapshotEditorHook`, `setRemeasureHook`.
+- **No Tailwind.** Plain CSS with custom properties.
 
-## Commands (Rust → Frontend)
+## IPC Commands
 
-### File Operations
-| Command | Signature |
-|---------|-----------|
-| `list_directory` | `(path: String) → Vec<DirEntry>` |
-| `read_file` | `(path: String) → String` |
-| `write_file` | `(path: String, content: String) → ()` |
-| `path_exists` | `(path: String) → bool` |
-| `create_folder` | `(path: String) → ()` |
-| `rename_file` | `(oldPath: String, newPath: String) → ()` — handles files and folders |
-| `trash_file` | `(path: String) → ()` — OS trash, handles files and folders |
-| `reveal_in_finder` | `(path: String) → ()` — cross-platform |
-
-### Directory Management
-| Command | Signature |
-|---------|-----------|
-| `get_registered_directories` | `() → Vec<RegisteredDirectory>` |
-| `register_directory` | `(path, label, color) → RegisteredDirectory` |
-| `unregister_directory` | `(id: String) → ()` |
-
-### Search & Index
-| Command | Signature |
-|---------|-----------|
-| `search_files` | `(query: String) → Vec<SearchResult>` |
-| `get_backlinks` | `(path: String) → Vec<BacklinkRecord>` |
-| `get_index_stats` | `() → IndexStats` |
-| `resolve_wikilink` | `(link: String, contextPath: String) → Option<String>` |
-| `reindex_file` | `(path: String) → ()` — immediately reindex a single file |
-
-### Bookmarks (Directory)
-| Command | Signature |
-|---------|-----------|
-| `toggle_bookmark` | `(path: String) → bool` — requires file in registered dir |
-| `get_bookmarks` | `() → Vec<BookmarkRecord>` |
-| `is_file_bookmarked` | `(path: String) → bool` |
-
-### Global Bookmarks
-| Command | Signature |
-|---------|-----------|
-| `toggle_global_bookmark` | `(path: String, label: String) → bool` — any file on disk |
-| `get_global_bookmarks` | `() → Vec<GlobalBookmark>` |
-| `is_global_bookmarked` | `(path: String) → bool` |
-
-### Typed Objects & Frontmatter
-| Command | Signature |
-|---------|-----------|
-| `get_object_types` | `() → Vec<ObjectType>` |
-| `query_by_type` | `(typeName: String) → Vec<SearchResult>` |
-| `get_file_frontmatter` | `(path: String) → Option<String>` (JSON) |
-| `update_frontmatter` | `(path: String, frontmatterJson: String) → ()` |
-
-### Periodic Notes
-| Command | Signature |
-|---------|-----------|
-| `get_periodic_config` | `() → PeriodicConfig` |
-| `save_periodic_config` | `(config: PeriodicConfig) → ()` |
-| `create_periodic_note` | `(periodType: String, date: String) → CreatePeriodicNoteResult` — date accepts YYYY-MM-DD or YYYY-Www |
-| `get_dates_with_notes` | `(year: i32, month: u32) → Vec<u32>` — day numbers with notes |
-| `get_weeks_with_notes` | `(weeks: Vec<String>) → Vec<String>` — which ISO weeks (YYYY-Www) have notes |
-
-### Autocomplete & Metadata
-| Command | Signature |
-|---------|-----------|
-| `get_all_tags` | `() → Vec<TagInfo>` — all tags with usage counts |
-| `get_all_titles` | `() → Vec<SearchResult>` — all file titles for autocomplete |
-| `count_incoming_links` | `(path: String) → u32` — count notes linking to this file |
-
-### Session
-| Command | Signature |
-|---------|-----------|
-| `read_session` | `() → Option<String>` (JSON) |
-| `write_session` | `(json: String) → ()` |
-
-### Path Allowlist (Orphan Files)
-| Command | Signature |
-|---------|-----------|
-| `allow_path` | `(path: String) → ()` — whitelist a path outside registered dirs |
-| `disallow_path` | `(path: String) → ()` — remove from allowlist |
-
-### Config & Keybindings
-| Command | Signature |
-|---------|-----------|
-| `get_config` | `() → Config` — full app config |
-| `update_config` | `(json: String) → ()` — partial JSON patch, deep-merged into existing config |
-| `get_keybindings` | `() → Vec<KeyBinding>` — user keybinding overrides |
-| `save_keybindings` | `(json: String) → ()` — persist keybinding overrides |
+All Tauri commands are defined in `src-tauri/src/commands.rs`. See that file for full signatures. Major groups: file ops, directory management, search & index, bookmarks (directory + global), typed objects & frontmatter, periodic notes, autocomplete & metadata, session, path allowlist (orphan files), config & keybindings.
 
 ## Build & Run
 
@@ -219,29 +122,6 @@ cargo check              # Rust type check (use instead of full build to save RA
 cargo test               # Rust unit tests
 npx tsc --noEmit         # TypeScript type check
 ```
-
-## Known Debt
-
-- **Focus trapping:** Command palette and QuickOpen overlays don't trap Tab focus. Keyboard-only users can Tab behind the overlay.
-- **Tab reorder accessibility:** Drag-to-reorder is mouse-only. Add Cmd+Shift+Left/Right for keyboard users.
-- **ARIA on command palette:** Category headers need `role="separator"` or group wrapping for screen readers.
-- **Autocomplete scaling:** `get_all_titles` fetches all indexed files on `[[` with empty prefix. Cache with short TTL for vaults >5k files.
-- **Multi-cursor formatting:** `toggleWrap` in `formatting.ts` offset drift fixed, but needs multi-cursor integration test.
-- **Duplicate preview sync:** Editor.tsx syncs `previewModeField` in both the tab-switch effect and a separate `useEffect(editorMode)`. Consider consolidating to a single sync point.
-- **Code-block pre-scan scaling:** `tags.ts` and `livePreview.ts` scan from line 1 to the first visible line on every viewport change. O(n) from top of doc. Could cache per doc version. Not a problem under ~50K lines.
-- **Heading line decorations not hoisted:** `Decoration.line()` in `buildPreviewDecorations` uses a dynamic class per heading level (h1-h6). Could pre-build 6 constants.
-- **Split panes not yet implemented:** ARCHITECTURE.md specifies split panes (7.4) but Phase 7 shipped without them. Nav stack, inline title, and live preview were prioritized. Split panes are next.
-- **Investigate: watcher self-write suppression vs IPC cache.** Verify that the file watcher's self-write suppression actually prevents `fs:change` emission to the frontend after Onyx's own saves. If it doesn't, the IPC cache (5s TTL) is being cleared on every auto-save and is effectively useless. Fix the watcher suppression if so.
-- **Investigate: mtime map `.clear()` cap strategy.** The 500-entry cap uses `.clear()` which nukes all tracked mtimes. An LRU eviction would be more correct. Low severity — fallback is content comparison, not data loss. Swap to LRU if it causes issues in practice.
-- **Auto-save stale path after rename:** `Editor.tsx:142` — The debounced save closure captures `tab.path` at edit time. If the user renames the file within the 500ms window and types, the save fires at the old (deleted) path. Narrow window but can create ghost files.
-- **`unregister_directory` doesn't stop watcher:** `commands.rs:258` — `notify` watcher continues watching the removed directory. File modifications trigger reindexing with empty `dir_id`, polluting search results with orphan entries.
-- **Orphan rename fails:** `commands.rs:493` — `validate_path` checks the new path against the allowlist, but only the old path was `allow_path`'d. Renaming an orphan note returns "Access denied".
-- **Stale store in `openFileInEditor`:** `openFile.ts:29` — `getState()` snapshot goes stale across `await` boundaries. If the user switches tabs during IPC round-trips, `replaceActiveTab` can replace the wrong tab.
-- **`dirs.rs` non-atomic save:** `dirs.rs:101` — Uses `fs::write()` instead of temp+rename. Crash during save truncates `directories.json`. Low probability.
-- **Frontmatter auto-fold rAF race:** `frontmatter.ts:98` — `requestAnimationFrame` captures `view` from constructor. On rapid tab switch, the rAF fires after `setState()` loaded a different document, potentially folding the wrong range.
-- **Inline formatting inside wikilinks:** `livePreview.ts` — Bold/italic regexes match inside `[[some *emphasized* link]]`, producing overlapping decorations. Cosmetic.
-- **Table `transact()` is a no-op:** `tableAdapter.ts` — Each mutation (`insertLine`, `deleteLine`, `replaceLines`, `setCursorPosition`) dispatches independently. Multi-step operations (transpose, sort, move column) produce N undo steps instead of one. Batching requires collecting changes and dispatching once, but `getLine()` reads from `view.state` which updates after each dispatch — needs careful offset tracking. Fix if users report janky undo in tables.
-- **Duplicate table scanning:** `livePreview.ts` — `detectTableRanges()` (ViewPlugin, visible ranges) and `buildTableBlockDecos()` (StateField, full tree) both walk the syntax tree for tables on every relevant update. Same logic, different code paths. Could consolidate by having the StateField expose skip-lines for the ViewPlugin, but sharing state between StateField and ViewPlugin in CM6 is awkward. Fix if table-heavy docs feel sluggish.
 
 ## Gotchas
 
@@ -255,8 +135,7 @@ npx tsc --noEmit         # TypeScript type check
 - **WKWebView keyboard limitations:** Tauri uses WebKit, not Chromium. Some keyboard shortcuts (e.g. `Cmd+Shift+Arrow`) are consumed by the Cocoa text system before reaching JavaScript. Use the `mac` property on CM6 keybindings for platform-specific alternatives.
 - **CSS layers vs CM6:** CodeMirror 6 injects its own styles at runtime **without** any CSS layer. Unlayered styles always beat layered styles regardless of specificity. Editor overrides (`.cm-content`, `.cm-scroller`, `.cm-editor`, etc.) must stay **outside** any `@layer` block in `layout.css`. Putting them in a layer will make them invisible — CM6 defaults will win.
 - **Mtime conflict on first save:** The mtime map starts empty. First save of a file falls back to content comparison (no mtime recorded yet). After the first `read_file`, mtime is tracked and subsequent writes use the cheap mtime check.
-- **Orphan files need `allow_path` before IPC.** Files outside registered directories are blocked by `validate_path`. Call `invoke("allow_path", { path })` before `read_file`/`write_file` for orphan files. `openFileInEditor` handles this automatically. On session restore, orphan paths are allowed before tab opening. On removal, `disallow_path` cleans up.
-- **Mtime conflict surfaces in StatusBar.** When `write_file` rejects due to external modification, it returns `CONFLICT:` prefix. The auto-save catches this, sets `saveConflictPath` in the store, and the StatusBar shows a clickable reload prompt. Reloading re-reads from disk and clears the conflict.
-- **CM6 cursor positioning: use padding, not margins.** `margin-top` on `.cm-line` breaks cursor calculations — CM6 doesn't account for margins in its character measurement. Use `padding-top` instead. After external CSS changes to font/sizing, call `requestMeasure()` via the `setRemeasureHook` pattern in `configBridge.ts`.
-- **CM6 syntax highlight spans override line-level colour.** `Decoration.line({ class })` sets colour on `.cm-line`, but CM6's markdown grammar wraps text in `<span class="ͼX">` with its own `color`. Child spans must use `color: inherit !important` to respect the line-level colour (see `.cm-preview-heading *` in `livePreview.ts`).
-- **Hook injection pattern for cross-module references.** When module A needs to call into module B but importing B from A would create a circular import, use the hook pattern: A exports `setXHook(fn)`, B calls it during init. Used for `setFlushSaveHook`, `setSnapshotEditorHook`, `setRemeasureHook`.
+- **Orphan files need `allow_path` before IPC.** Files outside registered directories are blocked by `validate_path`. Call `invoke("allow_path", { path })` before `read_file`/`write_file` for orphan files. `openFileInEditor` handles this automatically.
+- **Mtime conflict surfaces in StatusBar.** When `write_file` rejects due to external modification, it returns `CONFLICT:` prefix. The auto-save catches this, sets `saveConflictPath` in the store, and the StatusBar shows a clickable reload prompt.
+- **CM6 cursor positioning: use padding, not margins.** `margin-top` on `.cm-line` breaks cursor calculations. Use `padding-top` instead. After external CSS changes to font/sizing, call `requestMeasure()` via the `setRemeasureHook` pattern in `configBridge.ts`.
+- **CM6 syntax highlight spans override line-level colour.** `Decoration.line({ class })` sets colour on `.cm-line`, but CM6's markdown grammar wraps text in `<span class="ͼX">` with its own `color`. Child spans must use `color: inherit !important` to respect the line-level colour.

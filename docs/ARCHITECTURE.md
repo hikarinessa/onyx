@@ -1,7 +1,7 @@
 # Onyx — Architecture Document
 
-**Version:** 0.7 (Phase 7 Complete)
-**Date:** 2026-03-13
+**Version:** 0.8 (Phase 8 Complete)
+**Date:** 2026-03-14
 
 ---
 
@@ -1012,63 +1012,4 @@ Decisions made during the design phase:
 
 ## 18. Known Technical Debt
 
-### Resolved
-
-- ~~#1 Tab switch destroys undo/cursor/scroll state~~ — Fixed Phase 2: `EditorState` cached per tab, swapped via `setState()`
-- ~~#2 Extract shared `openFileInEditor`~~ — Fixed Phase 2: `src/lib/openFile.ts`
-- ~~#4 `findAvailablePath` TOCTOU race~~ — Fixed Phase 4.5: `path_exists` Rust command replaces `read_file` existence check
-- ~~#5 Delete action stubbed/no feedback~~ — Fixed Phase 4.5: `trash_file` implemented, delete works via context menu
-
-### Resolved (Phase 4.6)
-
-- ~~#8 Watcher debounce thread never exits~~ — Fixed Phase 4.6: `AtomicBool` shutdown flag, checked each loop iteration, set on drop
-- ~~#16 No React error boundary~~ — Fixed Phase 4.6: error boundary wraps editor and sidebar, prevents white-screen data loss
-- ~~#17 Session persistence uses localStorage~~ — Fixed Phase 4.6: moved to `~/.onyx/session.json` via Rust commands
-
-### Open
-
-3. **External edit conflict detection.** If a file is modified externally while Onyx has it open with unsaved changes, the stale editor cache can overwrite the external edit on the next auto-save. **Fix:** On `fs:change` events for open files, compare the on-disk content with `lastSavedContent`. If they differ and the editor also has unsaved changes, show a conflict notification (reload / keep mine / diff).
-
-6. **Context menu lacks keyboard navigation.** Currently mouse-only. Add arrow key navigation and Enter to select for accessibility.
-
-7. **QuickOpen missing ARIA attributes.** Add `role="listbox"`, `role="option"`, `aria-activedescendant` for screen reader support.
-
-9. **`unchecked_transaction` in db.rs.** Using `unchecked_transaction()` instead of `transaction()` skips the borrow checker's enforcement that only one transaction exists at a time. Safe in practice since all DB access is behind a Mutex, but worth noting. Consider using `transaction()` if the Mutex is ever replaced with finer-grained locking.
-
-10. **Bookmark desync on reindex.** If a file is deleted and re-created, `ON DELETE CASCADE` removes old bookmarks. The UI won't update until the user switches tabs. Consider listening for `fs:change` events to refresh bookmark state.
-
-11. ~~**Full-doc decoration scan.**~~ Fixed Phase 7: wikilinks, tags, and live preview all use viewport-aware iteration (`view.visibleRanges`). Pre-scan from line 1 to first visible line for code block state tracking.
-
-12. **Bookmark toggle on unindexed file fails silently.** `toggle_bookmark` returns "File not indexed" error which the frontend catches but doesn't surface. Needs a toast/notification system before this can be user-visible.
-
-13. **No index on `json_extract(frontmatter, '$.type')`.** `query_by_type` does a full table scan. Fine for <50k files, but if it becomes a bottleneck, add a generated column or expression index.
-
-14. **`update_frontmatter` doesn't update `title` column.** If an untyped note's raw frontmatter edit changes the title, the `files.title` column won't reflect it until the next full reindex. Low impact since title is derived from filename, not frontmatter.
-
-15. **`rename_dir_prefix` byte offset vs UTF-8.** The `substr` call uses `old_p.len()` (byte length) but SQLite's `substr` works on characters. Multi-byte folder names would slice at the wrong position. Low risk for typical usage but technically incorrect.
-
-16. ~~**No React error boundary.**~~ (See Resolved above)
-
-17. ~~**Session persistence uses localStorage.**~~ (See Resolved above)
-
-25. **`periodicNotes.ts` bypasses `fileOps.ts`.** Periodic note creation goes through a dedicated Rust command; the frontend manually calls `loadFileIntoCache` + `openFile` + `bumpFileTreeVersion` instead of routing through `fileOps.ts`. Add an `openCreatedFile(path)` helper to `fileOps.ts` and route `periodicNotes.ts` through it.
-
-26. **Recent docs use localStorage, not Rust persistence.** `recentDocs.ts` stores 20 paths in localStorage. This is a third persistence layer alongside Rust IPC and the session localStorage backup. If recent docs grow in importance, migrate to `~/.onyx/state.json` via Rust.
-
-27. **`useToday` timer drift on sleep/wake.** The midnight timer in Calendar uses `setTimeout` which can drift if the machine sleeps before midnight. Consequence is a stale "today" highlight until next month navigation. Low impact.
-
-28. **`get_dates_with_notes` runs 31 individual queries.** Each is O(1) via unique index on `files.path`. If this becomes a bottleneck, rewrite as a single `WHERE path IN (...)` query.
-
-18. **Module-level mutable refs not cleared on session reload.** `activeTabIdBox`, `_liveViewRef`, `editorStateCache`, `scrollCache`, `lastSavedContent` in Editor.tsx are module-level maps that persist across React hot-reloads in dev mode. Not a problem in production (full page reload clears them), but could cause stale state during development.
-
-19. **QuickOpen results capped at 10 with no pagination.** `QuickOpen.tsx` hardcodes a 10-result limit. For vaults with many similarly-named files, the desired result may not appear. Add a "show more" mechanism or increase the limit.
-
-20. **Untyped property type inference is basic.** `ContextPanel.tsx` infers property types via `Array.isArray(val) ? "tags" : typeof val === "boolean"...` — won't handle edge cases like numeric strings, nested objects, or null values. Acceptable for now but will need refinement if the property editor sees heavy use.
-
-21. **Single Mutex<Connection> for all DB access.** One connection serves both indexer writes and UI reads. At 10k+ files, lock contention during initial scan could cause UI jank. **Future fix:** Separate reader/writer connections (Otterly pattern A5). Not urgent — current approach works fine under 5k files.
-
-22. **Tag extraction regex is case-sensitive.** `indexer.rs` tag regex won't match `#Tag` or `#TAG` — only lowercase. Obsidian treats tags as case-insensitive. Decide whether to match that behavior.
-
-23. **Sidebar auto-expand on deep file open.** Opening a deeply nested file (via Quick Open or backlink) doesn't auto-expand its parent folders in the sidebar. The file is open in a tab but invisible in the tree.
-
-24. **Frontmatter parsing can mangle malformed files.** `commands.rs` update_frontmatter can prepend new frontmatter if the closing `---` delimiter is missing. Could produce a file with two frontmatter blocks. Add validation that rejects writes when the existing frontmatter is unparseable.
+See [`docs/DEBT.md`](DEBT.md) for the full consolidated debt tracker (resolved + open items).
