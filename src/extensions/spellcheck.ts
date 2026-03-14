@@ -174,12 +174,10 @@ const spellcheckPlugin = ViewPlugin.fromClass(
 
 const spellcheckTheme = EditorView.theme({
   ".cm-spelling-error": {
-    backgroundImage:
-      "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='3'%3E%3Cpath d='M0 2.5 Q1 0.5 2 2.5 Q3 4.5 4 2.5' fill='none' stroke='%23e85454' stroke-width='0.7'/%3E%3C/svg%3E\")",
-    backgroundRepeat: "repeat-x",
-    backgroundPosition: "bottom",
-    backgroundSize: "4px 3px",
-    paddingBottom: "1px",
+    textDecoration: "underline wavy #e85454",
+    textDecorationSkipInk: "none",
+    textUnderlineOffset: "3px",
+    textDecorationThickness: "0.8px",
   },
 });
 
