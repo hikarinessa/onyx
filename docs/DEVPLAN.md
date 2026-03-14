@@ -663,37 +663,40 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
 ### Block Features
 
-9.1 **Block awareness in CM6**
-- Detect `***` separators, track block boundaries (line ranges)
-- Visual: subtle separator line, block hover actions
+9.1 **Block awareness in CM6** ✅
+- Blocks defined as CommonMark block-level elements (paragraphs, headings, lists, code blocks, tables, etc.)
+- StateField computes block ranges from Lezer syntax tree
+- Subtle top-border on hovered block boundary
 
-9.2 **Block operations**
-- Copy block as markdown
-- Move block up/down (reorder across separators)
-- Delete block
-- Extract block to new note (create note with block content, replace with wikilink)
+9.2 **Block operations** ✅
+- Floating copy icon appears on hover (left of block, both source + preview mode)
+- Copy block as markdown (gutter click or command palette)
+- Move block up/down (Cmd+Shift+Up/Down)
+- Delete block (command palette)
+- Extract block to new note (command palette — replaces block with wikilink)
 
-9.3 **Block references**
-- `^block-id` syntax for addressable blocks
-- Cross-note block referencing
+9.3 **Block references** — Deferred to Phase 11 (with transclusion)
+- `^block-id` syntax, lazy ID generation, SQLite index
+- Only useful once transclusion or block-level navigation exists
 
-9.4 **Transclusion**
+9.4 **Transclusion** — Deferred to Phase 11
 - `![[note#^block-id]]` rendered inline (read-only)
-- 2-level depth cap with cycle detection (critical from day one)
+- 2-level depth cap with cycle detection
+- Ship block references + transclusion together
 
-### Full-Text Search
+### Full-Text Search ✅
 
 9.5 **Rust search backend**
-- Cmd+Shift+F triggers search panel
-- Ripgrep-style content search across all registered directories
-- Results streamed via Tauri channels if >300ms
+- `search_content` command walks registered dirs + orphan files
+- Case-insensitive substring match, .md only, 1MB cap, max 500 results
+- Ranked: title matches first (shorter = better), then by match count
 
 9.6 **Search UI**
-- Dedicated search panel (sidebar or overlay)
-- File name, line number, context preview per match
-- Click to open file at match position
+- Sidebar tabs (Files / Search), Cmd+Shift+F to activate
+- Debounced input, results grouped by file with expandable line matches
+- Click line match → opens file at that position
 
-**Milestone:** Blocks are addressable and operable. Full-text search across all notes via Cmd+Shift+F.
+**Milestone:** Blocks are operable (copy, move, delete, extract). Full-text search across all notes via Cmd+Shift+F. Block references and transclusion deferred to ship together.
 
 ---
 

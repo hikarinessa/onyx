@@ -289,6 +289,151 @@ pub fn search_files(
     db.search_files(&query)
 }
 
+// ── Full-text content search ──
+
+#[derive(Debug, Serialize)]
+pub struct LineMatch {
+    pub line_number: u32,
+    pub line_text: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ContentSearchResult {
+    pub path: String,
+    pub title: String,
+    pub match_count: u32,
+    pub title_match: bool,
+    pub line_matches: Vec<LineMatch>,
+}
+
+#[tauri::command]
+pub fn search_content(
+    query: String,
+    state: State<AppState>,
+) -> Result<Vec<ContentSearchResult>, String> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let query_lower = query.to_lowercase();
+
+    // Collect directory roots
+    let dir_roots: Vec<PathBuf> = {
+        let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+        dirs.list().iter().map(|d| d.path.clone()).collect()
+    };
+
+    // Collect orphan paths
+    let orphan_paths: Vec<String> = {
+        let allowed = state.allowed_paths.lock().map_err(|e| e.to_string())?;
+        allowed.iter().cloned().collect()
+    };
+
+    let mut results: Vec<ContentSearchResult> = Vec::new();
+    let mut seen_paths = std::collections::HashSet::new();
+
+    // Walk registered directories
+    for root in &dir_roots {
+        let walker = ignore::WalkBuilder::new(root)
+            .hidden(true) // skip hidden files
+            .build();
+
+        for entry in walker.flatten() {
+            let path = entry.path();
+            if !path.is_file() { continue; }
+            if path.extension().and_then(|e| e.to_str()) != Some("md") { continue; }
+
+            let path_str = path.to_string_lossy().to_string();
+            if !seen_paths.insert(path_str.clone()) { continue; }
+
+            if let Some(result) = search_file(path, &path_str, &query_lower) {
+                results.push(result);
+            }
+        }
+    }
+
+    // Search orphan files
+    for orphan in &orphan_paths {
+        let path = std::path::Path::new(orphan);
+        if !path.is_file() { continue; }
+        if path.extension().and_then(|e| e.to_str()) != Some("md") { continue; }
+        if !seen_paths.insert(orphan.clone()) { continue; }
+
+        if let Some(result) = search_file(path, orphan, &query_lower) {
+            results.push(result);
+        }
+    }
+
+    // Sort: title matches first (shorter title = better match), then by match count desc
+    results.sort_by(|a, b| {
+        b.title_match.cmp(&a.title_match)
+            .then_with(|| {
+                if a.title_match && b.title_match {
+                    a.title.len().cmp(&b.title.len())
+                } else {
+                    b.match_count.cmp(&a.match_count)
+                }
+            })
+    });
+
+    results.truncate(500);
+    Ok(results)
+}
+
+fn search_file(
+    path: &std::path::Path,
+    path_str: &str,
+    query_lower: &str,
+) -> Option<ContentSearchResult> {
+    let title = path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    let title_match = title.to_lowercase().contains(query_lower);
+
+    // Read file, skip if too large (>1MB) or binary
+    let content = std::fs::read_to_string(path).ok()?;
+    if content.len() > 1_048_576 { return None; }
+
+    let mut line_matches: Vec<LineMatch> = Vec::new();
+    let mut match_count: u32 = 0;
+
+    for (i, line) in content.lines().enumerate() {
+        let line_lower = line.to_lowercase();
+        let hits = line_lower.matches(query_lower).count() as u32;
+        if hits > 0 {
+            match_count += hits;
+            if line_matches.len() < 10 {
+                let text = if line.len() > 200 {
+                    // Find a char boundary at or before byte 200
+                    let mut end = 200;
+                    while !line.is_char_boundary(end) { end -= 1; }
+                    format!("{}…", &line[..end])
+                } else {
+                    line.to_string()
+                };
+                line_matches.push(LineMatch {
+                    line_number: (i + 1) as u32,
+                    line_text: text,
+                });
+            }
+        }
+    }
+
+    if !title_match && match_count == 0 {
+        return None;
+    }
+
+    Some(ContentSearchResult {
+        path: path_str.to_string(),
+        title,
+        match_count,
+        title_match,
+        line_matches,
+    })
+}
+
 #[tauri::command]
 pub fn get_backlinks(
     path: String,

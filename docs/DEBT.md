@@ -71,3 +71,4 @@ Consolidated from CLAUDE.md and ARCHITECTURE.md. Items are grouped by area, not 
 - **`unchecked_transaction` in db.rs.** (#9) Safe since all DB access is behind a Mutex, but consider using `transaction()` if Mutex is ever replaced.
 - **Tag extraction is case-sensitive.** (#22) `indexer.rs` tag regex won't match `#Tag` or `#TAG`. Obsidian treats tags as case-insensitive. Decide whether to match.
 - **`get_dates_with_notes` runs 31 individual queries.** (#28) Each is O(1) via unique index. Could rewrite as single `WHERE path IN (...)` if it becomes a bottleneck.
+- **`search_content` runs synchronously on main thread.** Walks all registered dirs + reads every .md file from disk on each search. Fine for <1000 files. For large vaults, move to async with `build_parallel()` or stream results via Tauri channels.

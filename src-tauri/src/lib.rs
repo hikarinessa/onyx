@@ -214,6 +214,7 @@ pub fn run() {
             commands::unregister_directory,
             commands::update_directory_icon,
             commands::search_files,
+            commands::search_content,
             commands::get_backlinks,
             commands::get_index_stats,
             commands::resolve_wikilink,
