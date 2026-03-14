@@ -300,6 +300,7 @@ function PropertiesSection({
         onClick={onToggle}
       >
         <span className="collapse-arrow"><Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} /></span>
+        <Icon name="list" size={14} />
         {label}
       </div>
 
@@ -390,6 +391,7 @@ function RecentDocuments({
         onClick={onToggle}
       >
         <span className="collapse-arrow"><Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} /></span>
+        <Icon name="clock" size={14} />
         Recent ({recents.length})
       </div>
       {expanded && (
@@ -400,7 +402,8 @@ function RecentDocuments({
             recents.map((doc) => (
               <div
                 key={doc.path}
-                className="backlink-item"
+                className="tree-item"
+                style={{ "--indent": 0 } as React.CSSProperties}
                 title={doc.path}
                 onClick={async (e) => {
                   try {
@@ -410,7 +413,8 @@ function RecentDocuments({
                   }
                 }}
               >
-                <div className="backlink-title">{doc.name}</div>
+                <span className="tree-item-icon"><Icon name="file-text" size={14} /></span>
+                <span className="tree-item-label">{doc.name}</span>
               </div>
             ))
           )}
@@ -577,12 +581,16 @@ export function ContextPanel() {
 
   return (
     <div className={`context-panel ${visible ? "" : "collapsed"}`}>
-      {/* Calendar */}
-      <Calendar onDateClick={handleDateClick} onWeekClick={handleWeekClick} />
-      {calendarError && (
-        <div className="calendar-error">{calendarError}</div>
-      )}
+      {/* Calendar — pinned */}
+      <div className="context-panel-pinned">
+        <Calendar onDateClick={handleDateClick} onWeekClick={handleWeekClick} />
+        {calendarError && (
+          <div className="calendar-error">{calendarError}</div>
+        )}
+      </div>
 
+      {/* Scrollable content */}
+      <div className="context-panel-scrollable">
       {/* Bookmark toggle button */}
       {activeTabPath && (
         <div className="context-panel-bookmark-row">
@@ -617,6 +625,7 @@ export function ContextPanel() {
           onClick={toggleBacklinks}
         >
           <span className="collapse-arrow"><Icon name={backlinksExpanded ? "chevron-down" : "chevron-right"} size={14} /></span>
+          <Icon name="link" size={14} />
           Backlinks ({backlinks.length})
         </div>
 
@@ -653,6 +662,7 @@ export function ContextPanel() {
 
       {/* Recent Documents */}
       <RecentDocuments expanded={recentExpanded} onToggle={toggleRecent} />
+      </div>
     </div>
   );
 }

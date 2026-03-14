@@ -59,8 +59,20 @@
     background: var(--bg-surface);
     border-left: 1px solid var(--border-subtle);
     flex-shrink: 0;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     transition: width var(--transition-normal);
+  }
+
+  .context-panel-pinned {
+    flex-shrink: 0;
+  }
+
+  .context-panel-scrollable {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
   }
 
   .context-panel.collapsed {
@@ -231,7 +243,7 @@
 
   /* Sidebar content */
   .sidebar-header {
-    padding: 8px 14px;
+    padding: 4px 14px;
     font-size: 11px;
     font-weight: 600;
     color: var(--text-tertiary);
@@ -474,9 +486,10 @@
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     user-select: none;
     margin-bottom: 0;
+    padding: 4px 0;
   }
 
   .context-panel-section-title.collapsible:hover {
@@ -484,9 +497,11 @@
   }
 
   .collapse-arrow {
-    font-size: 10px;
-    width: 12px;
-    display: inline-block;
+    width: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
   .context-panel-bookmark-row {
@@ -535,7 +550,7 @@
   }
 
   .backlink-item {
-    padding: 8px 14px;
+    padding: 4px 14px;
     margin: 0 -14px;
     cursor: pointer;
     border-radius: var(--radius-sm);
@@ -547,7 +562,7 @@
   }
 
   .backlink-title {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -560,7 +575,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-top: 2px;
+    margin-top: 1px;
   }
 
   .backlink-line {
@@ -1049,8 +1064,6 @@
 
   /* Recent documents */
   .recent-docs-list {
-    max-height: 200px;
-    overflow-y: auto;
   }
 
   /* Command palette */
@@ -2204,8 +2217,8 @@
     color: var(--text-tertiary);
     font-size: 12px;
     font-family: var(--font-mono);
-    padding: 2px 8px 0 4px;
-    line-height: 22.4px; /* match source mode content: 14px × 1.6 */
+    padding: 0 8px 0 4px;
+    line-height: 22.4px; /* match source content: 14px × 1.6 */
   }
 
   /* Source mode: plain monospace text, keep syntax colors */
