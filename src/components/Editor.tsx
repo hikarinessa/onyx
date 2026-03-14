@@ -14,7 +14,7 @@ import {
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
+import { useAppStore, setFlushSaveHook, setSnapshotEditorHook, selectAllTabs } from "../stores/app";
 import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab, toggleFrontmatterFoldCommand } from "../extensions/frontmatter";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
@@ -559,8 +559,8 @@ export function Editor() {
   // closing the last tab, the effect from the empty-tabs render would
   // otherwise wipe the cache entry that loadFileIntoCache just added).
   useEffect(() => {
-    const currentTabs = useAppStore.getState().tabs;
-    const tabIds = new Set(currentTabs.map((t) => t.id));
+    const allTabs = selectAllTabs(useAppStore.getState());
+    const tabIds = new Set(allTabs.map((t) => t.id));
     for (const key of editorStateCache.keys()) {
       if (!tabIds.has(key)) {
         editorStateCache.delete(key);
