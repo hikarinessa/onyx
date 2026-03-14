@@ -24,12 +24,10 @@ pub struct DirectoryManager {
 
 impl DirectoryManager {
     pub fn new() -> Result<Self, String> {
-        let config_dir = dirs_next::home_dir()
-            .ok_or("Could not find home directory")?
-            .join(".onyx");
+        let config_dir = crate::paths::onyx_dir()?;
 
         fs::create_dir_all(&config_dir)
-            .map_err(|e| format!("Failed to create ~/.onyx: {}", e))?;
+            .map_err(|e| format!("Failed to create onyx dir: {}", e))?;
 
         let config_path = config_dir.join("directories.json");
 

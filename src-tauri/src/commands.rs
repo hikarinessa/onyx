@@ -612,10 +612,7 @@ pub fn reveal_in_finder(path: String, state: State<AppState>) -> Result<(), Stri
 
 #[tauri::command]
 pub fn read_session() -> Result<Option<String>, String> {
-    let path = dirs_next::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".onyx")
-        .join("session.json");
+    let path = crate::paths::onyx_dir()?.join("session.json");
 
     if !path.exists() {
         return Ok(None);
@@ -628,9 +625,7 @@ pub fn read_session() -> Result<Option<String>, String> {
 
 #[tauri::command]
 pub fn write_session(json: String) -> Result<(), String> {
-    let dir = dirs_next::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".onyx");
+    let dir = crate::paths::onyx_dir()?;
 
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("Failed to create ~/.onyx: {}", e))?;
@@ -658,10 +653,7 @@ pub struct GlobalBookmark {
 }
 
 fn global_bookmarks_path() -> Result<PathBuf, String> {
-    Ok(dirs_next::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".onyx")
-        .join("global-bookmarks.json"))
+    Ok(crate::paths::onyx_dir()?.join("global-bookmarks.json"))
 }
 
 fn read_global_bookmarks_file() -> Result<Vec<GlobalBookmark>, String> {
@@ -676,11 +668,9 @@ fn read_global_bookmarks_file() -> Result<Vec<GlobalBookmark>, String> {
 }
 
 fn write_global_bookmarks_file(bookmarks: &[GlobalBookmark]) -> Result<(), String> {
-    let dir = dirs_next::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".onyx");
+    let dir = crate::paths::onyx_dir()?;
     std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create ~/.onyx: {}", e))?;
+        .map_err(|e| format!("Failed to create onyx dir: {}", e))?;
 
     let path = dir.join("global-bookmarks.json");
     let json = serde_json::to_string_pretty(bookmarks)

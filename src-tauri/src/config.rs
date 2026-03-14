@@ -264,16 +264,11 @@ impl Default for StyleConfig {
 }
 
 fn config_path() -> Result<PathBuf, String> {
-    Ok(dirs_next::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".onyx")
-        .join("config.json"))
+    Ok(crate::paths::onyx_dir()?.join("config.json"))
 }
 
 fn onyx_dir() -> Result<PathBuf, String> {
-    Ok(dirs_next::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".onyx"))
+    crate::paths::onyx_dir()
 }
 
 /// Load config from disk. Returns defaults if file doesn't exist or is unparseable.
@@ -366,10 +361,7 @@ pub struct KeyBinding {
 }
 
 fn keybindings_path() -> Result<PathBuf, String> {
-    Ok(dirs_next::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".onyx")
-        .join("keybindings.json"))
+    Ok(crate::paths::onyx_dir()?.join("keybindings.json"))
 }
 
 pub fn load_keybindings() -> Result<Vec<KeyBinding>, String> {
