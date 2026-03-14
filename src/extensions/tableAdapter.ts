@@ -19,8 +19,11 @@ import {
  * All conversions happen here.
  */
 export class CM6TextEditor extends ITextEditor {
-  constructor(private view: EditorView) {
+  view: EditorView;
+
+  constructor(view: EditorView) {
     super();
+    this.view = view;
   }
 
   getCursorPosition(): Point {

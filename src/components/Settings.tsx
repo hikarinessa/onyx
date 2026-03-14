@@ -107,7 +107,7 @@ export function Settings() {
         const next = deepMergePartials(
           JSON.parse(JSON.stringify(prev)),
           partial,
-        ) as AppConfig;
+        ) as unknown as AppConfig;
         applyConfig(next);
         return next;
       });

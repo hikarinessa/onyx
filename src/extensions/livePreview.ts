@@ -49,9 +49,14 @@ export const previewModeField = StateField.define<boolean>({
 // ── Widgets ──
 
 class CheckboxWidget extends WidgetType {
+  checked: boolean;
+  bracketPos: number;
+
   /** @param checked current check state @param bracketPos absolute doc position of `[` */
-  constructor(readonly checked: boolean, readonly bracketPos: number) {
+  constructor(checked: boolean, bracketPos: number) {
     super();
+    this.checked = checked;
+    this.bracketPos = bracketPos;
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -101,13 +106,14 @@ const tableParseOpts: Options = optionsWithDefaults({
 });
 
 class TableWidget extends WidgetType {
-  private rowCount: number;
+  tableText: string;
+  parsedTable: Table;
+  rowCount: number;
 
-  constructor(
-    private tableText: string,
-    private parsedTable: Table,
-  ) {
+  constructor(tableText: string, parsedTable: Table) {
     super();
+    this.tableText = tableText;
+    this.parsedTable = parsedTable;
     this.rowCount = parsedTable.getHeight();
   }
 

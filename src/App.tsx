@@ -157,7 +157,7 @@ function registerCommands() {
     id: "editor.foldFrontmatter",
     label: "Toggle Frontmatter Fold",
     category: "Editor",
-    execute: () => foldFrontmatter(),
+    execute: () => { foldFrontmatter(); },
   });
 
   // Editor-scope commands — dispatched by CM6 keymaps, registered here for
