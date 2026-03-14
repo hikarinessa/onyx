@@ -240,6 +240,8 @@ npx tsc --noEmit         # TypeScript type check
 - **`dirs.rs` non-atomic save:** `dirs.rs:101` — Uses `fs::write()` instead of temp+rename. Crash during save truncates `directories.json`. Low probability.
 - **Frontmatter auto-fold rAF race:** `frontmatter.ts:98` — `requestAnimationFrame` captures `view` from constructor. On rapid tab switch, the rAF fires after `setState()` loaded a different document, potentially folding the wrong range.
 - **Inline formatting inside wikilinks:** `livePreview.ts` — Bold/italic regexes match inside `[[some *emphasized* link]]`, producing overlapping decorations. Cosmetic.
+- **Table `transact()` is a no-op:** `tableAdapter.ts` — Each mutation (`insertLine`, `deleteLine`, `replaceLines`, `setCursorPosition`) dispatches independently. Multi-step operations (transpose, sort, move column) produce N undo steps instead of one. Batching requires collecting changes and dispatching once, but `getLine()` reads from `view.state` which updates after each dispatch — needs careful offset tracking. Fix if users report janky undo in tables.
+- **Duplicate table scanning:** `livePreview.ts` — `detectTableRanges()` (ViewPlugin, visible ranges) and `buildTableBlockDecos()` (StateField, full tree) both walk the syntax tree for tables on every relevant update. Same logic, different code paths. Could consolidate by having the StateField expose skip-lines for the ViewPlugin, but sharing state between StateField and ViewPlugin in CM6 is awkward. Fix if table-heavy docs feel sluggish.
 
 ## Gotchas
 
