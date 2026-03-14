@@ -86,13 +86,13 @@ function getNonProseLines(doc: { lines: number; line(n: number): { text: string 
   return skip;
 }
 
-/** Check if a byte offset falls inside inline code or wikilinks on its line */
+/** Check if a UTF-16 offset falls inside inline code or wikilinks on its line */
 function isInlineNonProse(lineText: string, offsetInLine: number): boolean {
-  // Inline code: `...`
-  let inCode = false;
-  for (let i = 0; i < lineText.length; i++) {
-    if (lineText[i] === "`") inCode = !inCode;
-    if (i === offsetInLine && inCode) return true;
+  // Inline code: ` or `` or ``` delimited
+  const codeRe = /(`{1,3})([^`]|(?!\1)`)*\1/g;
+  let cm;
+  while ((cm = codeRe.exec(lineText)) !== null) {
+    if (offsetInLine >= cm.index && offsetInLine < cm.index + cm[0].length) return true;
   }
   // Wikilinks: [[...]]
   const wlRe = /\[\[[^\]]*\]\]/g;

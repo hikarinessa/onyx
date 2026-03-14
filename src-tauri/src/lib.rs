@@ -13,22 +13,6 @@ use std::sync::{Arc, Mutex};
 use tauri::{Manager, Emitter};
 use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItemBuilder};
 
-/// Enable macOS continuous spellcheck for WKWebView.
-/// Must be called before webview creation — sets NSUserDefaults so WebKit
-/// enables its native spell checker on contenteditable elements.
-#[cfg(target_os = "macos")]
-fn enable_spellcheck() {
-    use cocoa::base::nil;
-    use cocoa::foundation::NSString;
-    use objc::{msg_send, sel, sel_impl};
-    unsafe {
-        let cls = objc::runtime::Class::get("NSUserDefaults").expect("NSUserDefaults class");
-        let defaults: cocoa::base::id = msg_send![cls, standardUserDefaults];
-        let key = NSString::alloc(nil).init_str("WebContinuousSpellCheckingEnabled");
-        let _: () = msg_send![defaults, setBool:true forKey:key];
-    }
-}
-
 /// Disable macOS App Nap to prevent throttling of JS timers when minimized.
 /// Without this, auto-save (500ms debounce) and session persistence (30s interval) stall.
 #[cfg(target_os = "macos")]
@@ -79,9 +63,6 @@ pub fn run() {
 
     let database = db::Database::new(&db_path).expect("Failed to initialize database");
     let db = Arc::new(Mutex::new(database));
-
-    #[cfg(target_os = "macos")]
-    enable_spellcheck();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
