@@ -2155,6 +2155,7 @@
     padding-top: var(--paragraph-spacing, 0px);
   }
 
+
   .editor-container .cm-content ul,
   .editor-container .cm-content ol {
     padding-left: var(--list-indent, 24px);
@@ -2203,7 +2204,8 @@
     color: var(--text-tertiary);
     font-size: 12px;
     font-family: var(--font-mono);
-    padding: 0 8px 0 4px;
+    padding: 2px 8px 0 4px;
+    line-height: 22.4px; /* match source mode content: 14px × 1.6 */
   }
 
   /* Source mode: plain monospace text, keep syntax colors */
