@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, selectActiveTabPath } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
@@ -73,7 +73,6 @@ export function BookmarkStrip() {
       <div
         className="sidebar-bookmarks-header"
         onClick={() => setCollapsed((c) => !c)}
-        style={{ cursor: "pointer" }}
       >
         <span className="sidebar-bookmarks-header-content">
           <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={14} />

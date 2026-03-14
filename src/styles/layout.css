@@ -412,8 +412,6 @@
     color: var(--text-primary);
   }
 
-
-
   .tree-rename-input {
     flex: 1;
     min-width: 0;
@@ -437,6 +435,7 @@
 
   .sidebar-bookmarks-header {
     padding: 12px 14px;
+    cursor: pointer;
     font-size: 11px;
     font-weight: 600;
     color: var(--text-tertiary);
@@ -910,7 +909,7 @@
 
   /* Calendar */
   .calendar {
-    padding: 10px 12px 10px 14px;
+    padding: 10px 12px 10px 14px; /* left +2px to optically balance week-number column */
     border-bottom: 1px solid var(--border-subtle);
   }
 
@@ -1060,10 +1059,6 @@
     font-size: 11px;
     color: var(--status-error);
     border-bottom: 1px solid var(--border-subtle);
-  }
-
-  /* Recent documents */
-  .recent-docs-list {
   }
 
   /* Command palette */
@@ -2167,7 +2162,6 @@
   .editor-container .cm-content .cm-line + .cm-line {
     padding-top: var(--paragraph-spacing, 0px);
   }
-
 
   .editor-container .cm-content ul,
   .editor-container .cm-content ol {
