@@ -24,7 +24,7 @@ const PAIRS: Record<string, string> = {
 };
 
 export function symbolWrapExtension(): Extension {
-  return EditorView.inputHandler.of((view, from, to, insert) => {
+  return EditorView.inputHandler.of((view, _from, _to, insert) => {
     // Only act when there's a selection
     const { state } = view;
     const hasSelection = state.selection.ranges.some((r) => r.from !== r.to);

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { HeadingStyle } from "./configTypes";
 
 // Injected by Editor.tsx to avoid circular imports
 let remeasureHook: (() => void) | null = null;

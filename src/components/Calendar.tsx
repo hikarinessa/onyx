@@ -99,7 +99,6 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
     try {
       const firstOfMonth = new Date(viewYear, viewMonth, 1);
       const startDay = (firstOfMonth.getDay() + 6) % 7;
-      const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
       // Monday of first row
       const firstMonday = new Date(viewYear, viewMonth, 1 - startDay);
       const weekStrings: string[] = [];
