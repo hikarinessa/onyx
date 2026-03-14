@@ -8,6 +8,7 @@ import * as fileOps from "../lib/fileOps";
 import type { DirEntry } from "../types";
 import { BookmarkStrip } from "./BookmarkStrip";
 import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
+import { SearchPanel } from "./SearchPanel";
 import { Icon } from "./Icon";
 import { IconPicker } from "./IconPicker";
 
@@ -368,8 +369,32 @@ export function Sidebar() {
     }
   };
 
+  const sidebarTab = useAppStore((s) => s.sidebarTab);
+  const setSidebarTab = useAppStore((s) => s.setSidebarTab);
+
   return (
     <div className={`sidebar ${sidebarVisible ? "" : "collapsed"}`}>
+      <div className="sidebar-tabs">
+        <button
+          className={`sidebar-tab ${sidebarTab === "files" ? "active" : ""}`}
+          onClick={() => setSidebarTab("files")}
+        >
+          <Icon name="folder" size={13} />
+          <span>Files</span>
+        </button>
+        <button
+          className={`sidebar-tab ${sidebarTab === "search" ? "active" : ""}`}
+          onClick={() => setSidebarTab("search")}
+        >
+          <Icon name="search" size={13} />
+          <span>Search</span>
+        </button>
+      </div>
+
+      {sidebarTab === "search" ? (
+        <SearchPanel />
+      ) : (
+      <>
       <div className="sidebar-directories">
       {directories.length === 0 ? (
         <div className="sidebar-empty">
@@ -514,6 +539,8 @@ export function Sidebar() {
       </div>
 
       <BookmarkStrip />
+      </>
+      )}
 
       {iconPickerDirId && (
         <IconPicker

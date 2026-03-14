@@ -129,6 +129,10 @@ interface AppState {
   saveConflictPath: string | null;
   setSaveConflictPath: (path: string | null) => void;
 
+  // Sidebar tabs
+  sidebarTab: "files" | "search";
+  setSidebarTab: (tab: "files" | "search") => void;
+
   // Lint
   lintErrors: number;
   lintWarnings: number;
@@ -364,6 +368,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   saveConflictPath: null,
   setSaveConflictPath: (path) => set({ saveConflictPath: path }),
+
+  sidebarTab: "files",
+  setSidebarTab: (tab) => set({ sidebarTab: tab }),
 
   lintErrors: 0,
   lintWarnings: 0,

@@ -241,6 +241,21 @@ function registerCommands() {
     execute: () => store().setSettingsVisible(true),
   });
 
+  registerCommand({
+    id: "view.searchFiles",
+    label: "Search in Files",
+    shortcut: "Cmd+Shift+F",
+    category: "View",
+    execute: () => {
+      const s = store();
+      if (!s.sidebarVisible) s.toggleSidebar();
+      s.setSidebarTab("search");
+      setTimeout(() => {
+        document.querySelector<HTMLInputElement>(".search-panel-input")?.focus();
+      }, 50);
+    },
+  });
+
   // ── Table commands (Phase 9c) ──
   const tbl = makeTableCommands(getEditorView);
   registerCommand({ id: "table.insert", label: "Table: Insert", category: "Table", execute: tbl.insertTable });
