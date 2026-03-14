@@ -26,6 +26,7 @@ import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension, togglePreviewEffect, previewModeField } from "../extensions/livePreview";
 import { lintingExtension, autofixContent } from "../extensions/linting";
+import { blocksExtension } from "../extensions/blocks";
 import { lintKeymap } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
 import { renameFile } from "../lib/fileOps";
@@ -234,6 +235,7 @@ function buildExtensions(): Extension[] {
     autocompleteExtension(),
     symbolWrapExtension(),
     livePreviewExtension(),
+    ...blocksExtension(),
     keymap.of(lintKeymap),
     ...lintingExtension(),
   ];

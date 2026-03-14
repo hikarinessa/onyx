@@ -15,6 +15,7 @@ import { restoreSession, initSessionPersistence } from "./lib/session";
 import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
 import { registerCommand, getAllCommands } from "./lib/commands";
 import { makeTableCommands } from "./extensions/tableEditor";
+import { copyBlock, deleteBlock, getCurrentBlock } from "./extensions/blocks";
 import { getEditorView } from "./components/Editor";
 import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
 import {
@@ -274,6 +275,56 @@ function registerCommands() {
   registerCommand({ id: "table.sortDesc", label: "Table: Sort Descending", category: "Table", execute: tbl.sortDesc });
   registerCommand({ id: "table.transpose", label: "Table: Transpose", category: "Table", execute: tbl.transpose });
   registerCommand({ id: "table.format", label: "Table: Format", category: "Table", execute: tbl.format });
+
+  // ── Block commands ──
+  registerCommand({
+    id: "block.copy",
+    label: "Block: Copy",
+    category: "Block",
+    execute: () => { const v = getEditorView(); if (v) copyBlock(v); },
+  });
+  registerCommand({
+    id: "block.delete",
+    label: "Block: Delete",
+    category: "Block",
+    execute: () => { const v = getEditorView(); if (v) deleteBlock(v); },
+  });
+  registerCommand({
+    id: "block.extract",
+    label: "Block: Extract to New Note",
+    category: "Block",
+    execute: async () => {
+      const v = getEditorView();
+      if (!v) return;
+      const block = getCurrentBlock(v);
+      if (!block) return;
+      // Get current file's directory
+      const s = store();
+      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      if (!tab) return;
+      const dir = tab.path.substring(0, tab.path.lastIndexOf("/"));
+      // Generate a name from the first line
+      const firstLine = block.text.split("\n")[0].replace(/^#+\s*/, "").trim();
+      const name = (firstLine.substring(0, 40) || "Extracted Note").replace(/[/:\0]/g, "");
+      let notePath = `${dir}/${name}.md`;
+      // Avoid collisions
+      const { invoke } = await import("@tauri-apps/api/core");
+      let counter = 1;
+      while (await invoke<boolean>("path_exists", { path: notePath })) {
+        notePath = `${dir}/${name} ${counter}.md`;
+        counter++;
+      }
+      // Write the new note
+      await invoke("write_file", { path: notePath, content: block.text + "\n" });
+      // Replace the block with a wikilink
+      const linkName = notePath.split("/").pop()!.replace(".md", "");
+      v.dispatch({
+        changes: { from: block.from, to: block.to, insert: `[[${linkName}]]` },
+      });
+      await invoke("reindex_file", { path: notePath });
+      s.bumpFileTreeVersion();
+    },
+  });
 
   // Register keybindings for every command that has a shortcut
   for (const cmd of getAllCommands()) {
