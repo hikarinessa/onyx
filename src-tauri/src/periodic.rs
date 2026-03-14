@@ -25,10 +25,7 @@ pub struct PeriodConfig {
 }
 
 fn config_path() -> Result<PathBuf, String> {
-    Ok(dirs_next::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".onyx")
-        .join("periodic-notes.json"))
+    Ok(crate::paths::onyx_dir()?.join("periodic-notes.json"))
 }
 
 fn default_config() -> PeriodicConfig {

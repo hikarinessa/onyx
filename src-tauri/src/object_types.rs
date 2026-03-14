@@ -23,8 +23,7 @@ pub struct ObjectType {
 }
 
 fn config_path() -> Result<PathBuf, String> {
-    let home = dirs_next::home_dir().ok_or("Could not find home directory")?;
-    Ok(home.join(".onyx").join("object-types.json"))
+    Ok(crate::paths::onyx_dir()?.join("object-types.json"))
 }
 
 fn default_types() -> Vec<ObjectType> {

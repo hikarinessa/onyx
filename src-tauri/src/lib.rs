@@ -4,6 +4,7 @@ mod db;
 mod dirs;
 mod indexer;
 mod object_types;
+mod paths;
 mod periodic;
 mod plugins;
 mod watcher;
@@ -54,10 +55,9 @@ pub fn run() {
     let dir_manager = dirs::DirectoryManager::new().expect("Failed to initialize directory manager");
     let app_config = config::load_config();
 
-    // Initialize SQLite database at ~/.onyx/cache/index.db
-    let db_path = dirs_next::home_dir()
-        .expect("Could not find home directory")
-        .join(".onyx")
+    // Initialize SQLite database at <onyx_dir>/cache/index.db
+    let db_path = paths::onyx_dir()
+        .expect("Could not resolve Onyx data directory")
         .join("cache")
         .join("index.db");
 
