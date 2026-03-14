@@ -161,7 +161,7 @@ const hoverTracker = ViewPlugin.fromClass(
         opacity: "0.4",
         cursor: "pointer",
         borderRadius: "4px",
-        zIndex: "5",
+        zIndex: "50",
         transition: "opacity 0.15s, color 0.15s",
       });
       this.btn.addEventListener("mouseenter", () => {
