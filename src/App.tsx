@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Titlebar } from "./components/Titlebar";
-import { TabBar } from "./components/TabBar";
 import { Sidebar } from "./components/Sidebar";
 import { Editor, foldFrontmatter } from "./components/Editor";
 import { LintPanel } from "./components/LintPanel";
@@ -258,6 +257,26 @@ function registerCommands() {
     },
   });
 
+  registerCommand({
+    id: "view.splitPane",
+    label: "Split Editor",
+    shortcut: "Cmd+\\",
+    category: "View",
+    execute: () => store().splitPane(),
+  });
+
+  registerCommand({
+    id: "view.closePane",
+    label: "Close Pane",
+    category: "View",
+    execute: () => {
+      const s = store();
+      if (s.paneState.panes.length > 1) {
+        s.closePane(s.paneState.activePaneId);
+      }
+    },
+  });
+
   // ── Table commands (Phase 9c) ──
   const tbl = makeTableCommands(getEditorView);
   registerCommand({ id: "table.insert", label: "Table: Insert", category: "Table", execute: tbl.insertTable });
@@ -478,7 +497,6 @@ export default function App() {
           <Sidebar />
         </ErrorBoundary>
         <div className="editor-column">
-          <TabBar />
           <ErrorBoundary label="editor">
             <Editor />
           </ErrorBoundary>

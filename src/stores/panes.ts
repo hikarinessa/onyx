@@ -8,7 +8,7 @@
  * This file defines types only. State lives in app.ts.
  */
 
-import type { Tab, EditorMode, NavEntry } from "./app";
+import type { Tab } from "./app";
 
 export interface Pane {
   id: string;       // "pane-0", "pane-1", "pane-2"
