@@ -17,6 +17,7 @@ import {
   createStateWithExtensions,
   registerPaneView,
   unregisterPaneView,
+  getAllPaneViews,
 } from "./Editor";
 
 export function EditorPane({ pane }: { pane: Pane }) {
@@ -146,6 +147,37 @@ export function EditorPane({ pane }: { pane: Pane }) {
       viewRef.current.focus();
     }
   }, [isActive, pane.id]);
+
+  // Scroll sync — when scroll lock is active, synchronize scroll with other panes
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    let isSyncing = false;
+
+    const handleScroll = () => {
+      if (isSyncing) return;
+      const anchors = useAppStore.getState().paneState.scrollLockAnchors;
+      if (!anchors) return;
+
+      const myAnchor = anchors.get(pane.id);
+      if (myAnchor === undefined) return;
+
+      const delta = view.scrollDOM.scrollTop - myAnchor;
+
+      isSyncing = true;
+      for (const [otherId, otherView] of getAllPaneViews()) {
+        if (otherId === pane.id) continue;
+        const otherAnchor = anchors.get(otherId);
+        if (otherAnchor === undefined) continue;
+        otherView.scrollDOM.scrollTop = otherAnchor + delta;
+      }
+      isSyncing = false;
+    };
+
+    view.scrollDOM.addEventListener("scroll", handleScroll);
+    return () => view.scrollDOM.removeEventListener("scroll", handleScroll);
+  }, [pane.id, activeTab?.id]);
 
   // ── Inline title ──
   const [titleValue, setTitleValue] = useState("");

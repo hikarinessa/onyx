@@ -16,7 +16,7 @@ import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
 import { registerCommand, getAllCommands } from "./lib/commands";
 import { makeTableCommands } from "./extensions/tableEditor";
 import { copyBlock, deleteBlock, getCurrentBlock } from "./extensions/blocks";
-import { getEditorView } from "./components/Editor";
+import { getEditorView, getAllPaneViews } from "./components/Editor";
 import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
 import {
   registerKeybinding,
@@ -305,6 +305,28 @@ function registerCommands() {
       const currentIdx = paneState.panes.indexOf(activePane);
       const targetIdx = (currentIdx + 1) % paneState.panes.length;
       s.moveTabToPane(activePane.activeTabId, paneState.panes[targetIdx].id);
+    },
+  });
+
+  registerCommand({
+    id: "view.toggleScrollLock",
+    label: "Toggle Scroll Lock",
+    category: "View",
+    execute: () => {
+      const s = store();
+      const { paneState } = s;
+      if (paneState.scrollLockAnchors) {
+        // Unlock
+        s.setScrollLockAnchors(null);
+      } else {
+        // Lock — capture current scroll positions as anchors
+        const anchors = new Map<string, number>();
+        const views = getAllPaneViews();
+        for (const [paneId, view] of views) {
+          anchors.set(paneId, view.scrollDOM.scrollTop);
+        }
+        s.setScrollLockAnchors(anchors);
+      }
     },
   });
 
