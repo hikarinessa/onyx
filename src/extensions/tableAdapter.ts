@@ -19,8 +19,6 @@ import {
  * All conversions happen here.
  */
 export class CM6TextEditor extends ITextEditor {
-  private changes: { from: number; to: number; insert: string }[] = [];
-
   constructor(private view: EditorView) {
     super();
   }

@@ -10,8 +10,8 @@ import {
   StateField,
   StateEffect,
   RangeSetBuilder,
+  type EditorState,
   type Extension,
-  type Transaction,
 } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 import { findTablesInRange } from "./tableAdapter";
@@ -100,17 +100,7 @@ const tableParseOpts: Options = optionsWithDefaults({
   formatType: FormatType.NORMAL,
 });
 
-/** Simple string hash for fast eq() comparison. */
-function hashString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  }
-  return h;
-}
-
 class TableWidget extends WidgetType {
-  private hash: number;
   private rowCount: number;
 
   constructor(
@@ -118,12 +108,11 @@ class TableWidget extends WidgetType {
     private parsedTable: Table,
   ) {
     super();
-    this.hash = hashString(tableText);
     this.rowCount = parsedTable.getHeight();
   }
 
   eq(other: TableWidget): boolean {
-    return this.hash === other.hash;
+    return this.tableText === other.tableText;
   }
 
   get estimatedHeight(): number {
@@ -543,7 +532,7 @@ const livePreviewPlugin = ViewPlugin.fromClass(
  * (not a ViewPlugin). We scan the full document syntax tree — acceptable
  * for note-sized files (<50K lines).
  */
-function buildTableBlockDecos(state: import("@codemirror/state").EditorState): DecorationSet {
+function buildTableBlockDecos(state: EditorState): DecorationSet {
   if (!state.field(previewModeField)) return Decoration.none;
 
   const doc = state.doc;
@@ -599,7 +588,7 @@ const tableBlockField = StateField.define<DecorationSet>({
     return buildTableBlockDecos(state);
   },
   update(decos, tr) {
-    if (tr.docChanged || tr.selection || tr.effects.some(e => e.is(togglePreviewEffect))) {
+    if (tr.docChanged || tr.selection !== tr.startState.selection || tr.effects.some(e => e.is(togglePreviewEffect))) {
       return buildTableBlockDecos(tr.state);
     }
     return decos;

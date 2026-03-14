@@ -340,13 +340,6 @@ export function scrollToPosition(from: number) {
   _liveViewRef.focus();
 }
 
-/** Apply a lint fix: replace text range [from, to) with nothing (delete) */
-export function applyLintFix(from: number, to: number) {
-  if (!_liveViewRef) return;
-  _liveViewRef.dispatch({ changes: { from, to } });
-  _liveViewRef.focus();
-}
-
 /** Apply fix-all: run autofixContent on the current document */
 export function applyLintFixAll() {
   if (!_liveViewRef) return;
