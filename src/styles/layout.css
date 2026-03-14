@@ -2351,12 +2351,21 @@
     pointer-events: none;
   }
 
-  /* ── Hide all CM6 lint UI — diagnostics shown in lint panel instead ── */
+  /* ── Lint marks: show in source mode, hide in preview mode ── */
 
-  .cm-lintRange-error,
-  .cm-lintRange-warning {
+  .editor-container.preview-mode .cm-lintRange-error,
+  .editor-container.preview-mode .cm-lintRange-warning {
     background-image: none !important;
     text-decoration: none !important;
+  }
+
+  .editor-container.preview-mode .cm-lint-marker {
+    display: none !important;
+  }
+
+  .editor-container.preview-mode .cm-lintPoint-error,
+  .editor-container.preview-mode .cm-lintPoint-warning {
+    display: none !important;
   }
 
   .cm-gutter-lint {

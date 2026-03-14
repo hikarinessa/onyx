@@ -1037,3 +1037,73 @@ pub fn save_keybindings(json: String) -> Result<(), String> {
         .map_err(|e| format!("Invalid keybindings JSON: {}", e))?;
     crate::config::save_keybindings(&bindings)
 }
+
+// ── Spellcheck (macOS only) ──
+
+#[derive(Debug, Serialize)]
+pub struct SpellingError {
+    pub from: usize,
+    pub to: usize,
+    pub word: String,
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn check_spelling(text: String) -> Vec<SpellingError> {
+    use cocoa::base::nil;
+    use cocoa::foundation::NSString;
+    use objc::{msg_send, sel, sel_impl, runtime::Class};
+
+    let mut errors = Vec::new();
+
+    unsafe {
+        let checker: cocoa::base::id = msg_send![
+            Class::get("NSSpellChecker").unwrap(),
+            sharedSpellChecker
+        ];
+        let ns_text = NSString::alloc(nil).init_str(&text);
+        let text_len: usize = msg_send![ns_text, length]; // UTF-16 length
+
+        let mut offset: usize = 0;
+        while offset < text_len {
+            let range: cocoa::foundation::NSRange = msg_send![
+                checker,
+                checkSpellingOfString: ns_text
+                startingAt: offset as cocoa::foundation::NSInteger
+                language: nil
+                wrap: false
+                inSpellDocumentWithTag: 0i64
+                wordCount: std::ptr::null_mut::<cocoa::foundation::NSInteger>()
+            ];
+
+            if range.length == 0 {
+                break;
+            }
+
+            // Extract the misspelled word
+            let sub: cocoa::base::id = msg_send![ns_text, substringWithRange: range];
+            let cstr: *const std::os::raw::c_char = msg_send![sub, UTF8String];
+            let word = std::ffi::CStr::from_ptr(cstr).to_string_lossy().to_string();
+
+            // Return UTF-16 offsets directly — JS string indexing is UTF-16 based
+            let from = range.location as usize;
+            let to = (range.location + range.length) as usize;
+
+            errors.push(SpellingError {
+                from,
+                to,
+                word,
+            });
+
+            offset = (range.location + range.length) as usize;
+        }
+    }
+
+    errors
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn check_spelling(_text: String) -> Vec<SpellingError> {
+    Vec::new()
+}
