@@ -1,7 +1,8 @@
 import { linter, type Diagnostic } from "@codemirror/lint";
 import type { Text } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
-import { isLintingEnabled } from "../lib/configBridge";
+import { isLintingEnabled, getLintRules } from "../lib/configBridge";
+import { useAppStore, type LintIssue } from "../stores/app";
 
 // ---------------------------------------------------------------------------
 // Rule types
@@ -313,24 +314,23 @@ const noEmptyLinks: LintRule = (doc) => {
 };
 
 // ---------------------------------------------------------------------------
-// All rules
+// All rules — keyed by config field name
 // ---------------------------------------------------------------------------
 
-const TIER1_RULES: LintRule[] = [
-  noTrailingSpaces,
-  noHardTabs,
-  noMultipleBlanks,
-  singleTrailingNewline,
-  noMissingSpaceAtx,
-  noReversedLinks,
-  noSpaceInEmphasis,
-];
+type RuleKey = keyof ReturnType<typeof getLintRules>;
 
-const TIER2_RULES: LintRule[] = [
-  headingIncrement,
-  consistentListMarker,
-  hrStyle,
-  noEmptyLinks,
+const ALL_RULES: { key: RuleKey; rule: LintRule }[] = [
+  { key: "trailing_spaces", rule: noTrailingSpaces },
+  { key: "hard_tabs", rule: noHardTabs },
+  { key: "multiple_blanks", rule: noMultipleBlanks },
+  { key: "trailing_newline", rule: singleTrailingNewline },
+  { key: "atx_spacing", rule: noMissingSpaceAtx },
+  { key: "reversed_links", rule: noReversedLinks },
+  { key: "space_in_emphasis", rule: noSpaceInEmphasis },
+  { key: "heading_increment", rule: headingIncrement },
+  { key: "consistent_list_marker", rule: consistentListMarker },
+  { key: "hr_style", rule: hrStyle },
+  { key: "empty_links", rule: noEmptyLinks },
 ];
 
 // ---------------------------------------------------------------------------
@@ -339,24 +339,14 @@ const TIER2_RULES: LintRule[] = [
 
 export function autofixContent(content: string): string {
   let result = content;
+  const rules = getLintRules();
 
-  // Trailing whitespace
-  result = result.replace(/[ \t]+$/gm, "");
-
-  // Hard tabs → spaces
-  result = result.replace(/\t/g, "    ");
-
-  // 3+ consecutive blank lines → 2
-  result = result.replace(/\n{3,}/g, "\n\n");
-
-  // Ensure single trailing newline
-  result = result.replace(/\n*$/, "\n");
-
-  // Missing space after ATX heading
-  result = result.replace(/^(#{1,6})([^ #\n])/gm, "$1 $2");
-
-  // Reversed links
-  result = result.replace(/\(([^)]+)\)\[([^\]]+)\]/g, "[$1]($2)");
+  if (rules.trailing_spaces) result = result.replace(/[ \t]+$/gm, "");
+  if (rules.hard_tabs) result = result.replace(/\t/g, "    ");
+  if (rules.multiple_blanks) result = result.replace(/\n{3,}/g, "\n\n");
+  if (rules.trailing_newline) result = result.replace(/\n*$/, "\n");
+  if (rules.atx_spacing) result = result.replace(/^(#{1,6})([^ #\n])/gm, "$1 $2");
+  if (rules.reversed_links) result = result.replace(/\(([^)]+)\)\[([^\]]+)\]/g, "[$1]($2)");
 
   return result;
 }
@@ -367,17 +357,43 @@ export function autofixContent(content: string): string {
 
 export function lintingExtension(): Extension[] {
   const lintSource = linter((view) => {
-    if (!isLintingEnabled()) return [];
+    if (!isLintingEnabled()) {
+      useAppStore.getState().setLintDiagnostics([]);
+      useAppStore.getState().setLintCounts(0, 0);
+      return [];
+    }
 
     const doc = view.state.doc;
     const diagnostics: Diagnostic[] = [];
+    const rules = getLintRules();
 
-    for (const rule of TIER1_RULES) {
-      diagnostics.push(...rule(doc));
+    for (const { key, rule } of ALL_RULES) {
+      if (rules[key]) {
+        diagnostics.push(...rule(doc));
+      }
     }
-    for (const rule of TIER2_RULES) {
-      diagnostics.push(...rule(doc));
-    }
+
+    // Push serializable issues to the store for the lint panel
+    let errors = 0;
+    let warnings = 0;
+    const issues: LintIssue[] = diagnostics.map((d, i) => {
+      const line = doc.lineAt(d.from);
+      const sev = d.severity === "error" ? "error" as const : "warning" as const;
+      if (sev === "error") errors++;
+      else warnings++;
+      return {
+        id: `${d.from}-${d.to}-${i}`,
+        from: d.from,
+        to: d.to,
+        line: line.number,
+        col: d.from - line.from + 1,
+        message: d.message,
+        severity: sev,
+        fixable: (d.actions?.length ?? 0) > 0,
+      };
+    });
+    useAppStore.getState().setLintDiagnostics(issues);
+    useAppStore.getState().setLintCounts(errors, warnings);
 
     return diagnostics;
   }, { delay: 500 });

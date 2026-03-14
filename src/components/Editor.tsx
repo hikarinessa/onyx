@@ -20,12 +20,13 @@ import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
 import { formattingKeymap } from "../extensions/formatting";
 import { outlinerKeymap } from "../extensions/outliner";
+import { tableEditorExtension } from "../extensions/tableEditor";
 import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension, togglePreviewEffect, previewModeField } from "../extensions/livePreview";
 import { lintingExtension, autofixContent } from "../extensions/linting";
-import { lintKeymap, forEachDiagnostic } from "@codemirror/lint";
+import { lintKeymap } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
 import { renameFile } from "../lib/fileOps";
 import { getAutoSaveMs, setRemeasureHook, isAutofixOnSave } from "../lib/configBridge";
@@ -52,6 +53,11 @@ const activeTabIdBox = { current: null as string | null };
 
 /** Module-level reference to the live EditorView for external content updates */
 let _liveViewRef: EditorView | null = null;
+
+/** Get the current live EditorView (for command palette table commands, etc.) */
+export function getEditorView(): EditorView | null {
+  return _liveViewRef;
+}
 
 // ---------------------------------------------------------------------------
 // Shared styles and highlight
@@ -126,7 +132,7 @@ function buildExtensions(): Extension[] {
     const tabId = activeTabIdBox.current;
     if (!tabId) return;
 
-    const { setCursorInfo, setModified, setWordCount, setCharCount, setLintCounts } = useAppStore.getState();
+    const { setCursorInfo, setModified, setWordCount, setCharCount } = useAppStore.getState();
 
     // Cursor position — always update (cheap)
     const pos = update.state.selection.main.head;
@@ -143,15 +149,6 @@ function buildExtensions(): Extension[] {
       const words = content.trim() ? content.trim().split(/\s+/).length : 0;
       setWordCount(words);
       setCharCount(content.length);
-
-      // Update lint counts
-      let errors = 0;
-      let warnings = 0;
-      forEachDiagnostic(update.state, (d) => {
-        if (d.severity === "error") errors++;
-        else if (d.severity === "warning") warnings++;
-      });
-      setLintCounts(errors, warnings);
 
       // Debounced auto-save
       clearTimeout(saveTimer);
@@ -210,6 +207,10 @@ function buildExtensions(): Extension[] {
   return [
     editorModeKeymap,
     keymap.of(formattingKeymap),
+    // Table keybindings — must precede outliner so Tab/Enter are
+    // handled by table navigation when cursor is inside a table.
+    // Order: editorMode → formatting → table → outliner → defaults
+    ...tableEditorExtension(),
     keymap.of(outlinerKeymap),
     keymap.of([
       ...defaultKeymap,
@@ -326,6 +327,36 @@ export function insertAtCursor(text: string) {
     changes: { from: pos, to: pos, insert: text },
     selection: EditorSelection.cursor(pos + text.length),
   });
+  _liveViewRef.focus();
+}
+
+/** Scroll the live editor to a character position and place the cursor there */
+export function scrollToPosition(from: number) {
+  if (!_liveViewRef) return;
+  _liveViewRef.dispatch({
+    selection: EditorSelection.cursor(from),
+    scrollIntoView: true,
+  });
+  _liveViewRef.focus();
+}
+
+/** Apply a lint fix: replace text range [from, to) with nothing (delete) */
+export function applyLintFix(from: number, to: number) {
+  if (!_liveViewRef) return;
+  _liveViewRef.dispatch({ changes: { from, to } });
+  _liveViewRef.focus();
+}
+
+/** Apply fix-all: run autofixContent on the current document */
+export function applyLintFixAll() {
+  if (!_liveViewRef) return;
+  const content = _liveViewRef.state.doc.toString();
+  const fixed = autofixContent(content);
+  if (fixed !== content) {
+    _liveViewRef.dispatch({
+      changes: { from: 0, to: _liveViewRef.state.doc.length, insert: fixed },
+    });
+  }
   _liveViewRef.focus();
 }
 

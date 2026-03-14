@@ -3,6 +3,7 @@ import { Titlebar } from "./components/Titlebar";
 import { TabBar } from "./components/TabBar";
 import { Sidebar } from "./components/Sidebar";
 import { Editor, foldFrontmatter } from "./components/Editor";
+import { LintPanel } from "./components/LintPanel";
 import { ContextPanel } from "./components/ContextPanel";
 import { StatusBar } from "./components/StatusBar";
 import { QuickOpen } from "./components/QuickOpen";
@@ -13,6 +14,8 @@ import { useAppStore } from "./stores/app";
 import { restoreSession, initSessionPersistence } from "./lib/session";
 import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
 import { registerCommand, getAllCommands } from "./lib/commands";
+import { makeTableCommands } from "./extensions/tableEditor";
+import { getEditorView } from "./components/Editor";
 import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
 import {
   registerKeybinding,
@@ -238,6 +241,25 @@ function registerCommands() {
     execute: () => store().setSettingsVisible(true),
   });
 
+  // ── Table commands (Phase 9c) ──
+  const tbl = makeTableCommands(getEditorView);
+  registerCommand({ id: "table.insert", label: "Table: Insert", category: "Table", execute: tbl.insertTable });
+  registerCommand({ id: "table.insertColumnRight", label: "Table: Insert Column Right", category: "Table", execute: tbl.insertColumnRight });
+  registerCommand({ id: "table.deleteColumn", label: "Table: Delete Column", category: "Table", execute: tbl.deleteColumn });
+  registerCommand({ id: "table.insertRowBelow", label: "Table: Insert Row Below", category: "Table", execute: tbl.insertRowBelow });
+  registerCommand({ id: "table.deleteRow", label: "Table: Delete Row", category: "Table", execute: tbl.deleteRow });
+  registerCommand({ id: "table.moveColumnRight", label: "Table: Move Column Right", category: "Table", execute: tbl.moveColumnRight });
+  registerCommand({ id: "table.moveColumnLeft", label: "Table: Move Column Left", category: "Table", execute: tbl.moveColumnLeft });
+  registerCommand({ id: "table.moveRowDown", label: "Table: Move Row Down", category: "Table", execute: tbl.moveRowDown });
+  registerCommand({ id: "table.moveRowUp", label: "Table: Move Row Up", category: "Table", execute: tbl.moveRowUp });
+  registerCommand({ id: "table.alignLeft", label: "Table: Align Left", category: "Table", execute: tbl.alignLeft });
+  registerCommand({ id: "table.alignCenter", label: "Table: Align Center", category: "Table", execute: tbl.alignCenter });
+  registerCommand({ id: "table.alignRight", label: "Table: Align Right", category: "Table", execute: tbl.alignRight });
+  registerCommand({ id: "table.sortAsc", label: "Table: Sort Ascending", category: "Table", execute: tbl.sortAsc });
+  registerCommand({ id: "table.sortDesc", label: "Table: Sort Descending", category: "Table", execute: tbl.sortDesc });
+  registerCommand({ id: "table.transpose", label: "Table: Transpose", category: "Table", execute: tbl.transpose });
+  registerCommand({ id: "table.format", label: "Table: Format", category: "Table", execute: tbl.format });
+
   // Register keybindings for every command that has a shortcut
   for (const cmd of getAllCommands()) {
     if (cmd.shortcut) {
@@ -397,6 +419,7 @@ export default function App() {
           <ErrorBoundary label="editor">
             <Editor />
           </ErrorBoundary>
+          <LintPanel />
         </div>
         <ErrorBoundary label="context panel">
           <ContextPanel />

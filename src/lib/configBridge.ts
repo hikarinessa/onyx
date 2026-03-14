@@ -10,6 +10,19 @@ let autoSaveMs = 500;
 let lintingEnabled = true;
 let autofixOnSave = false;
 
+// Per-rule flags (all default true)
+let ruleTrailingSpaces = true;
+let ruleHardTabs = true;
+let ruleMultipleBlanks = true;
+let ruleTrailingNewline = true;
+let ruleAtxSpacing = true;
+let ruleReversedLinks = true;
+let ruleSpaceInEmphasis = true;
+let ruleHeadingIncrement = true;
+let ruleConsistentListMarker = true;
+let ruleHrStyle = true;
+let ruleEmptyLinks = true;
+
 export function getAutoSaveMs(): number {
   return autoSaveMs;
 }
@@ -20,6 +33,22 @@ export function isLintingEnabled(): boolean {
 
 export function isAutofixOnSave(): boolean {
   return autofixOnSave;
+}
+
+export function getLintRules() {
+  return {
+    trailing_spaces: ruleTrailingSpaces,
+    hard_tabs: ruleHardTabs,
+    multiple_blanks: ruleMultipleBlanks,
+    trailing_newline: ruleTrailingNewline,
+    atx_spacing: ruleAtxSpacing,
+    reversed_links: ruleReversedLinks,
+    space_in_emphasis: ruleSpaceInEmphasis,
+    heading_increment: ruleHeadingIncrement,
+    consistent_list_marker: ruleConsistentListMarker,
+    hr_style: ruleHrStyle,
+    empty_links: ruleEmptyLinks,
+  };
 }
 
 import type { AppConfig, ThemeColorOverrides } from "./configTypes";
@@ -214,6 +243,17 @@ export function applyConfig(config: AppConfig) {
   if (config.linting) {
     lintingEnabled = config.linting.enabled;
     autofixOnSave = config.linting.autofix_on_save;
+    ruleTrailingSpaces = config.linting.trailing_spaces ?? true;
+    ruleHardTabs = config.linting.hard_tabs ?? true;
+    ruleMultipleBlanks = config.linting.multiple_blanks ?? true;
+    ruleTrailingNewline = config.linting.trailing_newline ?? true;
+    ruleAtxSpacing = config.linting.atx_spacing ?? true;
+    ruleReversedLinks = config.linting.reversed_links ?? true;
+    ruleSpaceInEmphasis = config.linting.space_in_emphasis ?? true;
+    ruleHeadingIncrement = config.linting.heading_increment ?? true;
+    ruleConsistentListMarker = config.linting.consistent_list_marker ?? true;
+    ruleHrStyle = config.linting.hr_style ?? true;
+    ruleEmptyLinks = config.linting.empty_links ?? true;
   }
 
   lastConfig = config;

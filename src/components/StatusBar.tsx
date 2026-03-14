@@ -73,7 +73,14 @@ export function StatusBar() {
             </span>
             <span title={`${charCount} characters`}>{wordCount} words</span>
             {(lintErrors > 0 || lintWarnings > 0) && (
-              <span className="statusbar-lint" title="Lint diagnostics">
+              <span
+                className="statusbar-lint"
+                title="Click to toggle lint panel"
+                role="button"
+                tabIndex={0}
+                onClick={() => useAppStore.getState().toggleLintPanel()}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); useAppStore.getState().toggleLintPanel(); } }}
+              >
                 {lintErrors > 0 && <span className="statusbar-lint-errors">{lintErrors}E</span>}
                 {lintWarnings > 0 && <span className="statusbar-lint-warnings">{lintWarnings}W</span>}
               </span>

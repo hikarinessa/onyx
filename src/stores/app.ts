@@ -2,6 +2,17 @@ import { create } from "zustand";
 
 export type EditorMode = "source" | "preview";
 
+export interface LintIssue {
+  id: string;
+  from: number;
+  to: number;
+  line: number;
+  col: number;
+  message: string;
+  severity: "error" | "warning";
+  fixable: boolean;
+}
+
 export interface NavEntry {
   path: string;
   cursor: number;
@@ -118,10 +129,14 @@ interface AppState {
   saveConflictPath: string | null;
   setSaveConflictPath: (path: string | null) => void;
 
-  // Lint counts
+  // Lint
   lintErrors: number;
   lintWarnings: number;
+  lintDiagnostics: LintIssue[];
+  lintPanelVisible: boolean;
   setLintCounts: (errors: number, warnings: number) => void;
+  setLintDiagnostics: (diagnostics: LintIssue[]) => void;
+  toggleLintPanel: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -352,7 +367,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   lintErrors: 0,
   lintWarnings: 0,
+  lintDiagnostics: [],
+  lintPanelVisible: false,
   setLintCounts: (errors, warnings) => set({ lintErrors: errors, lintWarnings: warnings }),
+  setLintDiagnostics: (diagnostics) => set({ lintDiagnostics: diagnostics }),
+  toggleLintPanel: () => set((s) => ({ lintPanelVisible: !s.lintPanelVisible })),
 }));
 
 // ── Memoized selectors ──
