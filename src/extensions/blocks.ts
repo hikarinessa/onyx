@@ -4,8 +4,6 @@ import {
   type ViewUpdate,
   Decoration,
   type DecorationSet,
-  GutterMarker,
-  gutter,
 } from "@codemirror/view";
 import {
   StateField,
@@ -110,48 +108,6 @@ const hoveredBlockLine = StateField.define<number | null>({
   },
 });
 
-// ── Gutter copy icon ──
-
-class CopyMarker extends GutterMarker {
-  toDOM(): HTMLElement {
-    const btn = document.createElement("div");
-    btn.className = "block-copy-gutter";
-    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-    btn.title = "Copy block";
-    return btn;
-  }
-}
-
-const copyMarkerInstance = new CopyMarker();
-
-const blockGutter = gutter({
-  class: "cm-block-gutter",
-  markers(view) {
-    const hLine = view.state.field(hoveredBlockLine);
-    if (hLine === null) {
-      const b = new RangeSetBuilder<GutterMarker>();
-      return b.finish();
-    }
-    const builder = new RangeSetBuilder<GutterMarker>();
-    const line = view.state.doc.line(hLine);
-    builder.add(line.from, line.from, copyMarkerInstance);
-    return builder.finish();
-  },
-  domEventHandlers: {
-    click(view, line) {
-      const blocks = view.state.field(blockRangesField);
-      const lineNum = view.state.doc.lineAt(line.from).number;
-      const block = blockAtLine(blocks, lineNum);
-      if (block) {
-        const text = view.state.doc.sliceString(block.from, block.to);
-        navigator.clipboard.writeText(text);
-        return true;
-      }
-      return false;
-    },
-  },
-});
-
 // ── Hover highlight decoration ──
 
 const blockHighlightDeco = Decoration.line({ class: "cm-block-hover-line" });
@@ -174,39 +130,133 @@ const blockHighlightField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-// ── Mouse tracking ViewPlugin ──
+// ── Floating copy button + mouse tracking ──
+
+const COPY_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+const CHECK_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
 const hoverTracker = ViewPlugin.fromClass(
   class {
     view: EditorView;
+    btn: HTMLElement;
+    currentLine: number | null = null;
+    feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
     constructor(view: EditorView) {
       this.view = view;
+
+      // Create floating copy button with inline styles (CM6 theme scoping
+      // doesn't reliably reach absolutely-positioned children)
+      this.btn = document.createElement("div");
+      this.btn.innerHTML = COPY_SVG;
+      this.btn.title = "Copy block";
+      Object.assign(this.btn.style, {
+        position: "absolute",
+        display: "none",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "18px",
+        height: "18px",
+        color: "var(--text-tertiary)",
+        opacity: "0.4",
+        cursor: "pointer",
+        borderRadius: "4px",
+        zIndex: "5",
+        transition: "opacity 0.15s, color 0.15s",
+      });
+      this.btn.addEventListener("mouseenter", () => {
+        this.btn.style.opacity = "1";
+        this.btn.style.color = "var(--text-primary)";
+        this.btn.style.background = "var(--bg-hover)";
+      });
+      this.btn.addEventListener("mouseleave", () => {
+        if (!this.btn.dataset.copied) {
+          this.btn.style.opacity = "0.4";
+          this.btn.style.color = "var(--text-tertiary)";
+          this.btn.style.background = "none";
+        }
+      });
+      this.btn.addEventListener("click", this.onCopy);
+      view.dom.style.position = "relative";
+      view.dom.appendChild(this.btn);
+
       view.dom.addEventListener("mousemove", this.onMove);
       view.dom.addEventListener("mouseleave", this.onLeave);
     }
 
+    onCopy = (e: MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const blocks = this.view.state.field(blockRangesField);
+      if (this.currentLine === null) return;
+      const block = blockAtLine(blocks, this.currentLine);
+      if (!block) return;
+      const text = this.view.state.doc.sliceString(block.from, block.to);
+      navigator.clipboard.writeText(text);
+
+      // Visual feedback: swap to check icon briefly
+      this.btn.innerHTML = CHECK_SVG;
+      this.btn.style.color = "var(--accent)";
+      this.btn.dataset.copied = "1";
+      clearTimeout(this.feedbackTimer);
+      this.feedbackTimer = setTimeout(() => {
+        this.btn.innerHTML = COPY_SVG;
+        this.btn.style.opacity = "0.4";
+        this.btn.style.color = "var(--text-tertiary)";
+        this.btn.style.background = "none";
+        delete this.btn.dataset.copied;
+      }, 1200);
+    };
+
     onMove = (e: MouseEvent) => {
       const pos = this.view.posAtCoords({ x: e.clientX, y: e.clientY });
-      if (pos === null) return;
+      if (pos === null) { this.hideBtn(); return; }
       const line = this.view.state.doc.lineAt(pos).number;
       const blocks = this.view.state.field(blockRangesField);
       const block = blockAtLine(blocks, line);
       const targetLine = block ? block.firstLine : null;
+
       if (targetLine !== this.view.state.field(hoveredBlockLine)) {
         this.view.dispatch({ effects: setHoveredBlock.of(targetLine) });
+      }
+
+      if (targetLine !== null && block) {
+        this.currentLine = targetLine;
+        // Position button at the first line of the block
+        const lineFrom = this.view.state.doc.line(targetLine).from;
+        const coords = this.view.coordsAtPos(lineFrom);
+        if (coords) {
+          const editorRect = this.view.dom.getBoundingClientRect();
+          const contentRect = this.view.contentDOM.getBoundingClientRect();
+          const top = coords.top - editorRect.top;
+          const left = contentRect.left - editorRect.left - 24;
+          this.btn.style.top = `${top}px`;
+          this.btn.style.left = `${Math.max(4, left)}px`;
+          this.btn.style.display = "flex";
+        }
+      } else {
+        this.hideBtn();
       }
     };
 
     onLeave = () => {
+      this.hideBtn();
       if (this.view.state.field(hoveredBlockLine) !== null) {
         this.view.dispatch({ effects: setHoveredBlock.of(null) });
       }
     };
 
+    hideBtn() {
+      this.currentLine = null;
+      this.btn.style.display = "none";
+    }
+
     destroy() {
       this.view.dom.removeEventListener("mousemove", this.onMove);
       this.view.dom.removeEventListener("mouseleave", this.onLeave);
+      this.btn.removeEventListener("click", this.onCopy);
+      this.btn.remove();
+      clearTimeout(this.feedbackTimer);
     }
 
     update(_update: ViewUpdate) {}
@@ -318,30 +368,9 @@ export function getCurrentBlock(view: EditorView): { text: string; from: number;
 
 // ── Theme ──
 
-const blockTheme = EditorView.theme({
-  ".cm-block-gutter": {
-    width: "18px",
-    cursor: "default",
-  },
-  ".cm-block-gutter .block-copy-gutter": {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "18px",
-    height: "18px",
-    color: "var(--text-tertiary)",
-    cursor: "pointer",
-    borderRadius: "3px",
-    opacity: "0.6",
-    transition: "opacity 0.15s, color 0.15s",
-  },
-  ".cm-block-gutter .block-copy-gutter:hover": {
-    opacity: "1",
-    color: "var(--text-primary)",
-    background: "var(--bg-hover)",
-  },
+const blockTheme = EditorView.baseTheme({
   ".cm-block-hover-line": {
-    borderTop: "1px solid var(--border-subtle)",
+    boxShadow: "0 -1px 0 0 var(--border-subtle)",
   },
 });
 
@@ -353,7 +382,6 @@ export function blocksExtension(): Extension[] {
     hoveredBlockLine,
     blockHighlightField,
     hoverTracker,
-    blockGutter,
     blockTheme,
     keymap.of([
       {
