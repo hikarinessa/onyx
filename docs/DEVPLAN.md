@@ -643,22 +643,74 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
 ---
 
-## Phase 8 — Split Panes
+## Phase 8 — Tables ✅
+
+**Status:** Complete (v0.8.0). Implemented using `@tgrosinger/md-advanced-tables` (MIT) with CM6 adapter.
+
+- Live preview renders tables as styled HTML widgets (StateField block decorations)
+- Tab/Shift-Tab/Enter/Escape cell navigation
+- 16 command palette commands (insert/delete rows+cols, move, align, sort, transpose, format)
+- TSV paste auto-converts to GFM tables
+- See `PHASE9_PLAN.md` for implementation details (file retains original name)
+
+---
+
+## Phase 9 — Per-Block Features + Full-Text Search
+
+**Goal:** Block-level operations on top of the existing markdown editor (NOT a block-based editor switch), plus cross-file full-text search.
+
+**TODO:** Create detailed feature design together before implementation. The candidates below are starting points for that design session.
+
+### Block Features
+
+9.1 **Block awareness in CM6**
+- Detect `***` separators, track block boundaries (line ranges)
+- Visual: subtle separator line, block hover actions
+
+9.2 **Block operations**
+- Copy block as markdown
+- Move block up/down (reorder across separators)
+- Delete block
+- Extract block to new note (create note with block content, replace with wikilink)
+
+9.3 **Block references**
+- `^block-id` syntax for addressable blocks
+- Cross-note block referencing
+
+9.4 **Transclusion**
+- `![[note#^block-id]]` rendered inline (read-only)
+- 2-level depth cap with cycle detection (critical from day one)
+
+### Full-Text Search
+
+9.5 **Rust search backend**
+- Cmd+Shift+F triggers search panel
+- Ripgrep-style content search across all registered directories
+- Results streamed via Tauri channels if >300ms
+
+9.6 **Search UI**
+- Dedicated search panel (sidebar or overlay)
+- File name, line number, context preview per match
+- Click to open file at match position
+
+**Milestone:** Blocks are addressable and operable. Full-text search across all notes via Cmd+Shift+F.
+
+---
+
+## Phase 10 — Split Panes
 
 **Goal:** Two-pane editing with independent tab bars. Reference one note while writing another.
 
-**Rationale:** Split panes were designed in Phase 7 but deferred. The architecture groundwork exists (persistent EditorView instances, per-tab state caching). This is the biggest remaining daily-driver unlock.
-
 ### Steps
 
-8.1 **Architecture**
+10.1 **Architecture**
 - Add to Zustand: `paneLayout: { type: 'single' | 'split'; activePaneId: 'left' | 'right' }`, `splitRatio: number`
 - Per-pane tab lists + active tab IDs
 - Extract core editor logic from `Editor.tsx` into `EditorPane.tsx` — each pane owns its own `EditorView` instance
 - Module-level caches (`editorStateCache`, `scrollCache`, `lastSavedContent`) stay shared (keyed by tab ID)
 - `Editor.tsx` becomes a layout container rendering 1 or 2 `EditorPane` components
 
-8.2 **Interactions & persistence**
+10.2 **Interactions & persistence**
 - `TabBar` accepts optional `paneId` prop for pane-specific tab list
 - Cmd+click on wikilink → open in split (or in inactive pane if already split)
 - Draggable divider: mousedown/move/up adjusts flex-basis, stored as `splitRatio`
@@ -669,146 +721,53 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
 ---
 
-## Phase 9 — Tables
-
-**Goal:** Inline table editing that feels natural. The single hardest "simple" feature in markdown editors.
-
-**Rationale (own phase):** Research confirms tables touch cell navigation, column alignment, paste handling, and format compatibility — each with its own complexity budget. Deserves dedicated focus.
-
-### Steps
-
-9.1 **Table editing CM6 extension**
-- Tab to move to next cell, Shift+Tab to previous
-- Enter to move to next row
-- Auto-align pipe columns on edit (reformat entire table)
-- Arrow key navigation within and between cells
-
-9.2 **Table operations**
-- Add/remove rows and columns via context menu or shortcuts
-- Sort column (ascending/descending) via context menu
-
-9.3 **Paste detection**
-- Paste tabular data (TSV/CSV from clipboard) → auto-convert to markdown table
-- Paste into existing table → fill cells
-
-9.4 **Live preview table rendering**
-- Tables rendered with styled cells in preview mode
-- Cell borders, header row styling, alternating row backgrounds
-
-**Milestone:** Tables can be created, edited, and reformatted inline. Tab navigates cells, columns auto-align, pasting tabular data creates tables automatically.
-
----
-
-## Phase 10 — Per-Block Features
-
-**Goal:** Block-level operations on top of the existing markdown editor. NOT a block-based editor switch.
-
-**TODO:** Create detailed feature design together before implementation. The candidates below are starting points for that design session.
-
-### Feature Candidates
-
-10.1 **Block awareness in CM6**
-- Detect `***` separators, track block boundaries (line ranges)
-- Visual: subtle separator line, block hover actions
-
-10.2 **Block operations**
-- Copy block as markdown
-- Move block up/down (reorder across separators)
-- Delete block
-- Extract block to new note (create note with block content, replace with wikilink)
-
-10.3 **Block references**
-- `^block-id` syntax for addressable blocks
-- Cross-note block referencing
-
-10.4 **Transclusion**
-- `![[note#^block-id]]` rendered inline (read-only)
-- 2-level depth cap with cycle detection (critical from day one)
-
-**Milestone:** Blocks are addressable and operable. Users can reference, transclude, copy, move, and extract blocks without the app becoming a block editor.
-
----
-
-## Phase 11 — MCP Server
-
-**Goal:** Claude Code can read, search, and write to your notes through Onyx.
-
-**Rationale (moved after blocks/tables):** Shipping MCP after the app is feature-complete means the tool surface is richer — search, backlinks, tables, blocks, and split panes all land in one integration.
-
-### Steps
-
-11.1 **HTTP server in Rust**
-- Separate thread, localhost:19532
-- MCP protocol over streamable HTTP
-
-11.2 **Read-only tools**
-- `onyx_get_active`, `onyx_read_note`, `onyx_search`, `onyx_get_backlinks`, `onyx_get_tags`, `onyx_resolve_link`, `onyx_list_directory`, `onyx_get_properties`, `onyx_query_by_type`, `onyx_get_index_stats`, `onyx_get_object_types`, `onyx_get_periodic_config`
-
-11.3 **Write tools with confirmation**
-- `onyx_write_note`, `onyx_insert_at_cursor`, `onyx_insert_after_heading`, `onyx_append_to_note`, `onyx_update_frontmatter`, `onyx_create_note`
-- Toast notification in Onyx UI: "Claude Code wants to write to Alice.md — Allow / Deny"
-- Cursor position snapshotted at confirmation time
-
-11.4 **State file**
-- Write `~/.onyx/state.json` on file switch, selection change, window focus (1s debounce)
-
-11.5 **Config**
-- MCP enable/disable, port, write confirmation toggle in `config.json`
-
-**Milestone:** Claude Code is vault-aware. You can ask it about your notes and it can read/write through Onyx.
-
----
-
-## Phase 12 — Tier 2 Features
+## Phase 11 — Tier 2 Features
 
 Build incrementally as desired. Includes original Tier 2 items plus medium-priority research findings.
 
 ### Core Tier 2
 
-- 12.1 Slash commands (`/h1`, `/table`, `/template`, `/divider`)
-- 12.2 ~~Custom keybindings~~ (done in 7.6 — keybinding registry + Settings editor + `~/.onyx/keybindings.json`)
-- 12.3 Full-text search across files (Cmd+Shift+F) — ripgrep-style in Rust
-- 12.4 Natural language dates (`@today` → `[[2026-03-11]]`)
-- 12.5 Custom sort (drag-to-reorder in sidebar)
-- 12.6 Sort by modified date (sidebar sort mode toggle)
-- 12.7 Heatmap calendar (activity visualization)
-- 12.8 Tracker widgets (inline charts from frontmatter data)
-- 12.9 Text extraction / OCR (images, PDFs)
-- 12.10 Print / PDF export
-- 12.11 Canvas read-only viewer (parse `.canvas` JSON, render visual)
+- 11.1 Slash commands (`/h1`, `/table`, `/template`, `/divider`)
+- 11.2 Natural language dates (`@today` → `[[2026-03-11]]`)
+- 11.3 Custom sort (drag-to-reorder in sidebar)
+- 11.4 Sort by modified date (sidebar sort mode toggle)
+- 11.5 Heatmap calendar (activity visualization)
+- 11.6 Tracker widgets (inline charts from frontmatter data)
+- 11.7 Text extraction / OCR (images, PDFs)
+- 11.8 Print / PDF export
+- 11.9 Canvas read-only viewer (parse `.canvas` JSON, render visual)
 
 ### Architecture (when hitting pain points)
 
-- 12.A1 Sidebar virtualization (react-vtree) — when file tree > 2,000 nodes
-- 12.A2 Zustand store splitting — when `app.ts` > 600 lines
-- 12.A3 Composition root extraction — when `App.tsx` wiring > 100 lines
-- 12.A4 External file conflict detection UI — when users report data loss
-- 12.A5 Search result streaming (Tauri channels) — when search > 300ms
-- 12.A6 External change → apply as CM6 transaction (preserves undo history)
+- 11.A1 Sidebar virtualization (react-vtree) — when file tree > 2,000 nodes
+- 11.A2 Zustand store splitting — when `app.ts` > 600 lines
+- 11.A3 Composition root extraction — when `App.tsx` wiring > 100 lines
+- 11.A4 External file conflict detection UI — when users report data loss
+- 11.A5 Search result streaming (Tauri channels) — when search > 300ms
+- 11.A6 External change → apply as CM6 transaction (preserves undo history)
 
 ### CSS & Theming (medium term)
 
-- 12.C1 OKLCH primitive color tokens — accent color picker derives variants from one hue
-- 12.C2 **User-created themes** — `~/.onyx/themes/*.json` loaded at startup, appear alongside built-ins in Settings. Each file defines a theme with:
+- 11.C1 OKLCH primitive color tokens — accent color picker derives variants from one hue
+- 11.C2 **User-created themes** — `~/.onyx/themes/*.json` loaded at startup, appear alongside built-ins in Settings. Each file defines a theme with:
   - `name`, `id`, optional `base` (inherit from "dark"/"light"/"warm" — only override what you change)
   - `colors` section: all 9 base colors (bg_base, bg_surface, bg_elevated, text_primary/secondary/tertiary, accent, border_default/subtle) plus derived (hover, active, muted, tag, link, status)
   - `headings` section: per-level size + color
   - `elements` section: blockquote, link, code, tag styling
   - Infrastructure already exists: `configBridge.ts` applies vars, `theme.css` defines `data-theme` selectors, Settings has per-theme color tabs. Remaining work: Rust `load_user_themes()` to scan `~/.onyx/themes/`, dynamic CSS injection for user themes (can't use static `theme.css` selectors), theme import/export in Settings, "Duplicate theme" button to fork a built-in
-- 12.C3 ~~User typography preferences~~ (done in 7.6 — font family, size, line height, content width in config.json)
-- 12.C4 Theme editor/preview — live preview, contrast ratio warnings, "Save as theme" button to export current overrides
+- 11.C3 Theme editor/preview — live preview, contrast ratio warnings, "Save as theme" button to export current overrides
 
 ### Deferred Gotchas (when scale demands)
 
-- 12.G1 Incremental startup indexing (track mtime, skip unchanged) — needed at 10K+ files
-- 12.G2 IPC pagination for large result sets — needed when vaults grow
-- 12.G3 Memory profiling during extended sessions
-- 12.G4 IME/dead key testing with non-Latin keyboards
+- 11.G1 Incremental startup indexing (track mtime, skip unchanged) — needed at 10K+ files
+- 11.G2 IPC pagination for large result sets — needed when vaults grow
+- 11.G3 Memory profiling during extended sessions
+- 11.G4 IME/dead key testing with non-Latin keyboards
 
 ### Deferred from Phase 7
 
-- 12.D1 Embeds — `![[note]]` rendered inline (read-only, 2-level depth cap)
-- 12.D2 Tag chips — Tags rendered as styled chips in live preview
+- 11.D1 Embeds — `![[note]]` rendered inline (read-only, 2-level depth cap)
+- 11.D2 Tag chips — Tags rendered as styled chips in live preview
 
 ---
 
