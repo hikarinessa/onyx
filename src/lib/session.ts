@@ -8,9 +8,20 @@ const SESSION_BACKUP_KEY = "onyx-session-backup";
 /** Legacy key from pre-4.6 localStorage-only sessions */
 const SESSION_LEGACY_KEY = "onyx-session";
 
-interface SessionData {
+interface SessionPaneData {
   tabs: { path: string; name: string; editorMode?: EditorMode }[];
   activeTabPath: string | null;
+}
+
+interface SessionData {
+  // Legacy flat format (pre-split-panes)
+  tabs?: { path: string; name: string; editorMode?: EditorMode }[];
+  activeTabPath?: string | null;
+  // New pane-aware format
+  panes?: SessionPaneData[];
+  activePaneIndex?: number;
+  splitRatios?: number[];
+  // Shared state
   sidebarVisible: boolean;
   contextPanelVisible: boolean;
   collapsedDirs?: string[];
@@ -23,9 +34,15 @@ interface SessionData {
 
 function getSessionData(): SessionData {
   const state = useAppStore.getState();
+  const { paneState } = state;
+
   return {
-    tabs: state.tabs.map((t) => ({ path: t.path, name: t.name, editorMode: t.editorMode })),
-    activeTabPath: state.activeTabId,
+    panes: paneState.panes.map((p) => ({
+      tabs: p.tabs.map((t) => ({ path: t.path, name: t.name, editorMode: t.editorMode })),
+      activeTabPath: p.activeTabId,
+    })),
+    activePaneIndex: paneState.panes.findIndex((p) => p.id === paneState.activePaneId),
+    splitRatios: paneState.splitRatios,
     sidebarVisible: state.sidebarVisible,
     contextPanelVisible: state.contextPanelVisible,
     collapsedDirs: state.collapsedDirs,
@@ -150,32 +167,70 @@ export async function restoreSession(): Promise<void> {
     }
   }
 
-  // Open all tabs concurrently (each does one IPC read call)
-  await Promise.all(
-    data.tabs.map((tab) =>
-      openFileInEditor(tab.path, tab.name).catch((err) =>
-        console.error(`Failed to restore tab ${tab.path}:`, err)
-      )
-    )
-  );
+  // Determine pane layout to restore
+  const paneDatas: SessionPaneData[] = data.panes
+    ? data.panes
+    : data.tabs
+      ? [{ tabs: data.tabs, activeTabPath: data.activeTabPath ?? null }]
+      : [];
 
-  // Restore per-tab editor mode (default is "preview", toggle if saved as "source")
-  const store = useAppStore.getState();
-  for (const tab of data.tabs) {
-    if (tab.editorMode === "source") {
-      const existing = store.tabs.find((t) => t.path === tab.path);
-      if (existing) store.toggleEditorMode(existing.id);
+  if (paneDatas.length === 0) return;
+
+  // Create additional panes if needed (pane-0 already exists)
+  for (let i = 1; i < paneDatas.length; i++) {
+    useAppStore.getState().splitPane();
+  }
+
+  // Restore split ratios
+  if (data.splitRatios && data.splitRatios.length > 0) {
+    useAppStore.getState().setSplitRatios(data.splitRatios);
+  }
+
+  // Open tabs in each pane
+  for (let i = 0; i < paneDatas.length; i++) {
+    const paneData = paneDatas[i];
+    const paneId = useAppStore.getState().paneState.panes[i]?.id;
+    if (!paneId) continue;
+
+    // Set this pane as active so openFileInEditor targets it
+    useAppStore.getState().setActivePane(paneId);
+
+    await Promise.all(
+      paneData.tabs.map((tab) =>
+        openFileInEditor(tab.path, tab.name).catch((err) =>
+          console.error(`Failed to restore tab ${tab.path}:`, err)
+        )
+      )
+    );
+
+    // Restore per-tab editor mode
+    const store = useAppStore.getState();
+    const pane = store.paneState.panes.find((p) => p.id === paneId);
+    if (pane) {
+      for (const tab of paneData.tabs) {
+        if (tab.editorMode === "source") {
+          const existing = pane.tabs.find((t) => t.path === tab.path);
+          if (existing) store.toggleEditorMode(existing.id);
+        }
+      }
+    }
+
+    // Switch to the previously active tab in this pane
+    if (paneData.activeTabPath) {
+      const existing = useAppStore.getState().paneState.panes
+        .find((p) => p.id === paneId)?.tabs
+        .find((t) => t.path === paneData.activeTabPath);
+      if (existing) {
+        useAppStore.getState().setActiveTab(existing.id);
+      }
     }
   }
 
-  // Switch to the previously active tab
-  if (data.activeTabPath) {
-    const existing = useAppStore.getState().tabs.find(
-      (t) => t.path === data.activeTabPath
-    );
-    if (existing) {
-      useAppStore.getState().setActiveTab(existing.id);
-    }
+  // Restore active pane
+  const activePaneIdx = data.activePaneIndex ?? 0;
+  const targetPaneId = useAppStore.getState().paneState.panes[activePaneIdx]?.id;
+  if (targetPaneId) {
+    useAppStore.getState().setActivePane(targetPaneId);
   }
 }
 

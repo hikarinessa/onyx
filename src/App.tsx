@@ -277,6 +277,37 @@ function registerCommands() {
     },
   });
 
+  // Pane focus shortcuts
+  for (let i = 0; i < 3; i++) {
+    registerCommand({
+      id: `view.focusPane${i + 1}`,
+      label: `Focus Pane ${i + 1}`,
+      shortcut: `Cmd+${i + 1}`,
+      category: "View",
+      execute: () => {
+        const panes = store().paneState.panes;
+        if (i < panes.length) store().setActivePane(panes[i].id);
+      },
+    });
+  }
+
+  registerCommand({
+    id: "view.moveTabToNextPane",
+    label: "Move Tab to Next Pane",
+    shortcut: "Cmd+Shift+\\",
+    category: "View",
+    execute: () => {
+      const s = store();
+      const { paneState } = s;
+      if (paneState.panes.length < 2) return;
+      const activePane = paneState.panes.find((p) => p.id === paneState.activePaneId);
+      if (!activePane?.activeTabId) return;
+      const currentIdx = paneState.panes.indexOf(activePane);
+      const targetIdx = (currentIdx + 1) % paneState.panes.length;
+      s.moveTabToPane(activePane.activeTabId, paneState.panes[targetIdx].id);
+    },
+  });
+
   // ── Table commands (Phase 9c) ──
   const tbl = makeTableCommands(getEditorView);
   registerCommand({ id: "table.insert", label: "Table: Insert", category: "Table", execute: tbl.insertTable });

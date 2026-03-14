@@ -92,6 +92,7 @@ interface AppState {
   get activeTabId(): string | null;
 
   // Tab operations (operate on specified pane, or active pane by default)
+  moveTabToPane: (tabId: string, targetPaneId: string) => void;
   openFile: (path: string, name: string, opts?: { paneId?: string }) => void;
   replaceActiveTab: (path: string, name: string, opts?: { paneId?: string }) => void;
   closeTab: (id: string) => Promise<void>;
@@ -271,6 +272,43 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // ── Tab operations ──
+
+  moveTabToPane: (tabId, targetPaneId) => {
+    const { paneState } = get();
+    const sourcePane = findPaneWithTab(paneState.panes, tabId);
+    if (!sourcePane || sourcePane.id === targetPaneId) return;
+    const targetPane = paneState.panes.find((p) => p.id === targetPaneId);
+    if (!targetPane) return;
+
+    const tab = sourcePane.tabs.find((t) => t.id === tabId)!;
+    const sourceTabs = sourcePane.tabs.filter((t) => t.id !== tabId);
+    const sourceActive = sourcePane.activeTabId === tabId
+      ? (sourceTabs.length > 0 ? sourceTabs[Math.max(0, sourceTabs.length - 1)].id : null)
+      : sourcePane.activeTabId;
+
+    let newPanes = paneState.panes.map((p) => {
+      if (p.id === sourcePane.id) return { ...p, tabs: sourceTabs, activeTabId: sourceActive };
+      if (p.id === targetPaneId) return { ...p, tabs: [...p.tabs, tab], activeTabId: tab.id };
+      return p;
+    });
+
+    // Collapse empty source pane if multiple panes remain
+    if (sourceTabs.length === 0 && newPanes.length > 1) {
+      newPanes = newPanes.filter((p) => p.id !== sourcePane.id);
+    }
+    const count = newPanes.length;
+    const ratios: number[] = [];
+    for (let i = 1; i < count; i++) ratios.push(i / count);
+
+    set({
+      paneState: {
+        ...paneState,
+        panes: newPanes,
+        activePaneId: targetPaneId,
+        splitRatios: newPanes.length !== paneState.panes.length ? ratios : paneState.splitRatios,
+      },
+    });
+  },
 
   openFile: (path, name, opts) => {
     const { paneState } = get();

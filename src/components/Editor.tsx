@@ -14,7 +14,7 @@ import {
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, setFlushSaveHook, setSnapshotEditorHook, selectAllTabs, selectActivePane } from "../stores/app";
+import { useAppStore, setFlushSaveHook, setSnapshotEditorHook, selectActivePane } from "../stores/app";
 import { frontmatterExtension, clearAutoFoldForTab, toggleFrontmatterFoldCommand } from "../extensions/frontmatter";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
@@ -425,9 +425,10 @@ export function Editor() {
       }
     });
 
-    wikilinkFollowRef.current = async (link: string, newTab: boolean) => {
-      const activePaneId = useAppStore.getState().paneState.activePaneId;
-      const pane = useAppStore.getState().paneState.panes.find((p) => p.id === activePaneId);
+    wikilinkFollowRef.current = async (link: string, newTab: boolean, otherPane: boolean) => {
+      const state = useAppStore.getState();
+      const { paneState } = state;
+      const pane = paneState.panes.find((p) => p.id === paneState.activePaneId);
       const currentTab = pane?.tabs.find((t) => t.id === pane.activeTabId);
       if (!currentTab) return;
       try {
@@ -437,7 +438,16 @@ export function Editor() {
         });
         if (resolved) {
           const name = resolved.split("/").pop() || resolved;
-          await openFileInEditor(resolved, name, { replaceActive: !newTab });
+          if (otherPane && paneState.panes.length > 1) {
+            // Open in the next pane
+            const currentIdx = paneState.panes.findIndex((p) => p.id === paneState.activePaneId);
+            const targetIdx = (currentIdx + 1) % paneState.panes.length;
+            const targetPaneId = paneState.panes[targetIdx].id;
+            useAppStore.getState().setActivePane(targetPaneId);
+            await openFileInEditor(resolved, name, { replaceActive: true });
+          } else {
+            await openFileInEditor(resolved, name, { replaceActive: !newTab });
+          }
         }
       } catch (err) {
         console.error("Failed to resolve wikilink:", err);
