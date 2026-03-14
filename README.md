@@ -7,11 +7,17 @@ Onyx is designed as a fast, native alternative to Electron-based note apps. It u
 ![Onyx screenshot](docs/Onyx_screenshot.png)
 
 ## Notes from the developer
+
 This is a fun project.
+
 This is a proof of concept. 
+
 This is to showcase llm capabilities with 4 days of part time work. 
+
 This isn't meant to be used by you. 
-This isn't going to be maintained. Perhaps it will be, but probably not.  
+
+This will not be maintained.  
+
 This is a canvas for you to start playing around. 
 
 ## Features

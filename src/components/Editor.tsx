@@ -475,11 +475,16 @@ export function Editor() {
     // track auto-fold state per tab instead of per document content.
     frontmatterTabRef.current = activeTab.id;
 
-    if (viewRef.current) {
-      // View exists — swap state (preserves the DOM element)
+    if (viewRef.current && viewRef.current.dom.parentElement === containerRef.current) {
+      // View exists in the current container — swap state (preserves the DOM element)
       viewRef.current.setState(state);
     } else {
-      // First tab ever — create the EditorView
+      // No view, or view is attached to a stale container (e.g. after closing
+      // all tabs removed the editor-container div from the DOM). Destroy the
+      // orphaned view and create a fresh one in the current container.
+      if (viewRef.current) {
+        viewRef.current.destroy();
+      }
       viewRef.current = new EditorView({
         state,
         parent: containerRef.current,
@@ -547,9 +552,13 @@ export function Editor() {
     }
   }, [editorMode]);
 
-  // Clean up caches when tabs close
+  // Clean up caches when tabs close — read live store state to avoid
+  // stale-closure races (e.g. when a tab is opened immediately after
+  // closing the last tab, the effect from the empty-tabs render would
+  // otherwise wipe the cache entry that loadFileIntoCache just added).
   useEffect(() => {
-    const tabIds = new Set(tabs.map((t) => t.id));
+    const currentTabs = useAppStore.getState().tabs;
+    const tabIds = new Set(currentTabs.map((t) => t.id));
     for (const key of editorStateCache.keys()) {
       if (!tabIds.has(key)) {
         editorStateCache.delete(key);
