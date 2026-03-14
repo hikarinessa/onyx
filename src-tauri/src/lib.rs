@@ -253,6 +253,7 @@ pub fn run() {
             plugins::mac_rounded_corners::enable_rounded_corners,
             plugins::mac_rounded_corners::enable_modern_window_style,
             plugins::mac_rounded_corners::reposition_traffic_lights,
+            commands::check_spelling,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

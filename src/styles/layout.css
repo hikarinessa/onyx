@@ -59,8 +59,20 @@
     background: var(--bg-surface);
     border-left: 1px solid var(--border-subtle);
     flex-shrink: 0;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     transition: width var(--transition-normal);
+  }
+
+  .context-panel-pinned {
+    flex-shrink: 0;
+  }
+
+  .context-panel-scrollable {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
   }
 
   .context-panel.collapsed {
@@ -73,10 +85,11 @@
     height: var(--statusbar-height);
     display: flex;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 14px;
     background: var(--bg-surface);
     border-top: 1px solid var(--border-subtle);
     font-size: 11px;
+    line-height: 1;
     color: var(--text-tertiary);
     flex-shrink: 0;
     gap: 16px;
@@ -100,7 +113,7 @@
     height: var(--titlebar-height);
     display: flex;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 14px;
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
@@ -160,7 +173,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 0 14px;
+    padding: 0 16px;
     font-size: 12px;
     color: var(--text-secondary);
     border-right: 1px solid var(--border-subtle);
@@ -410,7 +423,7 @@
 
   /* Sidebar content */
   .sidebar-header {
-    padding: 10px 12px;
+    padding: 4px 14px;
     font-size: 11px;
     font-weight: 600;
     color: var(--text-tertiary);
@@ -419,6 +432,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 6px;
     cursor: pointer;
   }
 
@@ -502,9 +516,10 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    width: calc(100% - 24px);
-    margin: 8px 12px;
-    padding: 6px 12px;
+    width: calc(100% - 28px);
+    margin: 6px 14px;
+    padding: 5px 12px;
+    flex-shrink: 0;
     background: transparent;
     color: var(--text-tertiary);
     border: 1px dashed var(--border-default);
@@ -524,8 +539,8 @@
   .tree-item {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 3px 8px 3px calc(8px + var(--indent, 0) * 16px);
+    gap: 5px;
+    padding: 3px 10px 3px calc(18px + var(--indent, 0) * 20px);
     font-size: 13px;
     color: var(--text-secondary);
     cursor: pointer;
@@ -539,6 +554,16 @@
   .tree-item.active {
     background: var(--accent-muted);
     color: var(--text-accent);
+  }
+
+  .tree-item-chevron {
+    width: 12px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-tertiary);
   }
 
   .tree-item-icon {
@@ -584,10 +609,13 @@
   .sidebar-bookmarks {
     flex-shrink: 0;
     border-top: 1px solid var(--border-subtle);
+    border-left: 2px solid transparent;
+    padding-bottom: 8px;
   }
 
   .sidebar-bookmarks-header {
-    padding: 10px 12px;
+    padding: 12px 14px;
+    cursor: pointer;
     font-size: 11px;
     font-weight: 600;
     color: var(--text-tertiary);
@@ -620,7 +648,7 @@
 
   /* Context panel content */
   .context-panel-section {
-    padding: 12px;
+    padding: 14px;
     border-bottom: 1px solid var(--border-subtle);
   }
 
@@ -637,9 +665,10 @@
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     user-select: none;
     margin-bottom: 0;
+    padding: 4px 0;
   }
 
   .context-panel-section-title.collapsible:hover {
@@ -647,16 +676,18 @@
   }
 
   .collapse-arrow {
-    font-size: 10px;
-    width: 12px;
-    display: inline-block;
+    width: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
   .context-panel-bookmark-row {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 10px 12px 6px;
+    padding: 12px 14px 8px;
     border-bottom: 1px solid var(--border-subtle);
   }
 
@@ -698,8 +729,8 @@
   }
 
   .backlink-item {
-    padding: 8px 12px;
-    margin: 0 -12px;
+    padding: 4px 14px;
+    margin: 0 -14px;
     cursor: pointer;
     border-radius: var(--radius-sm);
     transition: background var(--transition-fast);
@@ -710,7 +741,7 @@
   }
 
   .backlink-title {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -723,7 +754,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-top: 2px;
+    margin-top: 1px;
   }
 
   .backlink-line {
@@ -735,65 +766,83 @@
 
   /* Property editor */
   .properties-list {
-    margin-top: 6px;
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
   }
 
   .properties-empty {
-    padding: 6px 0;
+    padding: 8px 0;
     font-size: 12px;
     color: var(--text-tertiary);
   }
 
   .prop-row {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 4px 0;
+    align-items: baseline;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
   }
 
-  .prop-row + .prop-row {
-    border-top: 1px solid var(--border-subtle);
+  .prop-row:hover {
+    background: var(--bg-hover);
   }
 
   .prop-label {
-    font-size: 11px;
-    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    line-height: 1.2;
+    width: 72px;
+    flex-shrink: 0;
+    line-height: 1.6;
   }
 
   .prop-required {
     color: var(--status-error);
     margin-left: 2px;
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .prop-value {
+    flex: 1;
     min-width: 0;
   }
 
   .prop-input {
     width: 100%;
-    padding: 3px 6px;
+    padding: 2px 0;
     font-size: 12px;
     font-family: var(--font-ui);
     color: var(--text-primary);
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-sm);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    border-radius: 0;
     outline: none;
     transition: border-color var(--transition-fast);
     box-sizing: border-box;
   }
 
+  .prop-input:hover {
+    border-bottom-color: var(--border-default);
+  }
+
   .prop-input:focus {
-    border-color: var(--accent);
+    border-bottom-color: var(--accent);
   }
 
   .prop-input::placeholder {
     color: var(--text-tertiary);
+    font-style: italic;
+    opacity: 0.6;
   }
 
   .prop-input-date,
@@ -803,16 +852,21 @@
   }
 
   .prop-input-date::-webkit-calendar-picker-indicator {
-    filter: invert(0.7);
     cursor: pointer;
+    opacity: 0.5;
+    transition: opacity var(--transition-fast);
+  }
+
+  .prop-input-date:hover::-webkit-calendar-picker-indicator {
+    opacity: 1;
   }
 
   .prop-select {
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235c5c68'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 6px center;
-    padding-right: 20px;
+    background-position: right 0 center;
+    padding-right: 16px;
     cursor: pointer;
   }
 
@@ -825,34 +879,64 @@
     display: flex;
     align-items: center;
     cursor: pointer;
+    gap: 6px;
   }
 
   .prop-checkbox {
+    appearance: none;
     width: 14px;
     height: 14px;
-    accent-color: var(--accent);
+    border: 1.5px solid var(--border-strong);
+    border-radius: 3px;
+    background: transparent;
     cursor: pointer;
+    position: relative;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .prop-checkbox:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .prop-checkbox:checked::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 4px;
+    width: 4px;
+    height: 7px;
+    border: solid var(--bg-base);
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
   }
 
   .prop-multiselect {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-wrap: wrap;
+    gap: 4px;
   }
 
   .prop-multiselect-option {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
+    gap: 4px;
+    font-size: 11px;
     color: var(--text-secondary);
     cursor: pointer;
-    padding: 1px 0;
+    padding: 2px 8px 2px 4px;
+    border-radius: 10px;
+    background: var(--bg-elevated);
+    transition: background var(--transition-fast);
+  }
+
+  .prop-multiselect-option:hover {
+    background: var(--bg-active);
   }
 
   .prop-multiselect-option input {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
     accent-color: var(--accent);
     cursor: pointer;
   }
@@ -876,7 +960,7 @@
   }
 
   .context-menu-item {
-    padding: 6px 12px;
+    padding: 7px 14px;
     font-size: 12px;
     color: var(--text-secondary);
     cursor: pointer;
@@ -1005,7 +1089,7 @@
 
   /* Calendar */
   .calendar {
-    padding: 8px;
+    padding: 10px 12px 10px 14px; /* left +2px to optically balance week-number column */
     border-bottom: 1px solid var(--border-subtle);
   }
 
@@ -1090,7 +1174,7 @@
     text-align: center;
     font-size: 10px;
     color: var(--text-tertiary);
-    padding: 3px 4px 3px 0;
+    padding: 3px 2px;
     cursor: pointer;
     user-select: none;
     border-radius: var(--radius-sm);
@@ -1155,12 +1239,6 @@
     font-size: 11px;
     color: var(--status-error);
     border-bottom: 1px solid var(--border-subtle);
-  }
-
-  /* Recent documents */
-  .recent-docs-list {
-    max-height: 200px;
-    overflow-y: auto;
   }
 
   /* Command palette */
@@ -2314,6 +2392,7 @@
     font-size: 12px;
     font-family: var(--font-mono);
     padding: 0 8px 0 4px;
+    line-height: 22.4px; /* match source content: 14px × 1.6 */
   }
 
   /* Source mode: plain monospace text, keep syntax colors */
@@ -2452,12 +2531,21 @@
     pointer-events: none;
   }
 
-  /* ── Hide all CM6 lint UI — diagnostics shown in lint panel instead ── */
+  /* ── Lint marks: show in source mode, hide in preview mode ── */
 
-  .cm-lintRange-error,
-  .cm-lintRange-warning {
+  .editor-container.preview-mode .cm-lintRange-error,
+  .editor-container.preview-mode .cm-lintRange-warning {
     background-image: none !important;
     text-decoration: none !important;
+  }
+
+  .editor-container.preview-mode .cm-lint-marker {
+    display: none !important;
+  }
+
+  .editor-container.preview-mode .cm-lintPoint-error,
+  .editor-container.preview-mode .cm-lintPoint-warning {
+    display: none !important;
   }
 
   .cm-gutter-lint {

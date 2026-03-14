@@ -137,9 +137,14 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
         onClick={isRenaming ? undefined : toggle}
         onContextMenu={(e) => onContextMenu(e, entry)}
       >
+        <span className="tree-item-chevron">
+          {entry.is_dir
+            ? <Icon name={expanded ? "chevron-down" : "chevron-right"} size={12} />
+            : null}
+        </span>
         <span className="tree-item-icon">
           {entry.is_dir
-            ? <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} />
+            ? <Icon name="folder" size={14} />
             : <Icon name={isMarkdown ? "file-text" : "file"} size={14} />}
         </span>
         {isRenaming ? (
@@ -181,6 +186,7 @@ export function Sidebar() {
   const collapsedDirs = useAppStore((s) => s.collapsedDirs);
   const toggleDirCollapsed = useAppStore((s) => s.toggleDirCollapsed);
   const orphanPaths = useAppStore((s) => s.orphanPaths);
+  const orphanIcon = useAppStore((s) => s.orphanIcon);
   const [directories, setDirectories] = useState<RegisteredDirectory[]>([]);
   const [rootEntries, setRootEntries] = useState<Map<string, DirEntry[]>>(
     new Map()
@@ -188,6 +194,7 @@ export function Sidebar() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [iconPickerDirId, setIconPickerDirId] = useState<string | null>(null);
+  const [orphansCollapsed, setOrphansCollapsed] = useState(false);
   const iconPickerDirIdRef = useRef(iconPickerDirId);
   iconPickerDirIdRef.current = iconPickerDirId;
 
@@ -395,6 +402,13 @@ export function Sidebar() {
         <SearchPanel />
       ) : (
       <>
+      <button
+        className="sidebar-add-folder-btn"
+        onClick={addDirectory}
+        title="Add Folder"
+      >
+        <Icon name="folder-plus" size={14} /> Add Folder
+      </button>
       <div className="sidebar-directories">
       {directories.length === 0 ? (
         <div className="sidebar-empty">
@@ -446,16 +460,6 @@ export function Sidebar() {
                   </button>
                   <button
                     className="sidebar-header-btn"
-                    title="Refresh"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      loadDirectories();
-                    }}
-                  >
-                    <Icon name="refresh-cw" size={12} />
-                  </button>
-                  <button
-                    className="sidebar-header-btn"
                     title="Remove Directory"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -490,13 +494,27 @@ export function Sidebar() {
       )}
       {orphanPaths.length > 0 && (
         <div className="sidebar-directory">
-          <div className="sidebar-header" style={{ borderLeft: "2px solid var(--text-tertiary)" }}>
+          <div
+            className="sidebar-header"
+            style={{ borderLeft: "2px solid var(--text-tertiary)" }}
+            onClick={() => setOrphansCollapsed((c) => !c)}
+          >
             <span className="sidebar-header-chevron">
-              <Icon name="chevron-down" size={14} />
+              <Icon name={orphansCollapsed ? "chevron-right" : "chevron-down"} size={14} />
+            </span>
+            <span
+              className="sidebar-header-icon"
+              title="Change icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIconPickerDirId("__orphan__");
+              }}
+            >
+              <Icon name={orphanIcon} size={14} />
             </span>
             <span className="sidebar-header-label">Orphan Notes</span>
           </div>
-          <div className="sidebar-content">
+          {!orphansCollapsed && <div className="sidebar-content">
             {orphanPaths.map((p) => {
               const name = p.split("/").pop() || p;
               const isActive = p === activeTabId;
@@ -507,6 +525,7 @@ export function Sidebar() {
                   style={{ "--indent": 0 } as React.CSSProperties}
                   onClick={(e) => handleFileClick(p, name, e.metaKey)}
                 >
+                  <span className="tree-item-chevron" />
                   <span className="tree-item-icon"><Icon name="file-text" size={14} /></span>
                   <span className="tree-item-label">{name}</span>
                   <button
@@ -524,17 +543,9 @@ export function Sidebar() {
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
       )}
-
-      <button
-        className="sidebar-add-folder-btn"
-        onClick={addDirectory}
-        title="Add Folder"
-      >
-        <Icon name="folder-plus" size={14} /> Add Folder
-      </button>
 
       </div>
 
@@ -544,15 +555,19 @@ export function Sidebar() {
 
       {iconPickerDirId && (
         <IconPicker
-          currentIcon={directories.find((d) => d.id === iconPickerDirId)?.icon || "folder"}
+          currentIcon={iconPickerDirId === "__orphan__" ? orphanIcon : (directories.find((d) => d.id === iconPickerDirId)?.icon || "folder")}
           onSelect={async (icon) => {
             const dirId = iconPickerDirIdRef.current;
             if (!dirId) return;
-            try {
-              await invoke("update_directory_icon", { id: dirId, icon });
-              loadDirectories();
-            } catch (err) {
-              console.error("Failed to update directory icon:", err);
+            if (dirId === "__orphan__") {
+              useAppStore.getState().setOrphanIcon(icon);
+            } else {
+              try {
+                await invoke("update_directory_icon", { id: dirId, icon });
+                loadDirectories();
+              } catch (err) {
+                console.error("Failed to update directory icon:", err);
+              }
             }
             setIconPickerDirId(null);
           }}
