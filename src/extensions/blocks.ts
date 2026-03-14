@@ -114,7 +114,10 @@ const blockHighlightDeco = Decoration.line({ class: "cm-block-hover-line" });
 
 const blockHighlightField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
-  update(_, tr) {
+  update(prev, tr) {
+    // Only rebuild when hover state or doc actually changed
+    if (!tr.docChanged && !tr.effects.some((e) => e.is(setHoveredBlock))) return prev;
+
     const hLine = tr.state.field(hoveredBlockLine);
     if (hLine === null) return Decoration.none;
 
@@ -284,18 +287,17 @@ function moveBlock(view: EditorView, direction: -1 | 1): boolean {
   // Compute the full range including any separating whitespace
   let rangeFrom: number, rangeTo: number;
   let newContent: string;
+  let between: string;
 
   if (direction === -1) {
-    // Moving up: swap target and block
     rangeFrom = target.from;
     rangeTo = block.to;
-    const between = doc.sliceString(target.to, block.from);
+    between = doc.sliceString(target.to, block.from);
     newContent = blockText + between + targetText;
   } else {
-    // Moving down: swap block and target
     rangeFrom = block.from;
     rangeTo = target.to;
-    const between = doc.sliceString(block.to, target.from);
+    between = doc.sliceString(block.to, target.from);
     newContent = targetText + between + blockText;
   }
 
@@ -305,7 +307,7 @@ function moveBlock(view: EditorView, direction: -1 | 1): boolean {
   if (direction === -1) {
     newBlockStart = rangeFrom;
   } else {
-    newBlockStart = rangeFrom + targetText.length + (doc.sliceString(block.to, target.from)).length;
+    newBlockStart = rangeFrom + targetText.length + between.length;
   }
 
   view.dispatch({
@@ -335,13 +337,12 @@ export function deleteBlock(view: EditorView): boolean {
   if (!block) return false;
 
   const doc = view.state.doc;
-  // Include trailing newline(s) if not at end of doc
+  // Include trailing newline if not the last line
   let deleteTo = block.to;
-  if (deleteTo < doc.length) {
-    const nextLineStart = doc.line(block.lastLine + 1).from;
-    deleteTo = nextLineStart;
+  if (block.lastLine < doc.lines) {
+    deleteTo = doc.line(block.lastLine + 1).from;
   }
-  // If at end, include preceding newline
+  // If at end of doc, include preceding newline
   let deleteFrom = block.from;
   if (deleteFrom > 0 && deleteTo === doc.length) {
     deleteFrom = doc.line(block.firstLine).from - 1;

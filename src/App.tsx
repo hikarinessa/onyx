@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Titlebar } from "./components/Titlebar";
 import { TabBar } from "./components/TabBar";
 import { Sidebar } from "./components/Sidebar";
@@ -298,25 +299,21 @@ function registerCommands() {
       if (!v) return;
       const block = getCurrentBlock(v);
       if (!block) return;
-      // Get current file's directory
       const s = store();
       const tab = s.tabs.find((t) => t.id === s.activeTabId);
       if (!tab) return;
       const dir = tab.path.substring(0, tab.path.lastIndexOf("/"));
-      // Generate a name from the first line
       const firstLine = block.text.split("\n")[0].replace(/^#+\s*/, "").trim();
-      const name = (firstLine.substring(0, 40) || "Extracted Note").replace(/[/:\0]/g, "");
-      let notePath = `${dir}/${name}.md`;
-      // Avoid collisions
-      const { invoke } = await import("@tauri-apps/api/core");
+      const baseName = (firstLine.substring(0, 40) || "Extracted Note").replace(/[/:\0]/g, "");
+      let notePath = `${dir}/${baseName}.md`;
       let counter = 1;
       while (await invoke<boolean>("path_exists", { path: notePath })) {
-        notePath = `${dir}/${name} ${counter}.md`;
+        notePath = `${dir}/${baseName} ${counter}.md`;
         counter++;
       }
-      // Write the new note
+      // Create the new note (invoke is fine for new files — same as fileOps.createNote)
       await invoke("write_file", { path: notePath, content: block.text + "\n" });
-      // Replace the block with a wikilink
+      // Replace the block with a wikilink to the new note
       const linkName = notePath.split("/").pop()!.replace(".md", "");
       v.dispatch({
         changes: { from: block.from, to: block.to, insert: `[[${linkName}]]` },

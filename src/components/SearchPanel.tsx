@@ -89,17 +89,22 @@ export function SearchPanel() {
 
   const highlightMatch = (text: string, q: string) => {
     if (!q.trim()) return text;
-    const lower = text.toLowerCase();
     const qLower = q.toLowerCase();
-    const idx = lower.indexOf(qLower);
-    if (idx === -1) return text;
-    return (
-      <>
-        {text.slice(0, idx)}
-        <mark className="search-highlight">{text.slice(idx, idx + q.length)}</mark>
-        {text.slice(idx + q.length)}
-      </>
-    );
+    const parts: React.ReactNode[] = [];
+    let remaining = text;
+    let key = 0;
+    while (remaining.length > 0) {
+      const idx = remaining.toLowerCase().indexOf(qLower);
+      if (idx === -1) { parts.push(remaining); break; }
+      if (idx > 0) parts.push(remaining.slice(0, idx));
+      parts.push(
+        <mark key={key++} className="search-highlight">
+          {remaining.slice(idx, idx + q.length)}
+        </mark>
+      );
+      remaining = remaining.slice(idx + q.length);
+    }
+    return <>{parts}</>;
   };
 
   const titleMatches = results.filter((r) => r.title_match);
