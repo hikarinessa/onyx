@@ -262,7 +262,7 @@ type: person
 Full Name: Alice Chen
 Birthday: 1990-05-15
 Email: alice@example.com
-Tags: [collaborator, friend]
+Tags: [collaborator, design]
 ---
 ```
 
@@ -420,17 +420,17 @@ Auto-fix on save (configurable). Lint status in status bar. No separate lint pan
 ┌──────────────────────────────────────────────────────────────────┐
 │  ● ● ●                     (drag region)                         │
 ├────────────┬─────────────────────────────────────┬───────────────┤
-│            │  [Daily.md] [Alice.md ●] [+]        │  Mar 2026     │
+│            │  [Daily.md] [Alice.md ●] [+]        │  Jun 2025     │
 │  SIDEBAR   ├─────────────────────────────────────┤  < TODAY >    │
 │            │                                     │  M T W T F S S│
-│  ▾ Zettel  │  Alice Chen       (inline H1)  │  . . . . . 1 2│
+│  ▾ Notes   │  Alice Chen            (inline H1)  │  . . . . . 1 2│
 │    ▾ Cal   │                                     │  3 4 5 6 ⑦ 8 9│
-│      2026/ │  ---                                │  ...          │
-│    ▸ Notes │  Full Name: Alice Chen         │               │
+│      2025/ │  ---                                │  ...          │
+│    ▸ Ideas │  Full Name: Alice Chen              │               │
 │    ▸ Peop  │  ---                                │  Backlinks    │
-│    ▸ Work  │  # Log                              │  ─────────    │
-│            │  - Good to Great - book...          │  2024-10-02   │
-│  ▾ Work    │                                     │    "Call with │
+│    ▸ Read  │  # Log                              │  ─────────    │
+│            │  - Thinking in Systems...           │  2025-06-10   │
+│  ▾ Research│                                     │    "Call with │
 │    ▸ docs  │  ---                                │     Alice..." │
 │            │                                     │               │
 │  ────────  │  Falcon                             │  Properties   │
@@ -443,7 +443,7 @@ Auto-fix on save (configurable). Lint status in status bar. No separate lint pan
 │            │                                     │  ─────────    │
 │            │                                     │  Log          │
 ├────────────┴─────────────────────────────────────┴───────────────┤
-│  Ln 12, Col 4  │  324 words  │  Preview  │  ✓  │  path/Alice.md│
+│  Ln 12, Col 4  │  218 words  │  Preview  │  ✓  │  path/Alice.md│
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -711,11 +711,11 @@ Onyx also writes `~/.onyx/state.json` on meaningful state changes — file switc
 
 ```json
 {
-  "activeFile": "~/Notes/People/Alice.md",
+  "activeFile": "/home/user/Notes/People/Alice.md",
   "cursorLine": 12,
   "cursorCol": 4,
   "selectedText": "",
-  "activeDir": "~/Notes",
+  "activeDir": "/home/user/Notes",
   "timestamp": 1741520400
 }
 ```
