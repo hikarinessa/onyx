@@ -52,6 +52,19 @@ pub struct BehaviorConfig {
 pub struct LintingConfig {
     pub enabled: bool,
     pub autofix_on_save: bool,
+    // Per-rule toggles (autofix rules)
+    pub trailing_spaces: bool,
+    pub hard_tabs: bool,
+    pub multiple_blanks: bool,
+    pub trailing_newline: bool,
+    pub atx_spacing: bool,
+    pub reversed_links: bool,
+    pub space_in_emphasis: bool,
+    // Per-rule toggles (warning rules)
+    pub heading_increment: bool,
+    pub consistent_list_marker: bool,
+    pub hr_style: bool,
+    pub empty_links: bool,
 }
 
 impl Default for LintingConfig {
@@ -59,6 +72,17 @@ impl Default for LintingConfig {
         Self {
             enabled: true,
             autofix_on_save: false,
+            trailing_spaces: true,
+            hard_tabs: true,
+            multiple_blanks: true,
+            trailing_newline: true,
+            atx_spacing: true,
+            reversed_links: true,
+            space_in_emphasis: true,
+            heading_increment: true,
+            consistent_list_marker: true,
+            hr_style: true,
+            empty_links: true,
         }
     }
 }

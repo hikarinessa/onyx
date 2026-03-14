@@ -11,7 +11,17 @@ import {
   StateEffect,
   RangeSetBuilder,
   type Extension,
+  type Transaction,
 } from "@codemirror/state";
+import { syntaxTree } from "@codemirror/language";
+import { findTablesInRange } from "./tableAdapter";
+import {
+  readTable,
+  type Options,
+  optionsWithDefaults,
+  FormatType,
+  type Table,
+} from "@tgrosinger/md-advanced-tables";
 
 /**
  * Live Preview extension for Onyx.
@@ -84,6 +94,128 @@ class HRWidget extends WidgetType {
   }
 }
 
+// ── Table Widget ──
+
+const tableParseOpts: Options = optionsWithDefaults({
+  formatType: FormatType.NORMAL,
+});
+
+/** Simple string hash for fast eq() comparison. */
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return h;
+}
+
+class TableWidget extends WidgetType {
+  private hash: number;
+  private rowCount: number;
+
+  constructor(
+    private tableText: string,
+    private parsedTable: Table,
+  ) {
+    super();
+    this.hash = hashString(tableText);
+    this.rowCount = parsedTable.getHeight();
+  }
+
+  eq(other: TableWidget): boolean {
+    return this.hash === other.hash;
+  }
+
+  get estimatedHeight(): number {
+    return (this.rowCount + 1) * 28;
+  }
+
+  toDOM(): HTMLElement {
+    const table = this.parsedTable;
+    const rows = table.getRows();
+    const delimRow = table.getDelimiterRow();
+
+    // Parse alignments from delimiter row
+    const alignments: (string | undefined)[] = [];
+    if (delimRow) {
+      for (const cell of delimRow.getCells()) {
+        const a = cell.getAlignment();
+        alignments.push(
+          a === undefined ? undefined : (a as string),
+        );
+      }
+    }
+
+    const el = document.createElement("table");
+    el.className = "cm-preview-table";
+    el.style.borderCollapse = "collapse";
+    el.style.margin = "0.5em 0";
+
+    // Header (row 0)
+    if (rows.length > 0) {
+      const thead = document.createElement("thead");
+      const tr = document.createElement("tr");
+      const headerCells = rows[0].getCells();
+      for (let c = 0; c < headerCells.length; c++) {
+        const th = document.createElement("th");
+        th.textContent = headerCells[c].content;
+        th.style.border = "1px solid var(--border-default)";
+        th.style.padding = "4px 12px";
+        th.style.fontWeight = "600";
+        th.style.background = "var(--bg-elevated)";
+        const align = alignments[c];
+        if (align && align !== "none") th.style.textAlign = align;
+        tr.appendChild(th);
+      }
+      thead.appendChild(tr);
+      el.appendChild(thead);
+    }
+
+    // Body (rows 2+, skip delimiter at row 1)
+    if (rows.length > 2) {
+      const tbody = document.createElement("tbody");
+      for (let r = 2; r < rows.length; r++) {
+        const tr = document.createElement("tr");
+        const cells = rows[r].getCells();
+        for (let c = 0; c < cells.length; c++) {
+          const td = document.createElement("td");
+          td.textContent = cells[c].content;
+          td.style.border = "1px solid var(--border-default)";
+          td.style.padding = "4px 12px";
+          const align = alignments[c];
+          if (align && align !== "none") td.style.textAlign = align;
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      el.appendChild(tbody);
+    }
+
+    return el;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+/**
+ * Try to parse table text into a Table object using md-advanced-tables.
+ * Returns null if unparseable.
+ */
+function tryParseTable(text: string): Table | null {
+  try {
+    const lines = text.split("\n");
+    if (lines.length < 2) return null;
+    const table = readTable(lines, tableParseOpts);
+    // Verify it has a valid delimiter row
+    if (!table.getDelimiterRow()) return null;
+    return table;
+  } catch {
+    return null;
+  }
+}
+
 // ── Patterns ──
 
 const THEMATIC_BREAK_RE = /^[ ]{0,3}([-*_])[ ]*(?:\1[ ]*){2,}$/;
@@ -150,12 +282,51 @@ function preScanDocument(view: EditorView): PreScanResult {
 
 // ── Decoration builder ──
 
-function buildPreviewDecorations(view: EditorView, scan: PreScanResult): DecorationSet {
+/**
+ * Detect which line numbers are covered by tables that should be rendered
+ * as widgets (i.e. tables NOT containing the cursor).
+ * Used by both the inline ViewPlugin (to skip those lines) and the
+ * block-level StateField (to emit replace decorations).
+ */
+function detectTableRanges(
+  view: EditorView,
+  fmEnd: number,
+): { skipLines: Set<number>; decos: { from: number; to: number; text: string; table: Table }[] } {
+  const doc = view.state.doc;
+  const cursorLine = doc.lineAt(view.state.selection.main.head).number;
+  const skipLines = new Set<number>();
+  const decos: { from: number; to: number; text: string; table: Table }[] = [];
+
+  for (const { from, to } of view.visibleRanges) {
+    const tables = findTablesInRange(view.state, from, to);
+    for (const t of tables) {
+      const tableStartLine = doc.lineAt(t.from).number;
+      const tableEndLine = doc.lineAt(t.to).number;
+
+      if (cursorLine >= tableStartLine && cursorLine <= tableEndLine) continue;
+      if (fmEnd > 0 && tableStartLine <= fmEnd) continue;
+
+      const rangeFrom = doc.line(tableStartLine).from;
+      const rangeTo = doc.line(tableEndLine).to;
+      const tableText = doc.sliceString(rangeFrom, rangeTo);
+      const parsed = tryParseTable(tableText);
+      if (!parsed) continue;
+
+      for (let ln = tableStartLine; ln <= tableEndLine; ln++) {
+        skipLines.add(ln);
+      }
+      decos.push({ from: rangeFrom, to: rangeTo, text: tableText, table: parsed });
+    }
+  }
+
+  return { skipLines, decos };
+}
+
+function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSkipLines: Set<number>): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
   const { fmEnd, codeBlockStates } = scan;
 
-  // Find the cursor line (focus line shows raw markdown)
   const cursorLine = doc.lineAt(view.state.selection.main.head).number;
 
   for (const { from, to } of view.visibleRanges) {
@@ -166,6 +337,9 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult): Decorat
 
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
+
+      // Skip lines covered by table widgets
+      if (tableSkipLines.has(i)) continue;
 
       const text = line.text;
 
@@ -320,22 +494,28 @@ const livePreviewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
     scan: PreScanResult;
+    tableSkipLines: Set<number>;
 
     constructor(view: EditorView) {
       this.scan = preScanDocument(view);
+      this.tableSkipLines = new Set();
       const active = view.state.field(previewModeField);
-      this.decorations = active
-        ? buildPreviewDecorations(view, this.scan)
-        : Decoration.none;
+      if (active) {
+        const td = detectTableRanges(view, this.scan.fmEnd);
+        this.tableSkipLines = td.skipLines;
+        this.decorations = buildPreviewDecorations(view, this.scan, td.skipLines);
+      } else {
+        this.decorations = Decoration.none;
+      }
     }
 
     update(update: ViewUpdate) {
       const active = update.view.state.field(previewModeField);
       if (!active) {
         this.decorations = Decoration.none;
+        this.tableSkipLines = new Set();
         return;
       }
-      // Only re-scan on doc/viewport change (expensive), not on cursor move
       if (update.docChanged || update.viewportChanged) {
         this.scan = preScanDocument(update.view);
       }
@@ -345,12 +525,87 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         update.selectionSet ||
         update.startState.field(previewModeField) !== active
       ) {
-        this.decorations = buildPreviewDecorations(update.view, this.scan);
+        const td = detectTableRanges(update.view, this.scan.fmEnd);
+        this.tableSkipLines = td.skipLines;
+        this.decorations = buildPreviewDecorations(update.view, this.scan, td.skipLines);
       }
     }
   },
   { decorations: (v) => v.decorations }
 );
+
+// ── Table block decorations (separate StateField — required by CM6 for
+//    replace decorations that span multiple lines) ──
+
+/**
+ * Block-level table decorations via StateField.
+ * CM6 requires block replace decorations to come from a StateField
+ * (not a ViewPlugin). We scan the full document syntax tree — acceptable
+ * for note-sized files (<50K lines).
+ */
+function buildTableBlockDecos(state: import("@codemirror/state").EditorState): DecorationSet {
+  if (!state.field(previewModeField)) return Decoration.none;
+
+  const doc = state.doc;
+  const cursorLine = doc.lineAt(state.selection.main.head).number;
+  const tree = syntaxTree(state);
+
+  // Determine frontmatter end
+  let fmEnd = 0;
+  if (doc.lines >= 2 && doc.line(1).text.trim() === "---") {
+    for (let j = 2; j <= doc.lines; j++) {
+      if (doc.line(j).text.trim() === "---") { fmEnd = j; break; }
+    }
+  }
+
+  const builder = new RangeSetBuilder<Decoration>();
+
+  tree.iterate({
+    enter(node) {
+      if (node.name !== "Table") return;
+
+      const tableStartLine = doc.lineAt(node.from).number;
+      const tableEndLine = doc.lineAt(node.to).number;
+
+      // Skip if cursor is inside this table
+      if (cursorLine >= tableStartLine && cursorLine <= tableEndLine) return false;
+      // Skip tables inside frontmatter
+      if (fmEnd > 0 && tableStartLine <= fmEnd) return false;
+
+      const rangeFrom = doc.line(tableStartLine).from;
+      const rangeTo = doc.line(tableEndLine).to;
+      const tableText = doc.sliceString(rangeFrom, rangeTo);
+      const parsed = tryParseTable(tableText);
+      if (!parsed) return false;
+
+      builder.add(
+        rangeFrom,
+        rangeTo,
+        Decoration.replace({
+          widget: new TableWidget(tableText, parsed),
+          block: true,
+        })
+      );
+
+      return false; // don't descend into table children
+    },
+  });
+
+  return builder.finish();
+}
+
+const tableBlockField = StateField.define<DecorationSet>({
+  create(state) {
+    return buildTableBlockDecos(state);
+  },
+  update(decos, tr) {
+    if (tr.docChanged || tr.selection || tr.effects.some(e => e.is(togglePreviewEffect))) {
+      return buildTableBlockDecos(tr.state);
+    }
+    return decos;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 // ── Theme ──
 
@@ -436,5 +691,5 @@ const previewTheme = EditorView.theme({
 // ── Export ──
 
 export function livePreviewExtension(): Extension[] {
-  return [previewModeField, livePreviewPlugin, previewTheme];
+  return [previewModeField, livePreviewPlugin, tableBlockField, previewTheme];
 }

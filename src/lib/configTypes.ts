@@ -72,5 +72,16 @@ export interface AppConfig {
   linting: {
     enabled: boolean;
     autofix_on_save: boolean;
+    trailing_spaces: boolean;
+    hard_tabs: boolean;
+    multiple_blanks: boolean;
+    trailing_newline: boolean;
+    atx_spacing: boolean;
+    reversed_links: boolean;
+    space_in_emphasis: boolean;
+    heading_increment: boolean;
+    consistent_list_marker: boolean;
+    hr_style: boolean;
+    empty_links: boolean;
   };
 }

@@ -178,16 +178,19 @@ function SettingRow({
 function Toggle({
   checked,
   onChange,
+  disabled,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <button
-      className={`settings-toggle ${checked ? "on" : ""}`}
-      onClick={() => onChange(!checked)}
+      className={`settings-toggle ${checked ? "on" : ""} ${disabled ? "disabled" : ""}`}
+      onClick={() => { if (!disabled) onChange(!checked); }}
       role="switch"
       aria-checked={checked}
+      aria-disabled={disabled}
     >
       <span className="settings-toggle-knob" />
     </button>
@@ -291,92 +294,9 @@ function EditorSection({
   config: AppConfig;
   updateConfig: (partial: Record<string, unknown>) => void;
 }) {
-  const unlimited = config.editor.content_max_width === null;
-
   return (
     <div className="settings-section">
       <h2 className="settings-section-title">Editor</h2>
-
-      <SettingRow label="Font family">
-        <input
-          type="text"
-          className="settings-text-input"
-          value={config.editor.font_family}
-          placeholder="Literata"
-          onChange={(e) =>
-            updateConfig({ editor: { font_family: e.target.value } })
-          }
-        />
-      </SettingRow>
-
-      <SettingRow label="Font size" description={`${config.editor.font_size}px`}>
-        <input
-          type="range"
-          className="settings-range"
-          min={12}
-          max={24}
-          step={1}
-          value={config.editor.font_size}
-          onChange={(e) =>
-            updateConfig({ editor: { font_size: Number(e.target.value) } })
-          }
-        />
-        <span className="settings-range-value">{config.editor.font_size}px</span>
-      </SettingRow>
-
-      <SettingRow label="Line height" description={`${config.editor.line_height.toFixed(1)}`}>
-        <input
-          type="range"
-          className="settings-range"
-          min={1.2}
-          max={2.4}
-          step={0.1}
-          value={config.editor.line_height}
-          onChange={(e) =>
-            updateConfig({ editor: { line_height: Number(e.target.value) } })
-          }
-        />
-        <span className="settings-range-value">
-          {config.editor.line_height.toFixed(1)}
-        </span>
-      </SettingRow>
-
-      <SettingRow
-        label="Content max width"
-        description={unlimited ? "Unlimited" : `${config.editor.content_max_width}px`}
-      >
-        <label className="settings-inline-toggle">
-          <Toggle
-            checked={unlimited}
-            onChange={(v) =>
-              updateConfig({
-                editor: { content_max_width: v ? null : 720 },
-              })
-            }
-          />
-          <span className="settings-inline-label">Unlimited</span>
-        </label>
-        {!unlimited && (
-          <>
-            <input
-              type="range"
-              className="settings-range"
-              min={500}
-              max={1200}
-              step={10}
-              value={config.editor.content_max_width ?? 720}
-              onChange={(e) =>
-                updateConfig({
-                  editor: { content_max_width: Number(e.target.value) },
-                })
-              }
-            />
-            <span className="settings-range-value">
-              {config.editor.content_max_width}px
-            </span>
-          </>
-        )}
-      </SettingRow>
 
       <SettingRow label="Default mode">
         <select
@@ -416,17 +336,110 @@ function EditorSection({
 
       <SubSection title="Linting" />
 
-      <SettingRow label="Enable linting" description="Show warnings and errors in the editor">
+      <SettingRow label="Enable linting" description="Show warnings and errors in the status bar">
         <Toggle
           checked={config.linting.enabled}
           onChange={(v) => updateConfig({ linting: { enabled: v } })}
         />
       </SettingRow>
 
-      <SettingRow label="Autofix on save" description="Automatically fix trailing spaces, tabs, etc.">
+      <SettingRow label="Autofix on save" description="Automatically fix auto-fixable issues on save">
         <Toggle
           checked={config.linting.autofix_on_save}
           onChange={(v) => updateConfig({ linting: { autofix_on_save: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SubSection title="Autofix Rules" />
+
+      <SettingRow label="Trailing whitespace" description="Remove trailing spaces and tabs">
+        <Toggle
+          checked={config.linting.trailing_spaces}
+          onChange={(v) => updateConfig({ linting: { trailing_spaces: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SettingRow label="Hard tabs" description="Replace tabs with spaces">
+        <Toggle
+          checked={config.linting.hard_tabs}
+          onChange={(v) => updateConfig({ linting: { hard_tabs: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SettingRow label="Multiple blank lines" description="Collapse 3+ blank lines to 2">
+        <Toggle
+          checked={config.linting.multiple_blanks}
+          onChange={(v) => updateConfig({ linting: { multiple_blanks: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SettingRow label="Trailing newline" description="Ensure single trailing newline">
+        <Toggle
+          checked={config.linting.trailing_newline}
+          onChange={(v) => updateConfig({ linting: { trailing_newline: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SettingRow label="ATX heading spacing" description="Require space after # in headings">
+        <Toggle
+          checked={config.linting.atx_spacing}
+          onChange={(v) => updateConfig({ linting: { atx_spacing: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SettingRow label="Reversed links" description="Detect (text)[url] instead of [text](url)">
+        <Toggle
+          checked={config.linting.reversed_links}
+          onChange={(v) => updateConfig({ linting: { reversed_links: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SettingRow label="Space in emphasis" description="Detect * text * instead of *text*">
+        <Toggle
+          checked={config.linting.space_in_emphasis}
+          onChange={(v) => updateConfig({ linting: { space_in_emphasis: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SubSection title="Warning Rules" />
+
+      <SettingRow label="Heading increment" description="Warn when heading levels are skipped">
+        <Toggle
+          checked={config.linting.heading_increment}
+          onChange={(v) => updateConfig({ linting: { heading_increment: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SettingRow label="Consistent list markers" description="Warn on mixed list markers (-, *, +)">
+        <Toggle
+          checked={config.linting.consistent_list_marker}
+          onChange={(v) => updateConfig({ linting: { consistent_list_marker: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SettingRow label="Horizontal rule style" description="Warn on non-standard HR (prefer ***)">
+        <Toggle
+          checked={config.linting.hr_style}
+          onChange={(v) => updateConfig({ linting: { hr_style: v } })}
+          disabled={!config.linting.enabled}
+        />
+      </SettingRow>
+
+      <SettingRow label="Empty links" description="Warn on links with empty text or URL">
+        <Toggle
+          checked={config.linting.empty_links}
+          onChange={(v) => updateConfig({ linting: { empty_links: v } })}
+          disabled={!config.linting.enabled}
         />
       </SettingRow>
     </div>
@@ -560,6 +573,57 @@ function AppearanceSection({
           onChange={(e) => updateConfig({ appearance: { context_panel_width: Number(e.target.value) } })}
         />
         <span className="settings-range-value">{config.appearance.context_panel_width}px</span>
+      </SettingRow>
+
+      {/* -- Typography -- */}
+      <SubSection title="Typography" />
+
+      <SettingRow label="Editor font">
+        <input
+          type="text"
+          className="settings-text-input"
+          value={config.editor.font_family}
+          placeholder="Literata"
+          onChange={(e) => updateConfig({ editor: { font_family: e.target.value } })}
+        />
+      </SettingRow>
+
+      <SettingRow label="Editor font size" description={`${config.editor.font_size}px`}>
+        <input type="range" className="settings-range" min={12} max={24} step={1}
+          value={config.editor.font_size}
+          onChange={(e) => updateConfig({ editor: { font_size: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.editor.font_size}px</span>
+      </SettingRow>
+
+      <SettingRow label="Line height" description={`${config.editor.line_height.toFixed(1)}`}>
+        <input type="range" className="settings-range" min={1.2} max={2.4} step={0.1}
+          value={config.editor.line_height}
+          onChange={(e) => updateConfig({ editor: { line_height: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.editor.line_height.toFixed(1)}</span>
+      </SettingRow>
+
+      <SettingRow
+        label="Content max width"
+        description={config.editor.content_max_width === null ? "Unlimited" : `${config.editor.content_max_width}px`}
+      >
+        <label className="settings-inline-toggle">
+          <Toggle
+            checked={config.editor.content_max_width === null}
+            onChange={(v) => updateConfig({ editor: { content_max_width: v ? null : 720 } })}
+          />
+          <span className="settings-inline-label">Unlimited</span>
+        </label>
+        {config.editor.content_max_width !== null && (
+          <>
+            <input type="range" className="settings-range" min={500} max={1200} step={10}
+              value={config.editor.content_max_width ?? 720}
+              onChange={(e) => updateConfig({ editor: { content_max_width: Number(e.target.value) } })}
+            />
+            <span className="settings-range-value">{config.editor.content_max_width}px</span>
+          </>
+        )}
       </SettingRow>
 
       <SettingRow label="UI font override">
@@ -1081,6 +1145,16 @@ function AboutSection() {
         </div>
         <div className="settings-about-tech">
           Tauri 2 + React 18 + CodeMirror 6 + SQLite
+        </div>
+        <div className="settings-about-credits">
+          Built with{" "}
+          <a href="https://codemirror.net" target="_blank" rel="noreferrer">CodeMirror</a>,{" "}
+          <a href="https://v2.tauri.app" target="_blank" rel="noreferrer">Tauri</a>,{" "}
+          <a href="https://react.dev" target="_blank" rel="noreferrer">React</a>,{" "}
+          <a href="https://zustand.docs.pmnd.rs" target="_blank" rel="noreferrer">Zustand</a>,{" "}
+          <a href="https://lucide.dev" target="_blank" rel="noreferrer">Lucide</a>,{" "}
+          and{" "}
+          <a href="https://github.com/tgrosinger/md-advanced-tables" target="_blank" rel="noreferrer">md-advanced-tables</a>
         </div>
       </div>
     </div>
