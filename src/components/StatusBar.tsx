@@ -1,9 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, selectActiveTabPath, selectActiveEditorMode } from "../stores/app";
+import { useAppStore, selectActiveTab, selectActiveTabPath, selectActiveEditorMode } from "../stores/app";
 import { replaceTabContent } from "./Editor";
 
 export function StatusBar() {
-  const activeTabId = useAppStore((s) => s.activeTabId);
+  const activeTabId = useAppStore((s) => selectActiveTab(s)?.id ?? null);
   const activeTabPath = useAppStore(selectActiveTabPath);
   const activeEditorMode = useAppStore(selectActiveEditorMode);
   const cursorLine = useAppStore((s) => s.cursorLine);

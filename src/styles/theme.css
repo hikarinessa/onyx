@@ -193,10 +193,10 @@
 
     /* Warm cream (sampled: #f0e6de) */
     --bg-base: #e8ded6;
-    --bg-surface: #e8ded6;
-    --bg-elevated: #e0d6ce;
-    --bg-hover: #d8cec5;
-    --bg-active: #d0c5bc;
+    --bg-surface: #ddd3cb;
+    --bg-elevated: #d5cbc3;
+    --bg-hover: #cdc3ba;
+    --bg-active: #c5bbb2;
 
     --text-primary: #2c3030;
     --text-secondary: #5a6262;
@@ -269,18 +269,17 @@
   }
 }
 
-/* Forest theme — teal chrome overrides (unlayered to beat @layer layout) */
+/* Cream theme — teal chrome overrides (unlayered to beat @layer layout) */
 :root[data-theme="cream"] .titlebar,
-:root[data-theme="cream"] .tabbar,
 :root[data-theme="cream"] .statusbar {
   --bg-surface: #006a81;
   --bg-elevated: #0a7a90;
   --bg-hover: #1a8a9a;
   --bg-active: #2a9aaa;
-  --bg-base: #f0e6de;
+  --bg-base: #e8ded6;
   --text-primary: #e4eff2;
   --text-secondary: #a0ccd5;
-  --text-tertiary: #6aa0ac;
+  --text-tertiary: #a0ccd5;
   --border-subtle: #0a7a90;
   --border-default: #1a8a9a;
   --border-strong: #2a9aaa;
@@ -294,10 +293,33 @@
   color: var(--text-primary);
 }
 
-/* Active tab bridges chrome → content */
+/* Tabbar tweaks */
+:root[data-theme="cream"] .tabbar {
+  border-bottom: none;
+  padding-left: 5px;
+  padding-right: 5px;
+  height: 32px;
+}
+
+/* Inactive tabs: muted cream-teal tint */
+:root[data-theme="cream"] .tabbar .tab {
+  border-right: none;
+  border-radius: 5px 5px 0 0;
+  margin-top: 4px;
+  margin-right: 8px;
+  background: #c8beb5;
+  color: #2c3030;
+}
+
+/* Active tab: cream bg, rounded top, seamlessly connects to content */
 :root[data-theme="cream"] .tabbar .tab.active {
   background: #e8ded6;
   color: #2c3030;
+}
+
+/* Hide the default accent underline */
+:root[data-theme="cream"] .tabbar .tab.active::after {
+  display: none;
 }
 
 :root[data-theme="cream"] .tabbar .tab.active .tab-close {
