@@ -563,6 +563,13 @@ pub fn get_object_types() -> Result<Vec<ObjectType>, String> {
 }
 
 #[tauri::command]
+pub fn save_object_types(json: String) -> Result<(), String> {
+    let types: Vec<ObjectType> = serde_json::from_str(&json)
+        .map_err(|e| format!("Invalid object types JSON: {}", e))?;
+    object_types::save_object_types(&types)
+}
+
+#[tauri::command]
 pub fn query_by_type(
     type_name: String,
     state: State<AppState>,

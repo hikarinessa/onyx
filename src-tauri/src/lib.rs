@@ -222,6 +222,7 @@ pub fn run() {
             commands::get_bookmarks,
             commands::is_file_bookmarked,
             commands::get_object_types,
+            commands::save_object_types,
             commands::query_by_type,
             commands::get_file_frontmatter,
             commands::update_frontmatter,

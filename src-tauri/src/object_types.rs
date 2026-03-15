@@ -109,6 +109,28 @@ fn default_types() -> Vec<ObjectType> {
     ]
 }
 
+pub fn save_object_types(types: &[ObjectType]) -> Result<(), String> {
+    let path = config_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+    let json = serde_json::to_string_pretty(types)
+        .map_err(|e| format!("Failed to serialize object types: {}", e))?;
+
+    // Atomic write
+    let counter = std::sync::atomic::AtomicU64::new(0);
+    let temp_path = path.with_extension(format!("tmp-{}", counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    std::fs::write(&temp_path, &json)
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+    std::fs::rename(&temp_path, &path)
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            format!("Failed to rename temp file: {}", e)
+        })?;
+    Ok(())
+}
+
 pub fn load_object_types() -> Result<Vec<ObjectType>, String> {
     let path = config_path()?;
 

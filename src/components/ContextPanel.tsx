@@ -183,6 +183,58 @@ function PropertyField({
 
 // ── Properties section ──
 
+function inferPropertyType(val: unknown): string {
+  if (Array.isArray(val)) return "tags";
+  if (typeof val === "boolean") return "checkbox";
+  if (typeof val === "number") return "number";
+  return "text";
+}
+
+function AddPropertyRow({ onAdd }: { onAdd: (key: string) => void }) {
+  const [adding, setAdding] = useState(false);
+  const [key, setKey] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (adding) inputRef.current?.focus();
+  }, [adding]);
+
+  const submit = () => {
+    const trimmed = key.trim();
+    if (trimmed) {
+      onAdd(trimmed);
+      setKey("");
+      setAdding(false);
+    }
+  };
+
+  if (!adding) {
+    return (
+      <button className="prop-add" onClick={() => setAdding(true)}>
+        <Icon name="plus" size={12} />
+        Add property
+      </button>
+    );
+  }
+
+  return (
+    <div className="prop-add-row">
+      <input
+        ref={inputRef}
+        className="prop-add-input"
+        value={key}
+        onChange={(e) => setKey(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); submit(); }
+          if (e.key === "Escape") { setAdding(false); setKey(""); }
+        }}
+        onBlur={() => { if (!key.trim()) setAdding(false); }}
+        placeholder="Property name"
+      />
+    </div>
+  );
+}
+
 function PropertiesSection({
   path,
   expanded,
@@ -312,49 +364,70 @@ function PropertiesSection({
           ) : !frontmatter ? (
             <div className="properties-empty">No properties</div>
           ) : matchedType ? (
-            // Typed: render fields from object type definition
-            matchedType.properties.map((def) => (
-              <div key={def.key} className="prop-row">
-                <div className="prop-label" title={def.key}>
-                  {def.key}
-                  {def.required && <span className="prop-required">*</span>}
-                </div>
-                <div className="prop-value">
-                  <PropertyField
-                    def={def}
-                    value={frontmatter[def.key]}
-                    onChange={(v) => handleChange(def.key, v)}
-                  />
-                </div>
-              </div>
-            ))
-          ) : (
-            // Untyped: raw key-value editor for all frontmatter
-            Object.entries(frontmatter).map(([key, val]) => {
-              // Infer widget type from value shape
-              const inferredType: PropertyDef["type"] = Array.isArray(val)
-                ? "tags"
-                : typeof val === "boolean"
-                  ? "checkbox"
-                  : typeof val === "number"
-                    ? "number"
-                    : "text";
-              return (
-                <div key={key} className="prop-row">
-                  <div className="prop-label" title={key}>
-                    {key}
+            <>
+              {/* Typed: render all defined properties (even empty ones) */}
+              {matchedType.properties.map((def) => (
+                <div key={def.key} className="prop-row">
+                  <div className="prop-label" title={def.key}>
+                    {def.key}
+                    {def.required && <span className="prop-required">*</span>}
                   </div>
                   <div className="prop-value">
                     <PropertyField
-                      def={{ key, type: inferredType }}
-                      value={val}
-                      onChange={(v) => handleChange(key, v)}
+                      def={def}
+                      value={frontmatter[def.key]}
+                      onChange={(v) => handleChange(def.key, v)}
                     />
                   </div>
                 </div>
-              );
-            })
+              ))}
+              {/* Extra keys not in the type definition */}
+              {Object.entries(frontmatter)
+                .filter(([key]) => key !== "type" && !matchedType.properties.some((p) => p.key === key))
+                .map(([key, val]) => {
+                  const inferredType = inferPropertyType(val);
+                  return (
+                    <div key={key} className="prop-row prop-row-extra">
+                      <div className="prop-label" title={key}>{key}</div>
+                      <div className="prop-value">
+                        <PropertyField
+                          def={{ key, type: inferredType }}
+                          value={val}
+                          onChange={(v) => handleChange(key, v)}
+                        />
+                      </div>
+                      <button className="prop-delete" onClick={() => handleChange(key, null)} title="Remove">
+                        <Icon name="x" size={10} />
+                      </button>
+                    </div>
+                  );
+                })}
+            </>
+          ) : (
+            <>
+              {/* Untyped: raw key-value editor */}
+              {Object.entries(frontmatter).map(([key, val]) => {
+                const inferredType = inferPropertyType(val);
+                return (
+                  <div key={key} className="prop-row">
+                    <div className="prop-label" title={key}>{key}</div>
+                    <div className="prop-value">
+                      <PropertyField
+                        def={{ key, type: inferredType }}
+                        value={val}
+                        onChange={(v) => handleChange(key, v)}
+                      />
+                    </div>
+                    <button className="prop-delete" onClick={() => handleChange(key, null)} title="Remove">
+                      <Icon name="x" size={10} />
+                    </button>
+                  </div>
+                );
+              })}
+            </>
           )}
+          {/* Add property row */}
+          <AddPropertyRow onAdd={(key) => handleChange(key, "")} />
         </div>
       )}
     </div>
