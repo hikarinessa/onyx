@@ -216,9 +216,9 @@
     --text-tertiary: oklch(0.653 0.0093 197.2);
     --text-accent: oklch(0.542 0.0758 195.2);
 
-    --border-subtle: oklch(0.857 0.0165 64.6);
-    --border-default: oklch(0.826 0.0167 64.6);
-    --border-strong: oklch(0.776 0.0170 64.5);
+    --border-subtle: oklch(0.780 0.0170 64.6);
+    --border-default: oklch(0.740 0.0175 64.6);
+    --border-strong: oklch(0.700 0.0180 64.5);
 
     --accent: oklch(0.542 0.0758 195.2);
     --accent-hover: oklch(0.599 0.0810 195.2);
