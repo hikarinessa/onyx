@@ -460,6 +460,21 @@ export function Sidebar() {
                   </button>
                   <button
                     className="sidebar-header-btn"
+                    title="New Folder"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        const folderPath = await fileOps.createFolder(dir.path);
+                        setRenamingPath(folderPath);
+                      } catch (err) {
+                        console.error("Failed to create folder:", err);
+                      }
+                    }}
+                  >
+                    <Icon name="folder-plus" size={14} />
+                  </button>
+                  <button
+                    className="sidebar-header-btn"
                     title="Remove Directory"
                     onClick={(e) => {
                       e.stopPropagation();

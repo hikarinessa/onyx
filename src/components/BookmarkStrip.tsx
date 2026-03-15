@@ -103,7 +103,7 @@ export function BookmarkStrip() {
                 title={bookmark.path}
               >
                 <span className="tree-item-icon">
-                  <Icon name={bookmark.global ? "bookmark-check" : "star"} size={14} />
+                  <Icon name={bookmark.global ? "bookmark-check" : "bookmark"} size={14} />
                 </span>
                 <span className="tree-item-label">{bookmark.label}</span>
               </div>

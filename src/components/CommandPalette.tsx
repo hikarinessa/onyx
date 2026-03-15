@@ -10,6 +10,7 @@ export function CommandPalette() {
   const [filtered, setFiltered] = useState<Command[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (visible) {
@@ -30,6 +31,12 @@ export function CommandPalette() {
     }
     setSelectedIndex(0);
   }, [query, visible]);
+
+  // Scroll selected item into view
+  useEffect(() => {
+    const el = listRef.current?.querySelector(".selected");
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }, [selectedIndex]);
 
   const close = useCallback(() => setVisible(false), [setVisible]);
 
@@ -57,6 +64,15 @@ export function CommandPalette() {
       if (e.key === "ArrowUp") {
         e.preventDefault();
         setSelectedIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          setSelectedIndex((i) => Math.max(i - 1, 0));
+        } else {
+          setSelectedIndex((i) => Math.min(i + 1, filtered.length - 1));
+        }
         return;
       }
       if (e.key === "Enter") {
@@ -87,7 +103,7 @@ export function CommandPalette() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
         />
-        <div className="quick-open-results">
+        <div className="quick-open-results" ref={listRef}>
           {filtered.length === 0 && query.trim() !== "" && (
             <div className="command-palette-empty">No matching commands</div>
           )}
