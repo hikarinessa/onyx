@@ -12,11 +12,16 @@ import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu"
 // Flag to suppress Tauri's native drag-drop overlay during internal tree drags
 export let internalDragActive = false;
 
-function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder }: {
+// Track dragged file path via module variable (dataTransfer.getData unreliable in WebKit)
+let draggedFilePath: string | null = null;
+
+function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder, onReveal, onUnregister }: {
   x: number; y: number;
   onClose: () => void;
   onNewNote: () => void;
   onNewFolder: () => void;
+  onReveal: () => void;
+  onUnregister: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -37,6 +42,10 @@ function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder }: {
     <div ref={ref} className="context-menu" style={{ left: x, top: y, position: "fixed", zIndex: 1000 }}>
       <div className="context-menu-item" onClick={onNewNote}>New Note</div>
       <div className="context-menu-item" onClick={onNewFolder}>New Folder</div>
+      <div className="context-menu-separator" />
+      <div className="context-menu-item" onClick={onReveal}>Reveal in Finder</div>
+      <div className="context-menu-separator" />
+      <div className="context-menu-item destructive" onClick={onUnregister}>Unregister Directory</div>
     </div>
   );
 }
@@ -172,13 +181,13 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
         onContextMenu={(e) => onContextMenu(e, entry)}
         draggable={!entry.is_dir && !isRenaming}
         onDragStart={(e) => {
-          e.dataTransfer.setData("text/plain", entry.path);
+          draggedFilePath = entry.path;
           e.dataTransfer.effectAllowed = "move";
           internalDragActive = true;
         }}
-        onDragEnd={() => { internalDragActive = false; }}
+        onDragEnd={() => { internalDragActive = false; draggedFilePath = null; }}
         onDragOver={(e) => {
-          if (!entry.is_dir) return;
+          if (!entry.is_dir || !draggedFilePath) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
           setDropOver(true);
@@ -187,8 +196,9 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
         onDrop={(e) => {
           e.preventDefault();
           setDropOver(false);
-          if (!entry.is_dir) return;
-          const sourcePath = e.dataTransfer.getData("text/plain");
+          if (!entry.is_dir || !draggedFilePath) return;
+          const sourcePath = draggedFilePath;
+          draggedFilePath = null;
           if (sourcePath && !sourcePath.startsWith(entry.path + "/")) {
             onFileDrop(sourcePath, entry.path);
           }
@@ -250,7 +260,7 @@ export function Sidebar() {
     new Map()
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [rootDirMenu, setRootDirMenu] = useState<{ x: number; y: number; dirPath: string } | null>(null);
+  const [rootDirMenu, setRootDirMenu] = useState<{ x: number; y: number; dirPath: string; dirId: string } | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [iconPickerDirId, setIconPickerDirId] = useState<string | null>(null);
   const [orphansCollapsed, setOrphansCollapsed] = useState(false);
@@ -505,7 +515,7 @@ export function Sidebar() {
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  setRootDirMenu({ x: e.clientX, y: e.clientY, dirPath: dir.path });
+                  setRootDirMenu({ x: e.clientX, y: e.clientY, dirPath: dir.path, dirId: dir.id });
                 }}
               >
                 <span className="sidebar-header-chevron">
@@ -522,18 +532,7 @@ export function Sidebar() {
                   <Icon name={dir.icon || "folder"} size={14} />
                 </span>
                 <span className="sidebar-header-label">{dir.label}</span>
-                <div className="sidebar-header-actions">
-                  <button
-                    className="sidebar-header-btn"
-                    title="Remove Directory"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeDirectory(dir.id);
-                    }}
-                  >
-                    <Icon name="x" size={14} />
-                  </button>
-                </div>
+                <div className="sidebar-header-actions" />
               </div>
               {!isCollapsed && (
                 <div className="sidebar-content">
@@ -668,6 +667,8 @@ export function Sidebar() {
             }
             setRootDirMenu(null);
           }}
+          onReveal={() => { fileOps.revealInFinder(rootDirMenu.dirPath); setRootDirMenu(null); }}
+          onUnregister={() => { removeDirectory(rootDirMenu.dirId); setRootDirMenu(null); }}
         />
       )}
     </div>
