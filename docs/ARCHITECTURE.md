@@ -1,7 +1,7 @@
 # Onyx — Architecture Document
 
-**Version:** 0.8 (Phase 8 Complete)
-**Date:** 2026-03-14
+**Version:** 0.10 (Phase 10 Complete — Split Panes + FS Reactivity)
+**Date:** 2026-03-15
 
 ---
 
