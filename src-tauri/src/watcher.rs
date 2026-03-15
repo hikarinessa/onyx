@@ -179,6 +179,11 @@ impl FileWatcher {
 
                     let kind = match event.kind {
                         notify::EventKind::Create(_) => "create",
+                        notify::EventKind::Modify(notify::event::ModifyKind::Name(_)) => {
+                            // Rename/move event (e.g. Finder move).
+                            // Emit as create or remove based on whether the path still exists.
+                            if path.exists() { "create" } else { "remove" }
+                        }
                         notify::EventKind::Modify(_) => "modify",
                         notify::EventKind::Remove(_) => "remove",
                         _ => continue,
