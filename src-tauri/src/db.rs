@@ -543,6 +543,52 @@ impl Database {
         Ok(count)
     }
 
+    /// Resolve pending backlinks when a new file is created.
+    /// Finds links with target_id = NULL that match the new file's title, and sets target_id.
+    pub fn resolve_pending_links(&self, file_title: &str, file_id: i64) -> Result<u32, String> {
+        let count = self.conn.execute(
+            "UPDATE links SET target_id = ?1 WHERE target = ?2 AND target_id IS NULL",
+            params![file_id, file_title],
+        ).map_err(|e| format!("Failed to resolve pending links: {}", e))?;
+        Ok(count as u32)
+    }
+
+    /// Get all indexed file paths with their indexed_at timestamps (for startup reconciliation).
+    pub fn get_all_indexed_paths(&self) -> Result<Vec<(String, Option<i64>)>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT path, indexed_at FROM files"
+        ).map_err(|e| format!("Failed to prepare indexed paths query: {}", e))?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
+        }).map_err(|e| format!("Failed to query indexed paths: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read indexed path row: {}", e))?);
+        }
+        Ok(results)
+    }
+
+    /// Batch delete files by path. More efficient than individual deletes for reconciliation.
+    pub fn delete_files_batch(&self, paths: &[String]) -> Result<u32, String> {
+        if paths.is_empty() {
+            return Ok(0);
+        }
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|e| format!("Failed to begin batch delete transaction: {}", e))?;
+
+        let mut total = 0u32;
+        for path in paths {
+            let count = tx.execute("DELETE FROM files WHERE path = ?1", params![path])
+                .map_err(|e| format!("Failed to delete file {}: {}", path, e))?;
+            total += count as u32;
+        }
+
+        tx.commit().map_err(|e| format!("Failed to commit batch delete: {}", e))?;
+        Ok(total)
+    }
+
     pub fn get_stats(&self) -> Result<IndexStats, String> {
         let total_files: u32 = self.conn.query_row(
             "SELECT COUNT(*) FROM files", [], |row| row.get(0),

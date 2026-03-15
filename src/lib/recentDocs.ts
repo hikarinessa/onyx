@@ -48,3 +48,21 @@ export function subscribeRecentDocs(fn: () => void): () => void {
     listeners = listeners.filter((l) => l !== fn);
   };
 }
+
+/** Update a path in the recent docs list (after rename) */
+export function updateRecentDocPath(oldPath: string, newPath: string, newName: string): void {
+  const idx = recentDocs.findIndex((d) => d.path === oldPath);
+  if (idx !== -1) {
+    recentDocs[idx] = { path: newPath, name: newName };
+    persist();
+  }
+}
+
+/** Mark a recent doc as deleted (remove it from the list) */
+export function markRecentDocDeleted(path: string): void {
+  const before = recentDocs.length;
+  recentDocs = recentDocs.filter((d) => d.path !== path);
+  if (recentDocs.length !== before) {
+    persist();
+  }
+}

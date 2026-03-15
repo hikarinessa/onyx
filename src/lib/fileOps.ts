@@ -1,62 +1,41 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
-import { loadFileIntoCache, migrateEditorCache, clearEditorCache } from "../components/Editor";
+import { loadFileIntoCache } from "../components/Editor";
 
 /**
  * Centralized file operations module.
  *
  * Every file mutation (create, rename, delete) goes through here.
- * Each function owns the full sequence: disk → DB → tabs → editor caches → tree refresh.
- * Components should call these functions, never invoke Rust commands directly for mutations.
+ * Rust commands emit fs:change events; UI consumers react via event listeners.
+ * fileOps only handles the IPC call + any pre-mutation work (e.g. confirmation dialogs).
  */
 
 /** Create a new note in a directory, open it, and return its path */
 export async function createNote(dirPath: string): Promise<string> {
   const { path, name } = await findAvailablePath(dirPath);
   await invoke("write_file", { path, content: "" });
+  // Pre-load cache so the editor has content immediately when the tab opens.
+  // write_file doesn't emit fs:change for internal writes (self-write suppressed),
+  // so we handle the tab open here — this is a create-and-open flow, not a mutation.
   loadFileIntoCache(path, "");
   useAppStore.getState().openFile(path, name);
   useAppStore.getState().bumpFileTreeVersion();
   return path;
 }
 
-/** Rename a file (not a folder), updating all caches */
+/** Rename a file (not a folder). Rust emits fs:change rename; UI reacts via event listeners. */
 export async function renameFile(oldPath: string, newPath: string): Promise<void> {
-  const newName = newPath.split("/").pop() || newPath;
-
   await invoke("rename_file", { oldPath, newPath });
-
-  // Update tab if this file is open
-  const { tabs, updateTabPath } = useAppStore.getState();
-  const openTab = tabs.find((t) => t.path === oldPath);
-  if (openTab) {
-    updateTabPath(openTab.id, newPath, newName);
-    migrateEditorCache(oldPath, newPath);
-  }
-
-  useAppStore.getState().bumpFileTreeVersion();
+  // fs:change { kind: "rename", path: newPath, old_path: oldPath } emitted by Rust
 }
 
-/** Rename a folder, updating all affected tabs and caches */
+/** Rename a folder. Rust emits fs:change rename; UI reacts via event listeners. */
 export async function renameFolder(oldPath: string, newPath: string): Promise<void> {
   await invoke("rename_file", { oldPath, newPath });
-
-  // Migrate all tabs whose path starts with the old folder path
-  const { tabs, updateTabPath } = useAppStore.getState();
-  const oldPrefix = oldPath.endsWith("/") ? oldPath : oldPath + "/";
-  for (const tab of tabs) {
-    if (tab.path.startsWith(oldPrefix)) {
-      const migratedPath = newPath + tab.path.slice(oldPath.length);
-      const migratedName = migratedPath.split("/").pop() || migratedPath;
-      updateTabPath(tab.id, migratedPath, migratedName);
-      migrateEditorCache(tab.path, migratedPath);
-    }
-  }
-
-  useAppStore.getState().bumpFileTreeVersion();
+  // fs:change { kind: "rename", path: newPath, old_path: oldPath } emitted by Rust
 }
 
-/** Delete a file or folder (move to OS trash), cleaning up all caches */
+/** Delete a file or folder (move to OS trash). Rust emits fs:change remove. */
 export async function deleteFile(path: string): Promise<void> {
   // Check for incoming links and warn the user
   if (path.endsWith(".md")) {
@@ -75,24 +54,8 @@ export async function deleteFile(path: string): Promise<void> {
   }
 
   await invoke("trash_file", { path });
-
-  // Find all affected tabs (exact match for files, prefix match for folders)
-  const { tabs } = useAppStore.getState();
-  const prefix = path.endsWith("/") ? path : path + "/";
-  const affectedTabs = tabs.filter(
-    (t) => t.path === path || t.path.startsWith(prefix)
-  );
-
-  for (const tab of affectedTabs) {
-    clearEditorCache(tab.path);
-  }
-
-  if (affectedTabs.length > 0) {
-    useAppStore.getState().removeTabs(affectedTabs.map((t) => t.id));
-  }
-
-  useAppStore.getState().bumpFileTreeVersion();
-  useAppStore.getState().bumpBookmarkVersion();
+  // fs:change { kind: "remove", path } emitted by Rust
+  // Tab cleanup, tree refresh, bookmark invalidation all handled by event listeners
 }
 
 /** Create a folder, returning its path */

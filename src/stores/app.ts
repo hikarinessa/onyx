@@ -164,6 +164,11 @@ interface AppState {
   saveConflictPath: string | null;
   setSaveConflictPath: (path: string | null) => void;
 
+  // Paths deleted externally — auto-save guard checks this before writing
+  deletedPaths: Set<string>;
+  addDeletedPath: (path: string) => void;
+  removeDeletedPath: (path: string) => void;
+
   // Sidebar tabs
   sidebarTab: "files" | "search";
   setSidebarTab: (tab: "files" | "search") => void;
@@ -676,6 +681,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   saveConflictPath: null,
   setSaveConflictPath: (path) => set({ saveConflictPath: path }),
+
+  deletedPaths: new Set<string>(),
+  addDeletedPath: (path) => set((s) => {
+    const next = new Set(s.deletedPaths);
+    next.add(path);
+    return { deletedPaths: next };
+  }),
+  removeDeletedPath: (path) => set((s) => {
+    const next = new Set(s.deletedPaths);
+    next.delete(path);
+    return { deletedPaths: next };
+  }),
 
   sidebarTab: "files",
   setSidebarTab: (tab) => set({ sidebarTab: tab }),

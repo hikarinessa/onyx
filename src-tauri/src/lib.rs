@@ -184,11 +184,11 @@ pub fn run() {
                     Err(e) => log::error!("Failed to start file watcher: {}", e),
                 }
 
-                // Spawn background full index
+                // Spawn background reconciliation (diffs disk vs DB, prunes stale entries)
                 let db_ref = state.db.clone();
                 let app_ref = handle.clone();
                 std::thread::spawn(move || {
-                    indexer::Indexer::full_scan(&dir_pairs, &db_ref, &app_ref);
+                    indexer::Indexer::reconcile(&dir_pairs, &db_ref, &app_ref);
                 });
             }
 

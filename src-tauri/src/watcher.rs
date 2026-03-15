@@ -15,8 +15,9 @@ const INDEX_DEBOUNCE: Duration = Duration::from_secs(3);
 /// Events emitted to the frontend
 #[derive(Clone, serde::Serialize)]
 pub struct FileChangeEvent {
-    pub kind: String, // "create", "modify", "remove"
+    pub kind: String, // "create", "modify", "remove", "rename"
     pub path: String,
+    pub old_path: Option<String>,
 }
 
 pub struct FileWatcher {
@@ -46,6 +47,12 @@ impl FileWatcher {
         let pending_reindex: Arc<Mutex<HashMap<PathBuf, Instant>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let pending_ref = pending_reindex.clone();
+
+        // Rescan map: directory path -> scheduled reconciliation time
+        let pending_rescan: Arc<Mutex<HashMap<PathBuf, Instant>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let rescan_ref = pending_rescan.clone();
+        let rescan_debounce = pending_rescan.clone();
 
         // Shutdown flag — set to true when FileWatcher is dropped
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -95,6 +102,34 @@ impl FileWatcher {
                         }
                     }
                 }
+
+                // Process pending rescan (directory reconciliation)
+                let rescan_ready: Vec<(PathBuf, String)> = {
+                    let mut pending = rescan_debounce.lock().unwrap();
+                    let mut ready = Vec::new();
+                    let mut to_remove = Vec::new();
+                    for (path, scheduled) in pending.iter() {
+                        if now >= *scheduled {
+                            let dir_id = dirs_debounce
+                                .iter()
+                                .find(|(_, dir_path)| path.starts_with(dir_path))
+                                .map(|(id, _)| id.clone())
+                                .unwrap_or_default();
+                            ready.push((path.clone(), dir_id));
+                            to_remove.push(path.clone());
+                        }
+                    }
+                    for path in to_remove {
+                        pending.remove(&path);
+                    }
+                    ready
+                };
+                for (dir_path, dir_id) in rescan_ready {
+                    log::info!("Running rescan reconciliation for {}", dir_path.display());
+                    if let Err(e) = Indexer::reconcile_directory(&dir_path, &dir_id, &db_debounce) {
+                        log::error!("Rescan reconciliation failed for {}: {}", dir_path.display(), e);
+                    }
+                }
             }
             log::info!("Debounce processor thread exiting");
         });
@@ -108,6 +143,20 @@ impl FileWatcher {
                         return;
                     }
                 };
+
+                // Handle Rescan events (FSEvents coalescing, inotify overflow).
+                // Schedule a targeted reconciliation for each affected path.
+                if matches!(event.kind, notify::EventKind::Other) {
+                    log::warn!("Rescan event received — scheduling directory reconciliation");
+                    for path in &event.paths {
+                        let mut pending = rescan_ref.lock().unwrap();
+                        pending.insert(
+                            path.clone(),
+                            Instant::now() + INDEX_DEBOUNCE,
+                        );
+                    }
+                    return;
+                }
 
                 for path in &event.paths {
                     // Skip non-markdown files for change events
@@ -137,6 +186,7 @@ impl FileWatcher {
                     let change = FileChangeEvent {
                         kind: kind.to_string(),
                         path: path.to_string_lossy().to_string(),
+                        old_path: None,
                     };
 
                     if let Err(e) = app_ref.emit("fs:change", &change) {

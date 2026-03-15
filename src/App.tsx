@@ -31,6 +31,14 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
 import { invalidateCache } from "./lib/ipcCache";
 import { loadAndApplyConfig } from "./lib/configBridge";
+import { clearEditorCache, migrateEditorCache, cancelPendingSave } from "./components/Editor";
+import { updateRecentDocPath, markRecentDocDeleted } from "./lib/recentDocs";
+
+interface FsChangeEvent {
+  kind: "create" | "modify" | "remove" | "rename";
+  path: string;
+  old_path?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Shared action functions — called by commands, menu events, and shortcuts
@@ -452,10 +460,74 @@ export default function App() {
       }
     });
 
-    // Invalidate IPC cache on file system changes
-    const unlistenFsChange = listen("fs:change", () => {
+    // Central fs:change handler — cross-cutting concerns (tabs, cache, auto-save guard)
+    const unlistenFsChange = listen<FsChangeEvent>("fs:change", (event) => {
       if (cancelled) return;
       invalidateCache();
+
+      const { kind, path, old_path } = event.payload;
+      const store = useAppStore.getState();
+
+      if (kind === "remove") {
+        // Cancel pending auto-save for this file
+        cancelPendingSave(path);
+        // Track as deleted for auto-save guard
+        store.addDeletedPath(path);
+
+        // Close affected tabs (file or folder prefix match)
+        const prefix = path.endsWith("/") ? path : path + "/";
+        const affected = store.tabs.filter(
+          (t) => t.path === path || t.path.startsWith(prefix)
+        );
+        for (const tab of affected) {
+          clearEditorCache(tab.path);
+        }
+        if (affected.length > 0) {
+          store.removeTabs(affected.map((t) => t.id));
+        }
+
+        // Refresh tree + bookmarks
+        store.bumpFileTreeVersion();
+        store.bumpBookmarkVersion();
+
+        // Mark in recent docs
+        markRecentDocDeleted(path);
+      } else if (kind === "rename" && old_path) {
+        // Cancel pending auto-save for old path
+        cancelPendingSave(old_path);
+
+        const newName = path.split("/").pop() || path;
+
+        // Migrate tabs: single file rename or folder rename (prefix match)
+        const isDir = !path.endsWith(".md");
+        if (isDir) {
+          const oldPrefix = old_path.endsWith("/") ? old_path : old_path + "/";
+          for (const tab of store.tabs) {
+            if (tab.path.startsWith(oldPrefix)) {
+              const migratedPath = path + tab.path.slice(old_path.length);
+              const migratedName = migratedPath.split("/").pop() || migratedPath;
+              store.updateTabPath(tab.id, migratedPath, migratedName);
+              migrateEditorCache(tab.path, migratedPath);
+            }
+          }
+        } else {
+          const openTab = store.tabs.find((t) => t.path === old_path);
+          if (openTab) {
+            store.updateTabPath(openTab.id, path, newName);
+            migrateEditorCache(old_path, path);
+          }
+        }
+
+        // Refresh tree
+        store.bumpFileTreeVersion();
+
+        // Update recent docs
+        updateRecentDocPath(old_path, path, newName);
+      } else if (kind === "create") {
+        // Refresh tree for new files
+        store.bumpFileTreeVersion();
+      }
+      // "modify" events from the watcher don't need tree refresh
     });
 
     // Tauri 2 native drag-drop (HTML5 File.path doesn't exist in Tauri 2)

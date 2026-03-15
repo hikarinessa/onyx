@@ -192,6 +192,10 @@ function buildExtensions(): Extension[] {
                   }
                 }
               }
+              // Auto-save guard: skip if file was deleted
+              if (useAppStore.getState().deletedPaths.has(tab.path)) {
+                return;
+              }
               const result = await invoke<string>("write_file", {
                 path: tab.path,
                 content: saveContent,
@@ -204,7 +208,13 @@ function buildExtensions(): Extension[] {
                 useAppStore.getState().bumpSaveVersion();
               }
             } catch (err) {
-              console.error("Auto-save failed:", err);
+              const msg = String(err);
+              if (msg.startsWith("DELETED:")) {
+                // File was deleted externally — don't resurrect it
+                useAppStore.getState().addDeletedPath(tab.path);
+              } else {
+                console.error("Auto-save failed:", err);
+              }
             }
           }, getAutoSaveMs());
         }
@@ -338,6 +348,13 @@ export function clearEditorCache(path: string) {
   lastSavedContent.delete(path);
   scrollCache.delete(path);
   clearAutoFoldForTab(path);
+}
+
+/** Cancel pending auto-save for a file (e.g. when deleted externally) */
+export function cancelPendingSave(_path: string) {
+  // The save timer is global (single timer for the most recent edit).
+  // Clearing it prevents any pending save from firing.
+  clearTimeout(saveTimer);
 }
 
 /** Toggle frontmatter fold in the active editor */
