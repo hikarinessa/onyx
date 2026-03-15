@@ -10,6 +10,7 @@ export function setRemeasureHook(fn: () => void) {
 let autoSaveMs = 500;
 let lintingEnabled = true;
 let autofixOnSave = false;
+let spellcheckEnabled = false;
 
 // Per-rule flags (all default true)
 let ruleTrailingSpaces = true;
@@ -34,6 +35,10 @@ export function isLintingEnabled(): boolean {
 
 export function isAutofixOnSave(): boolean {
   return autofixOnSave;
+}
+
+export function isSpellcheckEnabled(): boolean {
+  return spellcheckEnabled;
 }
 
 export function getLintRules() {
@@ -201,6 +206,7 @@ export function applyConfig(config: AppConfig) {
 
   // Behavior
   autoSaveMs = config.behavior.auto_save_ms;
+  spellcheckEnabled = config.behavior.spellcheck;
   document.documentElement.setAttribute("spellcheck", config.behavior.spellcheck ? "true" : "false");
 
   // Style

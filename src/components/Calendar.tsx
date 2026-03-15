@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useAppStore } from "../stores/app";
 import { Icon } from "./Icon";
 
 const WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
@@ -74,6 +75,7 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
   // Note indicators keyed by "YYYY-MM" → Set of day numbers
   const [notesByMonth, setNotesByMonth] = useState<Map<string, Set<number>>>(new Map());
   const [weeksWithNotes, setWeeksWithNotes] = useState<Set<string>>(new Set());
+  const fileTreeVersion = useAppStore((s) => s.fileTreeVersion);
 
   const fetchNoteIndicators = useCallback(async () => {
     // Fetch daily note indicators for current month + adjacent months (visible in grid)
@@ -116,7 +118,7 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
 
   useEffect(() => {
     fetchNoteIndicators();
-  }, [fetchNoteIndicators]);
+  }, [fetchNoteIndicators, fileTreeVersion]);
 
   const prevMonth = () => {
     if (viewMonth === 0) {

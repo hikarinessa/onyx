@@ -27,6 +27,7 @@ import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension } from "../extensions/livePreview";
 import { lintingExtension, autofixContent } from "../extensions/linting";
 import { blocksExtension } from "../extensions/blocks";
+import { spellcheckExtension } from "../extensions/spellcheck";
 import { lintKeymap } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
 import { getAutoSaveMs, setRemeasureHook, isAutofixOnSave } from "../lib/configBridge";
@@ -252,6 +253,7 @@ function buildExtensions(): Extension[] {
     ...blocksExtension(),
     keymap.of(lintKeymap),
     ...lintingExtension(),
+    ...spellcheckExtension(),
   ];
 }
 

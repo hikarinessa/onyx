@@ -34,6 +34,43 @@ interface PropertyDef {
 type FrontmatterValue = string | number | boolean | string[] | null | undefined;
 type FrontmatterMap = Record<string, FrontmatterValue>;
 
+// ── Tags field (edits raw text, commits array on blur) ──
+
+function TagsField({ value, onChange }: { value: FrontmatterValue; onChange: (val: FrontmatterValue) => void }) {
+  const initial = Array.isArray(value) ? value.join(", ") : typeof value === "string" ? value : "";
+  const [raw, setRaw] = useState(initial);
+  const [editing, setEditing] = useState(false);
+
+  // Sync from outside when not editing
+  useEffect(() => {
+    if (!editing) {
+      setRaw(Array.isArray(value) ? value.join(", ") : typeof value === "string" ? value : "");
+    }
+  }, [value, editing]);
+
+  const commit = () => {
+    setEditing(false);
+    if (raw.trim() === "") {
+      onChange(null);
+    } else {
+      onChange(raw.split(",").map((t) => t.trim()).filter(Boolean));
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      className="prop-input"
+      placeholder="tag1, tag2, ..."
+      value={raw}
+      onFocus={() => setEditing(true)}
+      onChange={(e) => setRaw(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); (e.target as HTMLInputElement).blur(); } }}
+    />
+  );
+}
+
 // ── Property field widgets ──
 
 function PropertyField({
@@ -125,25 +162,8 @@ function PropertyField({
       );
     }
 
-    case "tags": {
-      const tagStr = Array.isArray(value) ? value.join(", ") : typeof value === "string" ? value : "";
-      return (
-        <input
-          type="text"
-          className="prop-input"
-          placeholder="tag1, tag2, ..."
-          value={tagStr}
-          onChange={(e) => {
-            const raw = e.target.value;
-            if (raw.trim() === "") {
-              onChange(null);
-            } else {
-              onChange(raw.split(",").map((t) => t.trim()).filter(Boolean));
-            }
-          }}
-        />
-      );
-    }
+    case "tags":
+      return <TagsField value={value} onChange={onChange} />;
 
     case "link":
     case "text":
@@ -280,6 +300,7 @@ function PropertiesSection({
         onClick={onToggle}
       >
         <span className="collapse-arrow"><Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} /></span>
+        <Icon name="list" size={14} />
         {label}
       </div>
 
@@ -370,6 +391,7 @@ function RecentDocuments({
         onClick={onToggle}
       >
         <span className="collapse-arrow"><Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} /></span>
+        <Icon name="clock" size={14} />
         Recent ({recents.length})
       </div>
       {expanded && (
@@ -380,7 +402,8 @@ function RecentDocuments({
             recents.map((doc) => (
               <div
                 key={doc.path}
-                className="backlink-item"
+                className="tree-item"
+                style={{ "--indent": 0 } as React.CSSProperties}
                 title={doc.path}
                 onClick={async (e) => {
                   try {
@@ -390,7 +413,8 @@ function RecentDocuments({
                   }
                 }}
               >
-                <div className="backlink-title">{doc.name}</div>
+                <span className="tree-item-icon"><Icon name="file-text" size={14} /></span>
+                <span className="tree-item-label">{doc.name}</span>
               </div>
             ))
           )}
@@ -557,12 +581,16 @@ export function ContextPanel() {
 
   return (
     <div className={`context-panel ${visible ? "" : "collapsed"}`}>
-      {/* Calendar */}
-      <Calendar onDateClick={handleDateClick} onWeekClick={handleWeekClick} />
-      {calendarError && (
-        <div className="calendar-error">{calendarError}</div>
-      )}
+      {/* Calendar — pinned */}
+      <div className="context-panel-pinned">
+        <Calendar onDateClick={handleDateClick} onWeekClick={handleWeekClick} />
+        {calendarError && (
+          <div className="calendar-error">{calendarError}</div>
+        )}
+      </div>
 
+      {/* Scrollable content */}
+      <div className="context-panel-scrollable">
       {/* Bookmark toggle button */}
       {activeTabPath && (
         <div className="context-panel-bookmark-row">
@@ -597,6 +625,7 @@ export function ContextPanel() {
           onClick={toggleBacklinks}
         >
           <span className="collapse-arrow"><Icon name={backlinksExpanded ? "chevron-down" : "chevron-right"} size={14} /></span>
+          <Icon name="link" size={14} />
           Backlinks ({backlinks.length})
         </div>
 
@@ -633,6 +662,7 @@ export function ContextPanel() {
 
       {/* Recent Documents */}
       <RecentDocuments expanded={recentExpanded} onToggle={toggleRecent} />
+      </div>
     </div>
   );
 }

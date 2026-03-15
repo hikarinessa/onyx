@@ -29,6 +29,7 @@ interface SessionData {
   themeId?: string;
   accordionState?: AccordionState;
   orphanPaths?: string[];
+  orphanIcon?: string;
   timestamp: number;
 }
 
@@ -50,6 +51,7 @@ function getSessionData(): SessionData {
     themeId: getActiveThemeId(),
     accordionState: state.accordionState,
     orphanPaths: state.orphanPaths,
+    orphanIcon: state.orphanIcon,
     timestamp: Date.now(),
   };
 }
@@ -148,6 +150,11 @@ export async function restoreSession(): Promise<void> {
     for (const [key, val] of Object.entries(data.accordionState)) {
       state.setAccordionExpanded(key as keyof AccordionState, val);
     }
+  }
+
+  // Restore orphan icon
+  if (data.orphanIcon) {
+    state.setOrphanIcon(data.orphanIcon);
   }
 
   // Restore orphan paths — allow in Rust, validate existence, remove dead ones
