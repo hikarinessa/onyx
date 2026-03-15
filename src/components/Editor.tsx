@@ -350,10 +350,12 @@ export function clearEditorCache(path: string) {
   clearAutoFoldForTab(path);
 }
 
-/** Cancel pending auto-save for a file (e.g. when deleted externally) */
-export function cancelPendingSave(_path: string) {
-  // The save timer is global (single timer for the most recent edit).
-  // Clearing it prevents any pending save from firing.
+/**
+ * Cancel any pending auto-save.
+ * Note: there's a single global save timer (for the most recent edit across all panes).
+ * This cancels it regardless of which file triggered the save.
+ */
+export function cancelPendingSave() {
   clearTimeout(saveTimer);
 }
 

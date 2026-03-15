@@ -570,6 +570,24 @@ impl Database {
         Ok(results)
     }
 
+    /// Get indexed file paths under a directory prefix (for scoped reconciliation).
+    pub fn get_indexed_paths_by_prefix(&self, prefix: &str) -> Result<Vec<String>, String> {
+        let pattern = format!("{}%", prefix);
+        let mut stmt = self.conn.prepare(
+            "SELECT path FROM files WHERE path LIKE ?1"
+        ).map_err(|e| format!("Failed to prepare prefix paths query: {}", e))?;
+
+        let rows = stmt.query_map(params![pattern], |row| {
+            row.get::<_, String>(0)
+        }).map_err(|e| format!("Failed to query prefix paths: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read path row: {}", e))?);
+        }
+        Ok(results)
+    }
+
     /// Batch delete files by path. More efficient than individual deletes for reconciliation.
     pub fn delete_files_batch(&self, paths: &[String]) -> Result<u32, String> {
         if paths.is_empty() {

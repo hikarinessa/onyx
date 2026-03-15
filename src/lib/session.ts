@@ -202,18 +202,26 @@ export async function restoreSession(): Promise<void> {
     // Set this pane as active so openFileInEditor targets it
     useAppStore.getState().setActivePane(paneId);
 
-    // Validate file existence before opening — skip dead entries
-    for (const tab of paneData.tabs) {
-      try {
-        const exists = await invoke<boolean>("path_exists", { path: tab.path });
-        if (exists) {
-          await openFileInEditor(tab.path, tab.name);
-        } else {
-          console.warn(`Session restore: skipping deleted file ${tab.path}`);
+    // Validate file existence in parallel, then open surviving tabs
+    const checked = await Promise.all(
+      paneData.tabs.map(async (tab) => {
+        try {
+          const exists = await invoke<boolean>("path_exists", { path: tab.path });
+          if (!exists) {
+            console.warn(`Session restore: skipping deleted file ${tab.path}`);
+            return null;
+          }
+          return tab;
+        } catch {
+          return null;
         }
-      } catch (err) {
-        console.error(`Failed to restore tab ${tab.path}:`, err);
-      }
+      })
+    );
+    for (const tab of checked) {
+      if (!tab) continue;
+      await openFileInEditor(tab.path, tab.name).catch((err) =>
+        console.error(`Failed to restore tab ${tab.path}:`, err)
+      );
     }
 
     // Restore per-tab editor mode

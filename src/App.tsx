@@ -38,6 +38,7 @@ interface FsChangeEvent {
   kind: "create" | "modify" | "remove" | "rename";
   path: string;
   old_path?: string;
+  is_dir: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -465,12 +466,12 @@ export default function App() {
       if (cancelled) return;
       invalidateCache();
 
-      const { kind, path, old_path } = event.payload;
+      const { kind, path, old_path, is_dir } = event.payload;
       const store = useAppStore.getState();
 
       if (kind === "remove") {
         // Cancel pending auto-save for this file
-        cancelPendingSave(path);
+        cancelPendingSave();
         // Track as deleted for auto-save guard
         store.addDeletedPath(path);
 
@@ -504,13 +505,12 @@ export default function App() {
         markRecentDocDeleted(path);
       } else if (kind === "rename" && old_path) {
         // Cancel pending auto-save for old path
-        cancelPendingSave(old_path);
+        cancelPendingSave();
 
         const newName = path.split("/").pop() || path;
 
         // Migrate tabs: single file rename or folder rename (prefix match)
-        const isDir = !path.endsWith(".md");
-        if (isDir) {
+        if (is_dir) {
           const oldPrefix = old_path.endsWith("/") ? old_path : old_path + "/";
           for (const tab of store.tabs) {
             if (tab.path.startsWith(oldPrefix)) {

@@ -706,6 +706,7 @@ pub fn rename_file(
         kind: "rename".to_string(),
         path: new_path,
         old_path: Some(old_path),
+        is_dir,
     });
 
     Ok(())
@@ -735,6 +736,7 @@ pub fn trash_file(path: String, state: State<AppState>, app: tauri::AppHandle) -
         kind: "remove".to_string(),
         path,
         old_path: None,
+        is_dir,
     });
 
     Ok(())
@@ -1054,6 +1056,7 @@ pub fn create_periodic_note(
         kind: "create".to_string(),
         path: path_str.clone(),
         old_path: None,
+        is_dir: false,
     });
 
     Ok(CreatePeriodicNoteResult {

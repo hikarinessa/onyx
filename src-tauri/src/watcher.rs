@@ -18,6 +18,7 @@ pub struct FileChangeEvent {
     pub kind: String, // "create", "modify", "remove", "rename"
     pub path: String,
     pub old_path: Option<String>,
+    pub is_dir: bool,
 }
 
 pub struct FileWatcher {
@@ -187,6 +188,7 @@ impl FileWatcher {
                         kind: kind.to_string(),
                         path: path.to_string_lossy().to_string(),
                         old_path: None,
+                        is_dir,
                     };
 
                     if let Err(e) = app_ref.emit("fs:change", &change) {

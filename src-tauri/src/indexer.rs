@@ -60,7 +60,14 @@ impl Indexer {
 
         // 2. Query all indexed paths from DB
         let indexed_paths = {
-            let db_lock = db.lock().unwrap();
+            let db_lock = match db.lock() {
+                Ok(l) => l,
+                Err(e) => {
+                    log::error!("Reconciliation aborted: DB mutex poisoned: {}", e);
+                    let _ = app_handle.emit("index:complete", ());
+                    return;
+                }
+            };
             db_lock.get_all_indexed_paths().unwrap_or_default()
         };
         let indexed_map: std::collections::HashMap<String, Option<i64>> = indexed_paths.into_iter().collect();
@@ -98,7 +105,14 @@ impl Indexer {
         // 4. Execute
         let stale_count = to_remove.len();
         if !to_remove.is_empty() {
-            let db_lock = db.lock().unwrap();
+            let db_lock = match db.lock() {
+                Ok(l) => l,
+                Err(e) => {
+                    log::error!("Failed to lock DB for pruning: {}", e);
+                    let _ = app_handle.emit("index:complete", ());
+                    return;
+                }
+            };
             if let Err(e) = db_lock.delete_files_batch(&to_remove) {
                 log::error!("Failed to prune stale entries: {}", e);
             }
@@ -152,12 +166,11 @@ impl Indexer {
         let dir_prefix = format!("{}/", dir_path.to_string_lossy());
         let indexed_paths = {
             let db_lock = db.lock().map_err(|e| e.to_string())?;
-            db_lock.get_all_indexed_paths().unwrap_or_default()
+            db_lock.get_indexed_paths_by_prefix(&dir_prefix).unwrap_or_default()
         };
 
         let stale: Vec<String> = indexed_paths.into_iter()
-            .filter(|(p, _)| p.starts_with(&dir_prefix) && !disk_files.contains(p))
-            .map(|(p, _)| p)
+            .filter(|p| !disk_files.contains(p))
             .collect();
 
         if !stale.is_empty() {
