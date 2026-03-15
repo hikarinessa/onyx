@@ -79,6 +79,19 @@
     --syntax-strikethrough: var(--text-secondary);
     --syntax-highlight-bg: oklch(0.865 0.1768 90.4 / 0.3);
 
+    /* Overlays & shadows */
+    --overlay-bg: oklch(0.000 0 0 / 0.5);
+    --shadow-popup: 0 4px 12px oklch(0.000 0 0 / 0.3);
+    --shadow-modal: 0 8px 32px oklch(0.000 0 0 / 0.4);
+    --close-btn-bg: oklch(0.536 0.1912 30.1);
+    --close-btn-text: oklch(1.000 0 0);
+    --error-bg-subtle: oklch(0.645 0.1837 23.8 / 0.1);
+    --error-bg-medium: oklch(0.645 0.1837 23.8 / 0.15);
+    --error-bg-strong: oklch(0.645 0.1837 23.8 / 0.25);
+    --modified-bg-subtle: oklch(0.768 0.1321 71.0 / 0.1);
+    --search-match-bg: oklch(0.657 0.1759 286.1 / 0.25);
+    --search-match-selected-bg: oklch(0.657 0.1759 286.1 / 0.45);
+
     /* Spacing */
     --paragraph-spacing: 0px;
     --list-indent: 24px;
