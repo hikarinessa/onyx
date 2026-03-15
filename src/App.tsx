@@ -33,6 +33,7 @@ import { invalidateCache } from "./lib/ipcCache";
 import { loadAndApplyConfig } from "./lib/configBridge";
 import { clearEditorCache, migrateEditorCache, cancelPendingSave, lastSavedContent, replaceTabContent } from "./components/Editor";
 import { updateRecentDocPath, markRecentDocDeleted } from "./lib/recentDocs";
+import { selectAllTabs } from "./stores/app";
 
 interface FsChangeEvent {
   kind: "create" | "modify" | "remove" | "rename";
@@ -461,6 +462,12 @@ export default function App() {
       }
     });
 
+    // Buffer remove events to handle the macOS rename race:
+    // On macOS, a rename produces Remove(old) + Create(new) from the watcher,
+    // racing with the command's Rename event. We buffer removes for 300ms —
+    // if a rename event arrives that matches, we cancel the remove processing.
+    const pendingRemoves = new Map<string, ReturnType<typeof setTimeout>>();
+
     // Central fs:change handler — cross-cutting concerns (tabs, cache, auto-save guard)
     const unlistenFsChange = listen<FsChangeEvent>("fs:change", (event) => {
       if (cancelled) return;
@@ -470,49 +477,57 @@ export default function App() {
       const store = useAppStore.getState();
 
       if (kind === "remove") {
-        // Cancel pending auto-save for this file
         cancelPendingSave();
-        // Track as deleted for auto-save guard
         store.addDeletedPath(path);
 
-        // Handle affected tabs (file or folder prefix match)
-        const prefix = path.endsWith("/") ? path : path + "/";
-        const affected = store.tabs.filter(
-          (t) => t.path === path || t.path.startsWith(prefix)
-        );
+        // Buffer the remove — a rename event may follow within 300ms
+        const timer = setTimeout(() => {
+          pendingRemoves.delete(path);
+          // Process the remove: close/mark tabs, refresh tree
+          const s = useAppStore.getState();
+          const prefix = path.endsWith("/") ? path : path + "/";
+          const affected = selectAllTabs(s).filter(
+            (t) => t.path === path || t.path.startsWith(prefix)
+          );
+          if (affected.length > 0) {
+            const toClose = affected.filter((t) => !t.modified);
+            const toMark = affected.filter((t) => t.modified);
+            for (const tab of toClose) {
+              clearEditorCache(tab.path);
+            }
+            if (toClose.length > 0) {
+              s.removeTabs(toClose.map((t) => t.id));
+            }
+            for (const tab of toMark) {
+              s.addDeletedPath(tab.path);
+            }
+          }
+          s.bumpFileTreeVersion();
+          s.bumpBookmarkVersion();
+          markRecentDocDeleted(path);
+        }, 300);
+        pendingRemoves.set(path, timer);
 
-        // Clean tabs → close silently. Dirty tabs → keep open with visual indicator.
-        const toClose = affected.filter((t) => !t.modified);
-        const toMark = affected.filter((t) => t.modified);
-
-        for (const tab of toClose) {
-          clearEditorCache(tab.path);
-        }
-        if (toClose.length > 0) {
-          store.removeTabs(toClose.map((t) => t.id));
-        }
-        // Dirty tabs stay open — deletedPaths membership is the visual signal
-        // (TabBar and StatusBar check this for styling)
-        for (const tab of toMark) {
-          store.addDeletedPath(tab.path);
-        }
-
-        // Refresh tree + bookmarks
-        store.bumpFileTreeVersion();
-        store.bumpBookmarkVersion();
-
-        // Mark in recent docs
-        markRecentDocDeleted(path);
       } else if (kind === "rename" && old_path) {
-        // Cancel pending auto-save for old path
         cancelPendingSave();
+
+        // Cancel any buffered remove for the old path (it was a rename, not a delete)
+        const pendingTimer = pendingRemoves.get(old_path);
+        if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          pendingRemoves.delete(old_path);
+        }
+
+        // Clear deleted markers
+        store.removeDeletedPath(old_path);
+        store.removeDeletedPath(path);
 
         const newName = path.split("/").pop() || path;
 
-        // Migrate tabs: single file rename or folder rename (prefix match)
+        // Migrate tabs — idempotent (no-op if fileOps already updated them)
         if (is_dir) {
           const oldPrefix = old_path.endsWith("/") ? old_path : old_path + "/";
-          for (const tab of store.tabs) {
+          for (const tab of selectAllTabs(store)) {
             if (tab.path.startsWith(oldPrefix)) {
               const migratedPath = path + tab.path.slice(old_path.length);
               const migratedName = migratedPath.split("/").pop() || migratedPath;
@@ -521,39 +536,31 @@ export default function App() {
             }
           }
         } else {
-          const openTab = store.tabs.find((t) => t.path === old_path);
+          const openTab = selectAllTabs(store).find((t) => t.path === old_path);
           if (openTab) {
             store.updateTabPath(openTab.id, path, newName);
             migrateEditorCache(old_path, path);
           }
         }
 
-        // Refresh tree
         store.bumpFileTreeVersion();
-
-        // Update recent docs
         updateRecentDocPath(old_path, path, newName);
       } else if (kind === "create") {
-        // Refresh tree for new files
         store.bumpFileTreeVersion();
       }
-      // "modify" from watcher — auto-reload clean tabs, conflict prompt for dirty
+
       if (kind === "modify") {
-        const openTab = store.tabs.find((t) => t.path === path);
-        if (openTab) {
-          if (!openTab.modified) {
-            // Clean tab: auto-reload if content actually changed
+        const modifyTab = selectAllTabs(store).find((t) => t.path === path);
+        if (modifyTab) {
+          if (!modifyTab.modified) {
             invoke<string>("read_file", { path }).then((newContent) => {
-              const cached = lastSavedContent.get(openTab.id);
+              const cached = lastSavedContent.get(modifyTab.id);
               if (cached !== undefined && cached !== newContent) {
-                replaceTabContent(openTab.id, newContent);
-                lastSavedContent.set(openTab.id, newContent);
+                replaceTabContent(modifyTab.id, newContent);
+                lastSavedContent.set(modifyTab.id, newContent);
               }
-            }).catch(() => {
-              // File may have been deleted between event and read — ignore
-            });
+            }).catch(() => {});
           } else {
-            // Dirty tab: mark conflict so user sees the reload prompt
             store.setSaveConflictPath(path);
           }
         }
@@ -584,6 +591,8 @@ export default function App() {
       unlisten.then((fn) => fn());
       unlistenFsChange.then((fn) => fn());
       unlistenDragDrop.then((fn) => fn());
+      for (const timer of pendingRemoves.values()) clearTimeout(timer);
+      pendingRemoves.clear();
     };
   }, []);
 

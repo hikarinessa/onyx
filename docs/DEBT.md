@@ -60,6 +60,7 @@ Consolidated from CLAUDE.md and ARCHITECTURE.md. Items are grouped by area, not 
 - **`useToday` timer drift on sleep/wake.** (#27) Midnight timer can drift if machine sleeps. Stale "today" highlight until next month navigation.
 - **Untyped property type inference is basic.** (#20) `ContextPanel.tsx` infers types via simple typeof checks. Won't handle edge cases like numeric strings, nested objects, or null.
 - **Split panes not yet implemented.** ARCHITECTURE.md specifies split panes but Phase 7 shipped without them. Planned for Phase 9.
+- **Compat getters `store.tabs` / `store.activeTabId` are fragile.** Zustand's `Object.assign` merge destroys `get` accessors on first `set()`. They work in React selectors but return stale data from imperative code (`getState().tabs`). All imperative callers have been migrated to `selectAllTabs()` / direct `paneState` access. Long-term: remove the compat getters entirely and make all consumers pane-aware.
 
 ## Open — Database & Indexing
 

@@ -271,6 +271,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // ── Compat getters ──
+  // WARNING: These getters are destroyed by Zustand's Object.assign merge on first set().
+  // They work in React selectors (useAppStore(s => s.tabs)) but return STALE data from
+  // imperative code (useAppStore.getState().tabs). Use selectAllTabs() or read
+  // paneState.panes directly for imperative access.
   get tabs() {
     return activePane(get()).tabs;
   },

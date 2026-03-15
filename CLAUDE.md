@@ -127,6 +127,10 @@ cargo test               # Rust unit tests
 npx tsc --noEmit         # TypeScript type check
 ```
 
+## GitHub Issues
+
+Every issue must have exactly one label from each category: **Priority**, **Type**, **Status**. Defaults: `P3-Medium`, `Task`, `Backlog`. See `docs/ISSUES.md` for full label list and creation commands.
+
 ## Gotchas
 
 - **Kill `cargo tauri dev` before making Rust changes.** The dev server watches Rust files and auto-rebuilds + relaunches the app on every save, causing repeated open/close cycles during multi-file edits. Stop the dev process first, make all backend changes, verify with `cargo check`, then relaunch once when ready to test.
@@ -141,5 +145,6 @@ npx tsc --noEmit         # TypeScript type check
 - **Mtime conflict on first save:** The mtime map starts empty. First save of a file falls back to content comparison (no mtime recorded yet). After the first `read_file`, mtime is tracked and subsequent writes use the cheap mtime check.
 - **Orphan files need `allow_path` before IPC.** Files outside registered directories are blocked by `validate_path`. Call `invoke("allow_path", { path })` before `read_file`/`write_file` for orphan files. `openFileInEditor` handles this automatically.
 - **Mtime conflict surfaces in StatusBar.** When `write_file` rejects due to external modification, it returns `CONFLICT:` prefix. The auto-save catches this, sets `saveConflictPath` in the store, and the StatusBar shows a clickable reload prompt.
+- **Zustand compat getters (`store.tabs`, `store.activeTabId`) are broken for imperative access.** Zustand's `set()` does `Object.assign({}, state, partial)` which invokes `get` accessors and copies the return value as a plain property. After the first `set()`, these getters freeze into stale snapshots. React selectors (`useAppStore(s => s.tabs)`) work because they re-run on state change. **For imperative code** (fileOps, event handlers, etc.), use `selectAllTabs(useAppStore.getState())` or read `paneState.panes` directly.
 - **CM6 cursor positioning: use padding, not margins.** `margin-top` on `.cm-line` breaks cursor calculations. Use `padding-top` instead. After external CSS changes to font/sizing, call `requestMeasure()` via the `setRemeasureHook` pattern in `configBridge.ts`.
 - **CM6 syntax highlight spans override line-level colour.** `Decoration.line({ class })` sets colour on `.cm-line`, but CM6's markdown grammar wraps text in `<span class="ͼX">` with its own `color`. Child spans must use `color: inherit !important` to respect the line-level colour.
