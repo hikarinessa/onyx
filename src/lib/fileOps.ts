@@ -1,13 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/app";
+import { useAppStore, selectAllTabs, type Tab } from "../stores/app";
 import { loadFileIntoCache, migrateEditorCache, clearEditorCache } from "../components/Editor";
+
+/** Get live tabs from paneState (the compat `store.tabs` getter is broken by Zustand's Object.assign) */
+function getAllTabs(): Tab[] {
+  return selectAllTabs(useAppStore.getState());
+}
 
 /**
  * Centralized file operations module.
  *
  * Every file mutation (create, rename, delete) goes through here.
- * Each function owns the full sequence: disk → DB → tabs → editor caches → tree refresh.
- * Components should call these functions, never invoke Rust commands directly for mutations.
+ * Rust commands emit fs:change events for external consumers (calendar, backlinks, etc.).
+ * fileOps does synchronous UI updates (tabs, caches, tree) for responsiveness — the
+ * fs:change event handler in App.tsx is idempotent and handles anything fileOps missed
+ * (e.g. external changes from the watcher).
  */
 
 /** Create a new note in a directory, open it, and return its path */
@@ -20,43 +27,47 @@ export async function createNote(dirPath: string): Promise<string> {
   return path;
 }
 
-/** Rename a file (not a folder), updating all caches */
+/** Rename a file (not a folder), updating tabs and caches synchronously */
 export async function renameFile(oldPath: string, newPath: string): Promise<void> {
   const newName = newPath.split("/").pop() || newPath;
 
   await invoke("rename_file", { oldPath, newPath });
+  // Rust emits fs:change rename — but we update the tab synchronously for responsiveness.
+  // The event handler in App.tsx will no-op if the tab was already updated.
 
-  // Update tab if this file is open
-  const { tabs, updateTabPath } = useAppStore.getState();
-  const openTab = tabs.find((t) => t.path === oldPath);
+  const store = useAppStore.getState();
+  const allTabs = getAllTabs();
+  const openTab = allTabs.find((t) => t.path === oldPath);
   if (openTab) {
-    updateTabPath(openTab.id, newPath, newName);
+    store.updateTabPath(openTab.id, newPath, newName);
     migrateEditorCache(oldPath, newPath);
   }
 
-  useAppStore.getState().bumpFileTreeVersion();
+  // Clear any stale deleted marker for the old path
+  store.removeDeletedPath(oldPath);
+  store.bumpFileTreeVersion();
 }
 
-/** Rename a folder, updating all affected tabs and caches */
+/** Rename a folder, updating all affected tabs and caches synchronously */
 export async function renameFolder(oldPath: string, newPath: string): Promise<void> {
   await invoke("rename_file", { oldPath, newPath });
 
-  // Migrate all tabs whose path starts with the old folder path
-  const { tabs, updateTabPath } = useAppStore.getState();
+  const store = useAppStore.getState();
+  const allTabs = getAllTabs();
   const oldPrefix = oldPath.endsWith("/") ? oldPath : oldPath + "/";
-  for (const tab of tabs) {
+  for (const tab of allTabs) {
     if (tab.path.startsWith(oldPrefix)) {
       const migratedPath = newPath + tab.path.slice(oldPath.length);
       const migratedName = migratedPath.split("/").pop() || migratedPath;
-      updateTabPath(tab.id, migratedPath, migratedName);
+      store.updateTabPath(tab.id, migratedPath, migratedName);
       migrateEditorCache(tab.path, migratedPath);
     }
   }
 
-  useAppStore.getState().bumpFileTreeVersion();
+  store.bumpFileTreeVersion();
 }
 
-/** Delete a file or folder (move to OS trash), cleaning up all caches */
+/** Delete a file or folder (move to OS trash), cleaning up tabs and caches synchronously */
 export async function deleteFile(path: string): Promise<void> {
   // Check for incoming links and warn the user
   if (path.endsWith(".md")) {
@@ -75,24 +86,25 @@ export async function deleteFile(path: string): Promise<void> {
   }
 
   await invoke("trash_file", { path });
+  // Rust emits fs:change remove — but we clean up tabs synchronously.
+  // The event handler in App.tsx will no-op if tabs were already closed.
 
-  // Find all affected tabs (exact match for files, prefix match for folders)
-  const { tabs } = useAppStore.getState();
+  const store = useAppStore.getState();
+  const allTabs = getAllTabs();
   const prefix = path.endsWith("/") ? path : path + "/";
-  const affectedTabs = tabs.filter(
+  const affectedTabs = allTabs.filter(
     (t) => t.path === path || t.path.startsWith(prefix)
   );
 
   for (const tab of affectedTabs) {
     clearEditorCache(tab.path);
   }
-
   if (affectedTabs.length > 0) {
-    useAppStore.getState().removeTabs(affectedTabs.map((t) => t.id));
+    store.removeTabs(affectedTabs.map((t) => t.id));
   }
 
-  useAppStore.getState().bumpFileTreeVersion();
-  useAppStore.getState().bumpBookmarkVersion();
+  store.bumpFileTreeVersion();
+  store.bumpBookmarkVersion();
 }
 
 /** Create a folder, returning its path */
@@ -114,8 +126,10 @@ export async function createFolder(parentPath: string): Promise<string> {
  * Used by Cmd+N and the command palette.
  */
 export async function createNewNote(): Promise<void> {
-  const { tabs, activeTabId } = useAppStore.getState();
-  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const allTabs = getAllTabs();
+  const activeTabId = useAppStore.getState().paneState.panes
+    .find((p) => p.id === useAppStore.getState().paneState.activePaneId)?.activeTabId;
+  const activeTab = allTabs.find((t) => t.id === activeTabId);
   const dir = activeTab
     ? activeTab.path.replace(/\/[^/]+$/, "")
     : undefined;

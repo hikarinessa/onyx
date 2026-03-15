@@ -1,9 +1,10 @@
 use crate::AppState;
+use crate::watcher::FileChangeEvent;
 use chrono::{Datelike, NaiveDate};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::object_types::{self, ObjectType};
 use crate::periodic;
@@ -143,13 +144,16 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
         }
 
         if let Some(&last_known) = mtimes.get(&canonical_key) {
+            if !target.exists() {
+                return Err("DELETED:File no longer exists on disk.".to_string());
+            }
             if let Ok(meta) = std::fs::metadata(&target) {
                 if let Ok(current_mtime) = meta.modified() {
                     if current_mtime == last_known {
                         // mtime matches our last write — disk content is what we put there.
                         // JS side only triggers saves when content differs, so proceed to write.
                     } else {
-                        return Err("CONFLICT:File was modified externally. Reload before saving.".to_string());
+                        return Err("CONFLICT:File was modified externally.".to_string());
                     }
                 }
             }
@@ -242,13 +246,13 @@ pub fn register_directory(
     }
     drop(watcher_lock);
 
-    // Trigger indexing of the new directory
+    // Trigger indexing of the new directory (reconcile handles add + prune)
     let dir_id = dir.id.clone();
     let dir_path = dir.path.clone();
     let db_ref = state.db.clone();
     let app_ref = app.clone();
     std::thread::spawn(move || {
-        crate::indexer::Indexer::full_scan(&[(dir_id, dir_path)], &db_ref, &app_ref);
+        crate::indexer::Indexer::reconcile(&[(dir_id, dir_path)], &db_ref, &app_ref);
     });
 
     Ok(dir)
@@ -663,6 +667,7 @@ pub fn rename_file(
     old_path: String,
     new_path: String,
     state: State<AppState>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     let old = PathBuf::from(&old_path);
     let new = PathBuf::from(&new_path);
@@ -694,12 +699,21 @@ pub fn rename_file(
     } else {
         db.rename_file(&old_path, &new_path)?;
     }
+    drop(db);
+
+    // Emit fs:change rename event before returning
+    let _ = app.emit("fs:change", &FileChangeEvent {
+        kind: "rename".to_string(),
+        path: new_path,
+        old_path: Some(old_path),
+        is_dir,
+    });
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn trash_file(path: String, state: State<AppState>) -> Result<(), String> {
+pub fn trash_file(path: String, state: State<AppState>, app: tauri::AppHandle) -> Result<(), String> {
     let file_path = PathBuf::from(&path);
     validate_path(&file_path, &state)?;
 
@@ -715,6 +729,15 @@ pub fn trash_file(path: String, state: State<AppState>) -> Result<(), String> {
     } else {
         db.delete_file(&path)?;
     }
+    drop(db);
+
+    // Emit fs:change remove event before returning
+    let _ = app.emit("fs:change", &FileChangeEvent {
+        kind: "remove".to_string(),
+        path,
+        old_path: None,
+        is_dir,
+    });
 
     Ok(())
 }
@@ -924,6 +947,7 @@ pub fn create_periodic_note(
     period_type: String,
     date: String,
     state: State<AppState>,
+    app: tauri::AppHandle,
 ) -> Result<CreatePeriodicNoteResult, String> {
     // Accept YYYY-MM-DD or YYYY-Www (ISO week → Monday of that week)
     let parsed_date = if date.contains("-W") {
@@ -1023,12 +1047,17 @@ pub fn create_periodic_note(
         format!("Failed to create periodic note: {}", e)
     })?;
 
-    // Index the new file immediately so it shows up in search/backlinks
+    // Full reindex so frontmatter, links, and tags are extracted immediately
     let path_str = full_path.to_string_lossy().to_string();
-    {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
-        let _ = db.upsert_file(&path_str, &dir_id, Some(&title), None, None);
-    }
+    let _ = crate::indexer::Indexer::reindex_file(&full_path, &dir_id, &state.db);
+
+    // Emit fs:change create event before returning
+    let _ = app.emit("fs:change", &FileChangeEvent {
+        kind: "create".to_string(),
+        path: path_str.clone(),
+        old_path: None,
+        is_dir: false,
+    });
 
     Ok(CreatePeriodicNoteResult {
         path: path_str,

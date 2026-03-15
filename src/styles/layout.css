@@ -16,13 +16,54 @@
     min-height: 0;
   }
 
-  /* Editor column — contains tab bar + editor, fills space between sidebar and context panel */
+  /* Editor column — contains panes (each with tab bar + editor) */
   .editor-column {
     flex: 1;
+    display: flex;
+    flex-direction: row;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* Pane column — one editor pane with its tab bar */
+  .pane-column {
     display: flex;
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Pane divider — draggable resize handle */
+  .pane-divider {
+    width: 1px;
+    background: var(--border-subtle);
+    cursor: col-resize;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .pane-divider::after {
+    content: "";
+    position: absolute;
+    inset: 0 -3px;
+    z-index: 10;
+  }
+
+  .pane-divider:hover {
+    background: var(--accent);
+  }
+
+  /* Editor pane wrapper */
+  .editor-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .editor-pane:not(.editor-pane-active) .editor-inline-title {
+    opacity: 0.6;
   }
 
   /* Editor area */
@@ -169,6 +210,10 @@
     display: none;
   }
 
+  .tabbar-inactive {
+    opacity: 0.6;
+  }
+
   .tab {
     display: flex;
     align-items: center;
@@ -208,6 +253,15 @@
     border-radius: 50%;
     background: var(--status-modified);
     flex-shrink: 0;
+  }
+
+  .tab-deleted {
+    font-style: italic;
+    opacity: 0.6;
+  }
+  .tab-deleted .tab-label {
+    text-decoration: line-through;
+    color: var(--status-error, #e55);
   }
 
   .tab-close {

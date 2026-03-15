@@ -448,6 +448,7 @@ export function ContextPanel() {
   const activeTabPath = useAppStore(selectActiveTabPath);
   const activeTabName = useAppStore(selectActiveTabName);
   const saveVersion = useAppStore((s) => s.saveVersion);
+  const fileTreeVersion = useAppStore((s) => s.fileTreeVersion);
 
   const [backlinks, setBacklinks] = useState<BacklinkRecord[]>([]);
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -489,7 +490,7 @@ export function ContextPanel() {
         setBacklinks([]);
       });
     return () => { stale = true; };
-  }, [activeTabId]);
+  }, [activeTabId, fileTreeVersion]);
 
   // Check bookmark state (directory bookmark OR global bookmark)
   useEffect(() => {

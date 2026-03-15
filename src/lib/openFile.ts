@@ -26,20 +26,23 @@ export async function openFileInEditor(
 ): Promise<void> {
   recordRecentDoc(path, name);
 
-  const store = useAppStore.getState();
+  const s = useAppStore.getState();
+  const { paneState } = s;
 
-  // Already open? Just switch.
-  const existing = store.tabs.find((t) => t.path === path);
-  if (existing) {
-    // Push nav entry before switching if replacing
-    if (opts?.replaceActive && store.activeTabId) {
-      store.pushNav(store.activeTabId, { path: store.activeTabId, cursor: 0 });
+  // Check if already open in any pane — focus it
+  for (const pane of paneState.panes) {
+    const existing = pane.tabs.find((t) => t.path === path);
+    if (existing) {
+      const activePane = paneState.panes.find((p) => p.id === paneState.activePaneId);
+      if (opts?.replaceActive && activePane?.activeTabId) {
+        s.pushNav(activePane.activeTabId, { path: activePane.activeTabId, cursor: 0 });
+      }
+      s.setActiveTab(existing.id);
+      return;
     }
-    store.setActiveTab(existing.id);
-    return;
   }
 
-  // Check if orphan — if so, allow the path on the Rust side before reading
+  // Check if orphan
   const underDir = await isUnderRegisteredDir(path);
   if (!underDir) {
     await invoke("allow_path", { path });
@@ -49,12 +52,16 @@ export async function openFileInEditor(
   const content = await invoke<string>("read_file", { path });
   loadFileIntoCache(path, content);
 
-  if (opts?.replaceActive && store.activeTabId) {
-    // Push current location to nav stack before replacing
-    store.pushNav(store.activeTabId, { path: store.activeTabId, cursor: 0 });
-    store.replaceActiveTab(path, name);
+  // Read fresh state after await
+  const fresh = useAppStore.getState();
+  const freshPane = fresh.paneState.panes.find((p) => p.id === fresh.paneState.activePaneId);
+  const activeTabId = freshPane?.activeTabId;
+
+  if (opts?.replaceActive && activeTabId) {
+    fresh.pushNav(activeTabId, { path: activeTabId, cursor: 0 });
+    fresh.replaceActiveTab(path, name);
   } else {
-    store.openFile(path, name);
+    fresh.openFile(path, name);
   }
 }
 

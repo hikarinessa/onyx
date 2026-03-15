@@ -23,8 +23,8 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 7.7 (Lucide Icons) | 0.7.7 ✅ |
 | Phase 7.8 (Polish & Deferred) | 0.7.8 ✅ |
 | Phase 8 (Tables) | 0.8.0 ✅ |
-| Phase 9 (Split Panes) | 0.9.0 |
-| Phase 10 (Per-Block Features) | 0.10.0 |
+| Phase 9 (Per-Block Features + Full-Text Search) | 0.9.0 ✅ |
+| Phase 10 (Split Panes + FS Reactivity) | 0.10.0 ✅ |
 | Phase 11 (MCP Server) | 0.11.0 |
 | Phase 12 (Tier 2) | 0.12.0 |
 
@@ -700,27 +700,29 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
 ---
 
-## Phase 10 — Split Panes
+## Phase 10 — Split Panes + FS Reactivity ✅
 
-**Goal:** Two-pane editing with independent tab bars. Reference one note while writing another.
+**Goal:** Two-pane editing with independent tab bars + unified file system reactivity.
 
-### Steps
+### Split Panes (complete)
+- ✅ Pane-aware Zustand store (array-based, max 3 panes)
+- ✅ `EditorPane` extraction, per-pane `TabBar`, draggable divider
+- ✅ Cmd+click wikilink → open in other pane; Cmd+Shift+Click → open in next pane
+- ✅ Pane shortcuts (Cmd+1/2/3 focus, Cmd+Shift+| move tab, Cmd+\ split)
+- ✅ Scroll lock: synchronized scrolling between panes
+- ✅ Session persistence for pane layout + split ratios
 
-10.1 **Architecture**
-- Add to Zustand: `paneLayout: { type: 'single' | 'split'; activePaneId: 'left' | 'right' }`, `splitRatio: number`
-- Per-pane tab lists + active tab IDs
-- Extract core editor logic from `Editor.tsx` into `EditorPane.tsx` — each pane owns its own `EditorView` instance
-- Module-level caches (`editorStateCache`, `scrollCache`, `lastSavedContent`) stay shared (keyed by tab ID)
-- `Editor.tsx` becomes a layout container rendering 1 or 2 `EditorPane` components
+### FS Reactivity (complete)
+- ✅ Rust commands emit `fs:change` events (create/remove/rename) for all mutations
+- ✅ Startup reconciliation replaces full_scan (diffs disk vs DB, prunes stale entries)
+- ✅ Auto-save guard (`deletedPaths` set + `DELETED:` error code from Rust)
+- ✅ Tab lifecycle: clean tabs close on external delete, dirty tabs get visual indicator
+- ✅ External modify: auto-reload clean tabs (content-hash check), conflict prompt for dirty
+- ✅ Backlink resolution: new files auto-resolve dangling `target_id = NULL` links
+- ✅ Rescan handling: FSEvents overflow triggers targeted directory reconciliation
+- ✅ Remove events buffered 300ms to handle macOS watcher rename race
 
-10.2 **Interactions & persistence**
-- `TabBar` accepts optional `paneId` prop for pane-specific tab list
-- Cmd+click on wikilink → open in split (or in inactive pane if already split)
-- Draggable divider: mousedown/move/up adjusts flex-basis, stored as `splitRatio`
-- Cmd+W: if last tab in split pane, close pane → single layout
-- Persist pane layout + split ratio in SessionData
-
-**Milestone:** Two-pane editing works. Cmd+click opens in split, draggable divider, independent tab bars per pane. Closing last tab in a pane collapses to single layout.
+See `docs/FS_REACTIVITY_SPEC.md` for full design spec.
 
 ---
 

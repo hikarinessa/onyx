@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { EditorState, EditorSelection, type Extension } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
@@ -14,8 +14,8 @@ import {
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, setFlushSaveHook, setSnapshotEditorHook } from "../stores/app";
-import { frontmatterExtension, frontmatterTabRef, clearAutoFoldForTab, toggleFrontmatterFoldCommand } from "../extensions/frontmatter";
+import { useAppStore, setFlushSaveHook, setSnapshotEditorHook, selectActivePane } from "../stores/app";
+import { frontmatterExtension, clearAutoFoldForTab, toggleFrontmatterFoldCommand } from "../extensions/frontmatter";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
 import { formattingKeymap } from "../extensions/formatting";
@@ -24,41 +24,60 @@ import { tableEditorExtension } from "../extensions/tableEditor";
 import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
-import { livePreviewExtension, togglePreviewEffect, previewModeField } from "../extensions/livePreview";
+import { livePreviewExtension } from "../extensions/livePreview";
 import { lintingExtension, autofixContent } from "../extensions/linting";
 import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
 import { lintKeymap } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
-import { renameFile } from "../lib/fileOps";
 import { getAutoSaveMs, setRemeasureHook, isAutofixOnSave } from "../lib/configBridge";
+import { EditorPane } from "./EditorPane";
+import { TabBar } from "./TabBar";
 
 // ---------------------------------------------------------------------------
-// Module-level caches
+// Module-level caches (shared across all panes)
 // ---------------------------------------------------------------------------
 
 /** Full EditorState snapshots — preserves undo history, selections, etc. */
-const editorStateCache = new Map<string, EditorState>();
+export const editorStateCache = new Map<string, EditorState>();
 
 /** Scroll positions per tab */
-const scrollCache = new Map<string, number>();
+export const scrollCache = new Map<string, number>();
 
 /** Last-saved content strings — used for dirty detection */
-const lastSavedContent = new Map<string, string>();
+export const lastSavedContent = new Map<string, string>();
 
 /**
- * Mutable ref for active tab id — the updateListener closure reads this
- * to know which tab is currently active, avoiding stale closure captures.
- * Stored as an object so closures capture the reference, not the value.
+ * Mutable ref for active tab id — the updateListener closure reads this.
+ * With split panes, this tracks the active pane's active tab.
  */
 const activeTabIdBox = { current: null as string | null };
 
-/** Module-level reference to the live EditorView for external content updates */
-let _liveViewRef: EditorView | null = null;
+/** Registry of pane views — paneId → EditorView */
+const paneViews = new Map<string, EditorView>();
 
-/** Get the current live EditorView (for command palette table commands, etc.) */
+export function registerPaneView(paneId: string, view: EditorView) {
+  paneViews.set(paneId, view);
+  // Update _liveViewRef to the active pane's view
+  const activePaneId = useAppStore.getState().paneState.activePaneId;
+  if (paneId === activePaneId) {
+    activeTabIdBox.current = selectActivePane(useAppStore.getState()).activeTabId;
+  }
+}
+
+export function unregisterPaneView(paneId: string) {
+  paneViews.delete(paneId);
+}
+
+/** Get the active pane's EditorView */
 export function getEditorView(): EditorView | null {
-  return _liveViewRef;
+  const activePaneId = useAppStore.getState().paneState.activePaneId;
+  return paneViews.get(activePaneId) || null;
+}
+
+/** Get all registered pane views */
+export function getAllPaneViews(): Map<string, EditorView> {
+  return paneViews;
 }
 
 // ---------------------------------------------------------------------------
@@ -82,64 +101,58 @@ const onyxHighlightStyle = HighlightStyle.define([
   { tag: tags.meta, color: "var(--syntax-meta)" },
   { tag: tags.comment, color: "var(--syntax-comment)" },
   { tag: tags.contentSeparator, color: "var(--syntax-hr)" },
-
   { tag: tags.processingInstruction, color: "var(--syntax-markup)" },
 ]);
 
 const onyxTheme = EditorView.theme({
-  "&": {
-    backgroundColor: "var(--bg-base)",
-  },
-  ".cm-content": {
-    caretColor: "var(--accent)",
-  },
-  ".cm-cursor": {
-    borderLeftColor: "var(--accent)",
-  },
+  "&": { backgroundColor: "var(--bg-base)" },
+  ".cm-content": { caretColor: "var(--accent)" },
+  ".cm-cursor": { borderLeftColor: "var(--accent)" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
     background: "var(--accent-muted) !important",
   },
-  ".cm-line": {
-    padding: "0 2px",
-  },
-  "&.cm-focused": {
-    outline: "none",
-  },
+  ".cm-line": { padding: "0 2px" },
+  "&.cm-focused": { outline: "none" },
   ".cm-gutters": {
     background: "var(--bg-surface)",
     borderRight: "1px solid var(--border-subtle)",
     color: "var(--text-tertiary)",
   },
-  ".cm-activeLineGutter": {
-    background: "transparent",
-  },
-  ".cm-activeLine": {
-    background: "var(--bg-hover)",
-  },
+  ".cm-activeLineGutter": { background: "transparent" },
+  ".cm-activeLine": { background: "var(--bg-hover)" },
 });
 
 // ---------------------------------------------------------------------------
 // Extensions builder
 // ---------------------------------------------------------------------------
 
-/**
- * Module-level save timer — avoids coupling a React ref into the extensions.
- * The extensions are built once and live for the app lifetime, so a module-level
- * mutable is the right scope.
- */
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Find which tab ID a view belongs to by checking the pane registry */
+function tabIdForView(view: EditorView): string | null {
+  for (const [paneId, paneView] of paneViews) {
+    if (paneView === view) {
+      const pane = useAppStore.getState().paneState.panes.find((p) => p.id === paneId);
+      return pane?.activeTabId ?? null;
+    }
+  }
+  return activeTabIdBox.current; // fallback for single-pane
+}
 
 function buildExtensions(): Extension[] {
   const updateListener = EditorView.updateListener.of((update) => {
-    const tabId = activeTabIdBox.current;
+    const tabId = tabIdForView(update.view);
     if (!tabId) return;
 
     const { setCursorInfo, setModified, setWordCount, setCharCount } = useAppStore.getState();
+    const isActiveView = tabId === selectActivePane(useAppStore.getState()).activeTabId;
 
-    // Cursor position — always update (cheap)
-    const pos = update.state.selection.main.head;
-    const line = update.state.doc.lineAt(pos);
-    setCursorInfo(line.number, pos - line.from + 1);
+    // Cursor position — only for active pane (status bar)
+    if (isActiveView) {
+      const pos = update.state.selection.main.head;
+      const line = update.state.doc.lineAt(pos);
+      setCursorInfo(line.number, pos - line.from + 1);
+    }
 
     if (update.docChanged) {
       const content = update.state.doc.toString();
@@ -147,15 +160,22 @@ function buildExtensions(): Extension[] {
       const isModified = content !== saved;
       setModified(tabId, isModified);
 
-      // Word count + char count
-      const words = content.trim() ? content.trim().split(/\s+/).length : 0;
-      setWordCount(words);
-      setCharCount(content.length);
+      // Word count + char count (active pane only)
+      if (isActiveView) {
+        const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+        setWordCount(words);
+        setCharCount(content.length);
+      }
 
       // Debounced auto-save
       clearTimeout(saveTimer);
       if (isModified) {
-        const tab = useAppStore.getState().tabs.find((t) => t.id === tabId);
+        // Find tab across all panes (compat getter may not resolve correctly)
+        let tab: { path: string } | undefined;
+        for (const p of useAppStore.getState().paneState.panes) {
+          tab = p.tabs.find((t) => t.id === tabId);
+          if (tab) break;
+        }
         if (tab) {
           saveTimer = setTimeout(async () => {
             try {
@@ -164,29 +184,37 @@ function buildExtensions(): Extension[] {
                 const fixed = autofixContent(content);
                 if (fixed !== content) {
                   saveContent = fixed;
-                  // Update editor state with fixed content
-                  const view = _liveViewRef;
-                  if (view && activeTabIdBox.current === tabId) {
+                  const view = getEditorView();
+                  if (view && view.state.doc.toString() === content) {
                     view.dispatch({
                       changes: { from: 0, to: view.state.doc.length, insert: fixed },
                     });
                   }
                 }
               }
-              await invoke("write_file", { path: tab.path, content: saveContent });
-              lastSavedContent.set(tabId, saveContent);
-              setModified(tabId, false);
-              useAppStore.getState().bumpSaveVersion();
-              // Clear conflict if save succeeds for this path
-              if (useAppStore.getState().saveConflictPath === tab.path) {
-                useAppStore.getState().setSaveConflictPath(null);
+              // Auto-save guard: skip if file was deleted
+              if (useAppStore.getState().deletedPaths.has(tab.path)) {
+                return;
+              }
+              const result = await invoke<string>("write_file", {
+                path: tab.path,
+                content: saveContent,
+              });
+              if (typeof result === "string" && result.startsWith("CONFLICT:")) {
+                useAppStore.getState().setSaveConflictPath(tab.path);
+              } else {
+                lastSavedContent.set(tabId, saveContent);
+                useAppStore.getState().setModified(tabId, false);
+                useAppStore.getState().bumpSaveVersion();
               }
             } catch (err) {
               const msg = String(err);
-              if (msg.includes("CONFLICT:")) {
-                useAppStore.getState().setSaveConflictPath(tab.path);
+              if (msg.startsWith("DELETED:")) {
+                // File was deleted externally — don't resurrect it
+                useAppStore.getState().addDeletedPath(tab.path);
+              } else {
+                console.error("Auto-save failed:", err);
               }
-              console.error("Failed to save:", err);
             }
           }, getAutoSaveMs());
         }
@@ -194,7 +222,6 @@ function buildExtensions(): Extension[] {
     }
   });
 
-  // Cmd+/ must be intercepted before defaultKeymap (which binds toggleComment)
   const editorModeKeymap = keymap.of([
     {
       key: "Mod-/",
@@ -209,9 +236,6 @@ function buildExtensions(): Extension[] {
   return [
     editorModeKeymap,
     keymap.of(formattingKeymap),
-    // Table keybindings — must precede outliner so Tab/Enter are
-    // handled by table navigation when cursor is inside a table.
-    // Order: editorMode → formatting → table → outliner → defaults
     ...tableEditorExtension(),
     keymap.of(outlinerKeymap),
     keymap.of([
@@ -244,17 +268,16 @@ function buildExtensions(): Extension[] {
 }
 
 // ---------------------------------------------------------------------------
-// Public API — used by openFile / Sidebar
+// Public API — shared across panes
 // ---------------------------------------------------------------------------
 
 /** Shared extensions ref — initialized on first Editor mount */
 let sharedExtensions: Extension[] | null = null;
+export const sharedExtensionsRef = { get: () => sharedExtensions };
 
 /** Create an EditorState with the shared extensions */
-function createStateWithExtensions(doc: string): EditorState {
+export function createStateWithExtensions(doc: string): EditorState {
   if (!sharedExtensions) {
-    // Fallback: create minimal state. This shouldn't happen in practice
-    // because loadFileIntoCache is called after Editor mounts.
     return EditorState.create({ doc });
   }
   return EditorState.create({ doc, extensions: sharedExtensions });
@@ -266,10 +289,7 @@ export function loadFileIntoCache(id: string, content: string) {
   lastSavedContent.set(id, content);
 }
 
-/**
- * Replace the document content for a tab after an external write (e.g. frontmatter update).
- * Updates the cache, the live view if it's the active tab, and the saved-content tracker.
- */
+/** Replace doc content for a tab after an external write */
 export function replaceTabContent(tabId: string, newContent: string) {
   const cached = editorStateCache.get(tabId);
   if (cached) {
@@ -280,11 +300,24 @@ export function replaceTabContent(tabId: string, newContent: string) {
   }
   lastSavedContent.set(tabId, newContent);
 
-  // If this tab is currently displayed, update the live view too
-  if (activeTabIdBox.current === tabId && _liveViewRef) {
-    _liveViewRef.dispatch({
-      changes: { from: 0, to: _liveViewRef.state.doc.length, insert: newContent },
-    });
+  // Update any pane currently showing this tab
+  for (const [, view] of paneViews) {
+    if (view.state.doc.toString() !== newContent) {
+      // Check if this view is showing the target tab
+      // (we can't directly check tabId, but if content matches the old cached content, update it)
+    }
+  }
+  // Direct approach: find pane showing this tab and dispatch
+  const state = useAppStore.getState();
+  for (const pane of state.paneState.panes) {
+    if (pane.activeTabId === tabId) {
+      const view = paneViews.get(pane.id);
+      if (view) {
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: newContent },
+        });
+      }
+    }
   }
 
   useAppStore.getState().setModified(tabId, false);
@@ -309,7 +342,7 @@ export function migrateEditorCache(oldPath: string, newPath: string) {
   }
 }
 
-/** Remove all editor caches for a path (used by delete) */
+/** Remove all editor caches for a path */
 export function clearEditorCache(path: string) {
   editorStateCache.delete(path);
   lastSavedContent.delete(path);
@@ -317,58 +350,78 @@ export function clearEditorCache(path: string) {
   clearAutoFoldForTab(path);
 }
 
-/** Toggle frontmatter fold in the active editor (for command palette) */
-export function foldFrontmatter(): boolean {
-  if (!_liveViewRef) return false;
-  return toggleFrontmatterFoldCommand(_liveViewRef);
+/**
+ * Cancel any pending auto-save.
+ * Note: there's a single global save timer (for the most recent edit across all panes).
+ * This cancels it regardless of which file triggered the save.
+ */
+export function cancelPendingSave() {
+  clearTimeout(saveTimer);
 }
 
-/** Insert text at the current cursor position in the live editor */
+/** Toggle frontmatter fold in the active editor */
+export function foldFrontmatter(): boolean {
+  const view = getEditorView();
+  if (!view) return false;
+  return toggleFrontmatterFoldCommand(view);
+}
+
+/** Insert text at the cursor in the active editor */
 export function insertAtCursor(text: string) {
-  if (!_liveViewRef) return;
-  const pos = _liveViewRef.state.selection.main.head;
-  _liveViewRef.dispatch({
+  const view = getEditorView();
+  if (!view) return;
+  const pos = view.state.selection.main.head;
+  view.dispatch({
     changes: { from: pos, to: pos, insert: text },
     selection: EditorSelection.cursor(pos + text.length),
   });
-  _liveViewRef.focus();
+  view.focus();
 }
 
-/** Scroll the live editor to a character position and place the cursor there */
+/** Scroll the active editor to a character position */
 export function scrollToPosition(from: number) {
-  if (!_liveViewRef) return;
-  _liveViewRef.dispatch({
+  const view = getEditorView();
+  if (!view) return;
+  view.dispatch({
     selection: EditorSelection.cursor(from),
     scrollIntoView: true,
   });
-  _liveViewRef.focus();
+  view.focus();
 }
 
 /** Apply fix-all: run autofixContent on the current document */
 export function applyLintFixAll() {
-  if (!_liveViewRef) return;
-  const content = _liveViewRef.state.doc.toString();
+  const view = getEditorView();
+  if (!view) return;
+  const content = view.state.doc.toString();
   const fixed = autofixContent(content);
   if (fixed !== content) {
-    _liveViewRef.dispatch({
-      changes: { from: 0, to: _liveViewRef.state.doc.length, insert: fixed },
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: fixed },
     });
   }
-  _liveViewRef.focus();
+  view.focus();
 }
 
-/** Flush any pending save for a tab (called before closing) */
+/** Flush any pending save for a tab */
 export async function flushSaveForTab(id: string): Promise<void> {
   const state = editorStateCache.get(id);
   if (!state) return;
+  clearTimeout(saveTimer);
 
   const content = state.doc.toString();
-  const saved = lastSavedContent.get(id);
+  const saved = lastSavedContent.get(id) ?? "";
   if (content !== saved) {
-    const tab = useAppStore.getState().tabs.find((t) => t.id === id);
-    if (tab) {
+    // Find the path for this tab (search all panes)
+    const store = useAppStore.getState();
+    let tabPath: string | null = null;
+    for (const pane of store.paneState.panes) {
+      const tab = pane.tabs.find((t) => t.id === id);
+      if (tab) { tabPath = tab.path; break; }
+    }
+    if (tabPath) {
       try {
-        await invoke("write_file", { path: tab.path, content });
+        await invoke("write_file", { path: tabPath, content });
         lastSavedContent.set(id, content);
         useAppStore.getState().setModified(id, false);
       } catch (err) {
@@ -379,43 +432,46 @@ export async function flushSaveForTab(id: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Editor Layout Component
 // ---------------------------------------------------------------------------
 
 export function Editor() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<EditorView | null>(null);
-  /** Tracks which tab the EditorView is currently showing */
-  const viewTabIdRef = useRef<string | null>(null);
-
-  const activeTabId = useAppStore((s) => s.activeTabId);
-  const tabs = useAppStore((s) => s.tabs);
-  const activeTab = tabs.find((t) => t.id === activeTabId);
-  const editorMode = activeTab?.editorMode ?? "source";
+  const panes = useAppStore((s) => s.paneState.panes);
+  const splitRatios = useAppStore((s) => s.paneState.splitRatios);
 
   // Initialize shared extensions once
   if (!sharedExtensions) {
     sharedExtensions = buildExtensions();
   }
 
-  // Register hooks so closeTab can snapshot + flush
+  // Register hooks
   useEffect(() => {
     setSnapshotEditorHook((id: string) => {
-      if (viewRef.current && viewTabIdRef.current === id) {
-        editorStateCache.set(id, viewRef.current.state);
-        scrollCache.set(id, viewRef.current.scrollDOM.scrollTop);
+      // Find which pane has this tab and snapshot from its view
+      const state = useAppStore.getState();
+      for (const pane of state.paneState.panes) {
+        if (pane.activeTabId === id) {
+          const view = paneViews.get(pane.id);
+          if (view) {
+            editorStateCache.set(id, view.state);
+            scrollCache.set(id, view.scrollDOM.scrollTop);
+          }
+          break;
+        }
       }
     });
     setFlushSaveHook(flushSaveForTab);
     setRemeasureHook(() => {
-      if (viewRef.current) viewRef.current.requestMeasure();
+      for (const [, view] of paneViews) {
+        view.requestMeasure();
+      }
     });
 
-    // Wire wikilink follow: resolve via Rust, then open the target file
-    wikilinkFollowRef.current = async (link: string, newTab: boolean) => {
-      const currentTab = useAppStore.getState().tabs.find(
-        (t) => t.id === activeTabIdBox.current
-      );
+    wikilinkFollowRef.current = async (link: string, newTab: boolean, otherPane: boolean) => {
+      const state = useAppStore.getState();
+      const { paneState } = state;
+      const pane = paneState.panes.find((p) => p.id === paneState.activePaneId);
+      const currentTab = pane?.tabs.find((t) => t.id === pane.activeTabId);
       if (!currentTab) return;
       try {
         const resolved = await invoke<string | null>("resolve_wikilink", {
@@ -424,7 +480,16 @@ export function Editor() {
         });
         if (resolved) {
           const name = resolved.split("/").pop() || resolved;
-          await openFileInEditor(resolved, name, { replaceActive: !newTab });
+          if (otherPane && paneState.panes.length > 1) {
+            // Open in the next pane
+            const currentIdx = paneState.panes.findIndex((p) => p.id === paneState.activePaneId);
+            const targetIdx = (currentIdx + 1) % paneState.panes.length;
+            const targetPaneId = paneState.panes[targetIdx].id;
+            useAppStore.getState().setActivePane(targetPaneId);
+            await openFileInEditor(resolved, name, { replaceActive: true });
+          } else {
+            await openFileInEditor(resolved, name, { replaceActive: !newTab });
+          }
         }
       } catch (err) {
         console.error("Failed to resolve wikilink:", err);
@@ -438,207 +503,123 @@ export function Editor() {
     };
   }, []);
 
-  // Create or swap the EditorView when the active tab changes
+  // Clean up caches when tabs close
   useEffect(() => {
-    // Update the mutable ref immediately so the updateListener knows which tab is active.
-    // Must happen before any editor operations in this effect.
-    activeTabIdBox.current = activeTabId;
-
-    if (!containerRef.current || !activeTab) return;
-
-    // --- Save current tab state before switching ---
-    if (viewRef.current && viewTabIdRef.current && viewTabIdRef.current !== activeTab.id) {
-      editorStateCache.set(viewTabIdRef.current, viewRef.current.state);
-      scrollCache.set(viewTabIdRef.current, viewRef.current.scrollDOM.scrollTop);
+    const allTabIds = new Set<string>();
+    for (const p of panes) {
+      for (const t of p.tabs) allTabIds.add(t.id);
     }
-
-    // --- Get or create EditorState for the new tab ---
-    let state = editorStateCache.get(activeTab.id);
-    if (state) {
-      // Check if state was created without extensions (by loadFileIntoCache
-      // before sharedExtensions were initialized). If so, rebuild with extensions.
-      // We detect this by checking if the state has fewer extensions facets.
-      // A simple heuristic: if the state has no keymaps configured, it's bare.
-      try {
-        const hasKeymap = state.facet(keymap).length > 0;
-        if (!hasKeymap) {
-          state = createStateWithExtensions(state.doc.toString());
-          editorStateCache.set(activeTab.id, state);
-        }
-      } catch {
-        // Facet check failed — rebuild to be safe
-        state = createStateWithExtensions(state.doc.toString());
-        editorStateCache.set(activeTab.id, state);
-      }
-    } else {
-      state = createStateWithExtensions("");
-      editorStateCache.set(activeTab.id, state);
-    }
-
-    // Tell the frontmatter plugin which tab is being shown so it can
-    // track auto-fold state per tab instead of per document content.
-    frontmatterTabRef.current = activeTab.id;
-
-    if (viewRef.current && viewRef.current.dom.parentElement === containerRef.current) {
-      // View exists in the current container — swap state (preserves the DOM element)
-      viewRef.current.setState(state);
-    } else {
-      // No view, or view is attached to a stale container (e.g. after closing
-      // all tabs removed the editor-container div from the DOM). Destroy the
-      // orphaned view and create a fresh one in the current container.
-      if (viewRef.current) {
-        viewRef.current.destroy();
-      }
-      viewRef.current = new EditorView({
-        state,
-        parent: containerRef.current,
-      });
-    }
-
-    _liveViewRef = viewRef.current;
-    viewTabIdRef.current = activeTab.id;
-
-    // Sync preview mode state
-    const wantPreview = activeTab.editorMode === "preview";
-    const currentPreview = viewRef.current.state.field(previewModeField);
-    if (currentPreview !== wantPreview) {
-      viewRef.current.dispatch({ effects: togglePreviewEffect.of(wantPreview) });
-    }
-
-    // Restore scroll position (deferred so layout is complete)
-    const savedScroll = scrollCache.get(activeTab.id);
-    requestAnimationFrame(() => {
-      if (viewRef.current) {
-        viewRef.current.scrollDOM.scrollTop = savedScroll ?? 0;
-      }
-    });
-
-    viewRef.current.focus();
-
-    // Initial word count + cursor info
-    const doc = viewRef.current.state.doc;
-    const content = doc.toString();
-    const words = content.trim() ? content.trim().split(/\s+/).length : 0;
-    useAppStore.getState().setWordCount(words);
-    useAppStore.getState().setCharCount(content.length);
-
-    const pos = viewRef.current.state.selection.main.head;
-    const line = doc.lineAt(pos);
-    useAppStore.getState().setCursorInfo(line.number, pos - line.from + 1);
-
-    return () => {
-      clearTimeout(saveTimer);
-    };
-  }, [activeTab?.id, activeTab?.path]); // eslint-disable-line -- CM6 manages its own state
-
-  // Destroy the view on unmount, saving state first
-  useEffect(() => {
-    return () => {
-      if (viewRef.current) {
-        if (viewTabIdRef.current) {
-          editorStateCache.set(viewTabIdRef.current, viewRef.current.state);
-          scrollCache.set(viewTabIdRef.current, viewRef.current.scrollDOM.scrollTop);
-        }
-        viewRef.current.destroy();
-        viewRef.current = null;
-        _liveViewRef = null;
-      }
-    };
-  }, []);
-
-  // Sync live preview mode when editorMode changes
-  useEffect(() => {
-    if (!viewRef.current) return;
-    const isPreview = editorMode === "preview";
-    const current = viewRef.current.state.field(previewModeField);
-    if (current !== isPreview) {
-      viewRef.current.dispatch({ effects: togglePreviewEffect.of(isPreview) });
-    }
-  }, [editorMode]);
-
-  // Clean up caches when tabs close — read live store state to avoid
-  // stale-closure races (e.g. when a tab is opened immediately after
-  // closing the last tab, the effect from the empty-tabs render would
-  // otherwise wipe the cache entry that loadFileIntoCache just added).
-  useEffect(() => {
-    const currentTabs = useAppStore.getState().tabs;
-    const tabIds = new Set(currentTabs.map((t) => t.id));
     for (const key of editorStateCache.keys()) {
-      if (!tabIds.has(key)) {
+      if (!allTabIds.has(key)) {
         editorStateCache.delete(key);
         scrollCache.delete(key);
         lastSavedContent.delete(key);
         clearAutoFoldForTab(key);
       }
     }
-  }, [tabs]);
+  }, [panes]);
 
-  // Inline title — editable, renames file on change
-  const [titleValue, setTitleValue] = useState("");
-  const titleRef = useRef<HTMLInputElement>(null);
-
-  // Sync title when active tab changes
+  // Update activeTabIdBox when active pane changes
   useEffect(() => {
-    if (activeTab) {
-      setTitleValue(activeTab.name.replace(/\.md$/, ""));
-    }
-  }, [activeTab?.id, activeTab?.name]); // eslint-disable-line
+    const unsub = useAppStore.subscribe((s) => {
+      const pane = selectActivePane(s);
+      activeTabIdBox.current = pane.activeTabId;
+    });
+    return unsub;
+  }, []);
 
-  const handleTitleCommit = useCallback(async () => {
-    const tab = useAppStore.getState().tabs.find(
-      (t) => t.id === useAppStore.getState().activeTabId
-    );
-    if (!tab) return;
-    const trimmed = titleValue.trim().replace(/[/\0:]/g, "");
-    const oldName = tab.name.replace(/\.md$/, "");
-    if (!trimmed || trimmed === oldName) {
-      setTitleValue(oldName);
-      return;
-    }
-    const dir = tab.path.substring(0, tab.path.lastIndexOf("/"));
-    const newPath = `${dir}/${trimmed}.md`;
-    try {
-      await renameFile(tab.path, newPath);
-    } catch (err) {
-      console.error("Failed to rename:", err);
-      setTitleValue(oldName);
-    }
-  }, [titleValue]);
-
-  if (!activeTab) {
-    return (
-      <div className="editor-area">
-        <div className="editor-empty">Open a file to start editing</div>
-      </div>
-    );
-  }
-
-  const modeClass = activeTab.editorMode === "source" ? "source-mode" : "preview-mode";
+  const isSplit = panes.length > 1;
 
   return (
-    <div className="editor-area">
-      <input
-        ref={titleRef}
-        className="editor-inline-title"
-        value={titleValue}
-        onChange={(e) => setTitleValue(e.target.value)}
-        onBlur={handleTitleCommit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            titleRef.current?.blur();
-          }
-          if (e.key === "Escape") {
-            const tab = useAppStore.getState().tabs.find(
-              (t) => t.id === useAppStore.getState().activeTabId
-            );
-            setTitleValue(tab?.name.replace(/\.md$/, "") ?? "");
-            titleRef.current?.blur();
-          }
-        }}
-        spellCheck={false}
-      />
-      <div className={`editor-container ${modeClass}`} ref={containerRef} />
-    </div>
+    <>
+      {panes.map((pane, i) => {
+        // Calculate flex style from split ratios
+        let flex: string;
+        if (!isSplit) {
+          flex = "1 1 0";
+        } else {
+          const start = i === 0 ? 0 : splitRatios[i - 1];
+          const end = i < splitRatios.length ? splitRatios[i] : 1;
+          const fraction = end - start;
+          flex = `${fraction} ${fraction} 0`;
+        }
+
+        return (
+          <div key={pane.id} style={{ display: "contents" }}>
+            {i > 0 && <PaneDivider index={i - 1} />}
+            <div className="pane-column" style={{ flex, minWidth: 0, display: "flex", flexDirection: "column" }}>
+              <TabBar paneId={pane.id} />
+              <EditorPane pane={pane} />
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pane Divider
+// ---------------------------------------------------------------------------
+
+function PaneDivider({ index }: { index: number }) {
+  const divRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const ratios = [...useAppStore.getState().paneState.splitRatios];
+    const startRatio = ratios[index];
+    const container = divRef.current?.parentElement?.parentElement;
+    if (!container) return;
+    const containerWidth = container.getBoundingClientRect().width;
+
+    // Prevent CM6 from capturing mouse events during drag
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const overlay = document.createElement("div");
+    Object.assign(overlay.style, {
+      position: "fixed", inset: "0", zIndex: "9999", cursor: "col-resize",
+    });
+    document.body.appendChild(overlay);
+
+    let rafId: number | null = null;
+
+    const handleMove = (ev: MouseEvent) => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const dx = ev.clientX - startX;
+        const deltaRatio = dx / containerWidth;
+        const newRatio = Math.max(0.15, Math.min(0.85, startRatio + deltaRatio));
+        const newRatios = [...ratios];
+        newRatios[index] = newRatio;
+        useAppStore.getState().setSplitRatios(newRatios);
+        // Tell CM6 to remeasure
+        for (const [, view] of paneViews) {
+          view.requestMeasure();
+        }
+      });
+    };
+
+    const handleUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      overlay.remove();
+      document.removeEventListener("mousemove", handleMove);
+      document.removeEventListener("mouseup", handleUp);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+
+    document.addEventListener("mousemove", handleMove);
+    document.addEventListener("mouseup", handleUp);
+  }, [index]);
+
+  return (
+    <div
+      ref={divRef}
+      className="pane-divider"
+      onMouseDown={handleMouseDown}
+    />
   );
 }

@@ -17,48 +17,6 @@ struct IndexProgress {
 pub struct Indexer;
 
 impl Indexer {
-    /// Full scan of all registered directories. Runs on a background thread.
-    pub fn full_scan(
-        dirs: &[(String, PathBuf)], // (dir_id, path)
-        db: &Mutex<Database>,
-        app_handle: &tauri::AppHandle,
-    ) {
-        // Collect all .md files first for progress tracking
-        let mut md_files: Vec<(String, PathBuf)> = Vec::new();
-
-        for (dir_id, dir_path) in dirs {
-            for entry in WalkDir::new(dir_path)
-                .into_iter()
-                .filter_entry(|e| !is_ignored(e.file_name()))
-                .filter_map(|e| e.ok())
-            {
-                let path = entry.path().to_path_buf();
-                if path.is_file() && path.extension().map_or(false, |e| e == "md") {
-                    md_files.push((dir_id.clone(), path));
-                }
-            }
-        }
-
-        let total = md_files.len() as u32;
-        let mut indexed: u32 = 0;
-
-        for (dir_id, path) in &md_files {
-            if let Err(e) = index_single_file(path, dir_id, db) {
-                log::error!("Failed to index {}: {}", path.display(), e);
-            }
-
-            indexed += 1;
-
-            // Emit progress every 50 files to avoid flooding the frontend
-            if indexed % 50 == 0 || indexed == total {
-                let _ = app_handle.emit("index:progress", IndexProgress { indexed, total });
-            }
-        }
-
-        let _ = app_handle.emit("index:complete", ());
-        log::info!("Full index complete: {} files indexed", total);
-    }
-
     /// Reindex a single file (used for watcher delta updates)
     pub fn reindex_file(path: &Path, dir_id: &str, db: &Mutex<Database>) -> Result<(), String> {
         index_single_file(path, dir_id, db)
@@ -68,6 +26,160 @@ impl Indexer {
     pub fn remove_file(path: &Path, db: &Mutex<Database>) -> Result<(), String> {
         let db = db.lock().map_err(|e| e.to_string())?;
         db.delete_file(&path.to_string_lossy())
+    }
+
+    /// Startup reconciliation: diff disk state vs DB, prune stale entries, add missing files,
+    /// reindex changed files. Replaces full_scan for startup.
+    pub fn reconcile(
+        dirs: &[(String, PathBuf)],
+        db: &Mutex<Database>,
+        app_handle: &tauri::AppHandle,
+    ) {
+        // 1. Walk all registered dirs → collect (path, mtime) from disk
+        let mut disk_files: std::collections::HashMap<String, Option<i64>> = std::collections::HashMap::new();
+        let mut disk_dir_ids: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+        for (dir_id, dir_path) in dirs {
+            for entry in WalkDir::new(dir_path)
+                .into_iter()
+                .filter_entry(|e| !is_ignored(e.file_name()))
+                .filter_map(|e| e.ok())
+            {
+                let path = entry.path().to_path_buf();
+                if path.is_file() && path.extension().map_or(false, |e| e == "md") {
+                    let path_str = path.to_string_lossy().to_string();
+                    let mtime = path.metadata().ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64);
+                    disk_files.insert(path_str.clone(), mtime);
+                    disk_dir_ids.insert(path_str, dir_id.clone());
+                }
+            }
+        }
+
+        // 2. Query all indexed paths from DB
+        let indexed_paths = {
+            let db_lock = match db.lock() {
+                Ok(l) => l,
+                Err(e) => {
+                    log::error!("Reconciliation aborted: DB mutex poisoned: {}", e);
+                    let _ = app_handle.emit("index:complete", ());
+                    return;
+                }
+            };
+            db_lock.get_all_indexed_paths().unwrap_or_default()
+        };
+        let indexed_map: std::collections::HashMap<String, Option<i64>> = indexed_paths.into_iter().collect();
+
+        // 3. Diff
+        let mut to_index: Vec<(String, String)> = Vec::new(); // (path, dir_id)
+        let mut to_remove: Vec<String> = Vec::new();
+
+        // Files on disk but not in DB, or changed since last index
+        for (path, disk_mtime) in &disk_files {
+            let dir_id = disk_dir_ids.get(path).cloned().unwrap_or_default();
+            match indexed_map.get(path) {
+                None => {
+                    // New file on disk
+                    to_index.push((path.clone(), dir_id));
+                }
+                Some(indexed_at) => {
+                    // File exists in both — check if mtime > indexed_at
+                    if let (Some(mt), Some(ia)) = (disk_mtime, indexed_at) {
+                        if *mt > *ia {
+                            to_index.push((path.clone(), dir_id));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Files in DB but not on disk
+        for (path, _) in &indexed_map {
+            if !disk_files.contains_key(path) {
+                to_remove.push(path.clone());
+            }
+        }
+
+        // 4. Execute
+        let stale_count = to_remove.len();
+        if !to_remove.is_empty() {
+            let db_lock = match db.lock() {
+                Ok(l) => l,
+                Err(e) => {
+                    log::error!("Failed to lock DB for pruning: {}", e);
+                    let _ = app_handle.emit("index:complete", ());
+                    return;
+                }
+            };
+            if let Err(e) = db_lock.delete_files_batch(&to_remove) {
+                log::error!("Failed to prune stale entries: {}", e);
+            }
+        }
+
+        let total = to_index.len() as u32;
+        let mut indexed: u32 = 0;
+        for (path, dir_id) in &to_index {
+            let path_buf = PathBuf::from(path);
+            if let Err(e) = index_single_file(&path_buf, dir_id, db) {
+                log::error!("Failed to index {}: {}", path, e);
+            }
+            indexed += 1;
+            if indexed % 50 == 0 || indexed == total {
+                let _ = app_handle.emit("index:progress", IndexProgress { indexed, total });
+            }
+        }
+
+        let _ = app_handle.emit("index:complete", ());
+        log::info!(
+            "Reconciliation complete: {} indexed, {} pruned, {} unchanged",
+            to_index.len(), stale_count, disk_files.len().saturating_sub(to_index.len())
+        );
+    }
+
+    /// Targeted reconciliation for a single directory (used after Rescan events).
+    pub fn reconcile_directory(
+        dir_path: &Path,
+        dir_id: &str,
+        db: &Mutex<Database>,
+    ) -> Result<(), String> {
+        // Walk the directory
+        let mut disk_files: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for entry in WalkDir::new(dir_path)
+            .into_iter()
+            .filter_entry(|e| !is_ignored(e.file_name()))
+            .filter_map(|e| e.ok())
+        {
+            let path = entry.path().to_path_buf();
+            if path.is_file() && path.extension().map_or(false, |e| e == "md") {
+                let path_str = path.to_string_lossy().to_string();
+                disk_files.insert(path_str.clone());
+                // Reindex every file found (Rescan means we can't trust event history)
+                if let Err(e) = index_single_file(&path, dir_id, db) {
+                    log::error!("Rescan reindex failed for {}: {}", path.display(), e);
+                }
+            }
+        }
+
+        // Prune DB entries under this directory that are no longer on disk
+        let dir_prefix = format!("{}/", dir_path.to_string_lossy());
+        let indexed_paths = {
+            let db_lock = db.lock().map_err(|e| e.to_string())?;
+            db_lock.get_indexed_paths_by_prefix(&dir_prefix).unwrap_or_default()
+        };
+
+        let stale: Vec<String> = indexed_paths.into_iter()
+            .filter(|p| !disk_files.contains(p))
+            .collect();
+
+        if !stale.is_empty() {
+            let db_lock = db.lock().map_err(|e| e.to_string())?;
+            db_lock.delete_files_batch(&stale)?;
+            log::info!("Rescan pruned {} stale entries from {}", stale.len(), dir_path.display());
+        }
+
+        Ok(())
     }
 }
 
@@ -112,6 +224,11 @@ fn index_single_file(path: &Path, dir_id: &str, db: &Mutex<Database>) -> Result<
 
     db.set_links(file_id, &links)?;
     db.set_tags(file_id, &tags)?;
+
+    // Resolve any pending backlinks that point to this newly-indexed file
+    if let Some(ref t) = title {
+        let _ = db.resolve_pending_links(t, file_id);
+    }
 
     Ok(())
 }

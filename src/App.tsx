@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Titlebar } from "./components/Titlebar";
-import { TabBar } from "./components/TabBar";
 import { Sidebar } from "./components/Sidebar";
 import { Editor, foldFrontmatter } from "./components/Editor";
 import { LintPanel } from "./components/LintPanel";
@@ -17,7 +16,7 @@ import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
 import { registerCommand, getAllCommands } from "./lib/commands";
 import { makeTableCommands } from "./extensions/tableEditor";
 import { copyBlock, deleteBlock, getCurrentBlock } from "./extensions/blocks";
-import { getEditorView } from "./components/Editor";
+import { getEditorView, getAllPaneViews } from "./components/Editor";
 import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
 import {
   registerKeybinding,
@@ -32,6 +31,16 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
 import { invalidateCache } from "./lib/ipcCache";
 import { loadAndApplyConfig } from "./lib/configBridge";
+import { clearEditorCache, migrateEditorCache, cancelPendingSave, lastSavedContent, replaceTabContent } from "./components/Editor";
+import { updateRecentDocPath, markRecentDocDeleted } from "./lib/recentDocs";
+import { selectAllTabs } from "./stores/app";
+
+interface FsChangeEvent {
+  kind: "create" | "modify" | "remove" | "rename";
+  path: string;
+  old_path?: string;
+  is_dir: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Shared action functions — called by commands, menu events, and shortcuts
@@ -258,6 +267,79 @@ function registerCommands() {
     },
   });
 
+  registerCommand({
+    id: "view.splitPane",
+    label: "Split Editor",
+    shortcut: "Cmd+\\",
+    category: "View",
+    execute: () => store().splitPane(),
+  });
+
+  registerCommand({
+    id: "view.closePane",
+    label: "Close Pane",
+    category: "View",
+    execute: () => {
+      const s = store();
+      if (s.paneState.panes.length > 1) {
+        s.closePane(s.paneState.activePaneId);
+      }
+    },
+  });
+
+  // Pane focus shortcuts
+  for (let i = 0; i < 3; i++) {
+    registerCommand({
+      id: `view.focusPane${i + 1}`,
+      label: `Focus Pane ${i + 1}`,
+      shortcut: `Cmd+${i + 1}`,
+      category: "View",
+      execute: () => {
+        const panes = store().paneState.panes;
+        if (i < panes.length) store().setActivePane(panes[i].id);
+      },
+    });
+  }
+
+  registerCommand({
+    id: "view.moveTabToNextPane",
+    label: "Move Tab to Next Pane",
+    shortcut: "Cmd+Shift+|",
+    category: "View",
+    execute: () => {
+      const s = store();
+      const { paneState } = s;
+      if (paneState.panes.length < 2) return;
+      const activePane = paneState.panes.find((p) => p.id === paneState.activePaneId);
+      if (!activePane?.activeTabId) return;
+      const currentIdx = paneState.panes.indexOf(activePane);
+      const targetIdx = (currentIdx + 1) % paneState.panes.length;
+      s.moveTabToPane(activePane.activeTabId, paneState.panes[targetIdx].id);
+    },
+  });
+
+  registerCommand({
+    id: "view.toggleScrollLock",
+    label: "Toggle Scroll Lock",
+    category: "View",
+    execute: () => {
+      const s = store();
+      const { paneState } = s;
+      if (paneState.scrollLockAnchors) {
+        // Unlock
+        s.setScrollLockAnchors(null);
+      } else {
+        // Lock — capture current scroll positions as anchors
+        const anchors = new Map<string, number>();
+        const views = getAllPaneViews();
+        for (const [paneId, view] of views) {
+          anchors.set(paneId, view.scrollDOM.scrollTop);
+        }
+        s.setScrollLockAnchors(anchors);
+      }
+    },
+  });
+
   // ── Table commands (Phase 9c) ──
   const tbl = makeTableCommands(getEditorView);
   registerCommand({ id: "table.insert", label: "Table: Insert", category: "Table", execute: tbl.insertTable });
@@ -380,10 +462,109 @@ export default function App() {
       }
     });
 
-    // Invalidate IPC cache on file system changes
-    const unlistenFsChange = listen("fs:change", () => {
+    // Buffer remove events to handle the macOS rename race:
+    // On macOS, a rename produces Remove(old) + Create(new) from the watcher,
+    // racing with the command's Rename event. We buffer removes for 300ms —
+    // if a rename event arrives that matches, we cancel the remove processing.
+    const pendingRemoves = new Map<string, ReturnType<typeof setTimeout>>();
+
+    // Central fs:change handler — cross-cutting concerns (tabs, cache, auto-save guard)
+    const unlistenFsChange = listen<FsChangeEvent>("fs:change", (event) => {
       if (cancelled) return;
       invalidateCache();
+
+      const { kind, path, old_path, is_dir } = event.payload;
+      const store = useAppStore.getState();
+
+      if (kind === "remove") {
+        cancelPendingSave();
+        store.addDeletedPath(path);
+
+        // Buffer the remove — a rename event may follow within 300ms
+        const timer = setTimeout(() => {
+          pendingRemoves.delete(path);
+          // Process the remove: close/mark tabs, refresh tree
+          const s = useAppStore.getState();
+          const prefix = path.endsWith("/") ? path : path + "/";
+          const affected = selectAllTabs(s).filter(
+            (t) => t.path === path || t.path.startsWith(prefix)
+          );
+          if (affected.length > 0) {
+            const toClose = affected.filter((t) => !t.modified);
+            const toMark = affected.filter((t) => t.modified);
+            for (const tab of toClose) {
+              clearEditorCache(tab.path);
+            }
+            if (toClose.length > 0) {
+              s.removeTabs(toClose.map((t) => t.id));
+            }
+            for (const tab of toMark) {
+              s.addDeletedPath(tab.path);
+            }
+          }
+          s.bumpFileTreeVersion();
+          s.bumpBookmarkVersion();
+          markRecentDocDeleted(path);
+        }, 300);
+        pendingRemoves.set(path, timer);
+
+      } else if (kind === "rename" && old_path) {
+        cancelPendingSave();
+
+        // Cancel any buffered remove for the old path (it was a rename, not a delete)
+        const pendingTimer = pendingRemoves.get(old_path);
+        if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          pendingRemoves.delete(old_path);
+        }
+
+        // Clear deleted markers
+        store.removeDeletedPath(old_path);
+        store.removeDeletedPath(path);
+
+        const newName = path.split("/").pop() || path;
+
+        // Migrate tabs — idempotent (no-op if fileOps already updated them)
+        if (is_dir) {
+          const oldPrefix = old_path.endsWith("/") ? old_path : old_path + "/";
+          for (const tab of selectAllTabs(store)) {
+            if (tab.path.startsWith(oldPrefix)) {
+              const migratedPath = path + tab.path.slice(old_path.length);
+              const migratedName = migratedPath.split("/").pop() || migratedPath;
+              store.updateTabPath(tab.id, migratedPath, migratedName);
+              migrateEditorCache(tab.path, migratedPath);
+            }
+          }
+        } else {
+          const openTab = selectAllTabs(store).find((t) => t.path === old_path);
+          if (openTab) {
+            store.updateTabPath(openTab.id, path, newName);
+            migrateEditorCache(old_path, path);
+          }
+        }
+
+        store.bumpFileTreeVersion();
+        updateRecentDocPath(old_path, path, newName);
+      } else if (kind === "create") {
+        store.bumpFileTreeVersion();
+      }
+
+      if (kind === "modify") {
+        const modifyTab = selectAllTabs(store).find((t) => t.path === path);
+        if (modifyTab) {
+          if (!modifyTab.modified) {
+            invoke<string>("read_file", { path }).then((newContent) => {
+              const cached = lastSavedContent.get(modifyTab.id);
+              if (cached !== undefined && cached !== newContent) {
+                replaceTabContent(modifyTab.id, newContent);
+                lastSavedContent.set(modifyTab.id, newContent);
+              }
+            }).catch(() => {});
+          } else {
+            store.setSaveConflictPath(path);
+          }
+        }
+      }
     });
 
     // Tauri 2 native drag-drop (HTML5 File.path doesn't exist in Tauri 2)
@@ -410,6 +591,8 @@ export default function App() {
       unlisten.then((fn) => fn());
       unlistenFsChange.then((fn) => fn());
       unlistenDragDrop.then((fn) => fn());
+      for (const timer of pendingRemoves.values()) clearTimeout(timer);
+      pendingRemoves.clear();
     };
   }, []);
 
@@ -478,7 +661,6 @@ export default function App() {
           <Sidebar />
         </ErrorBoundary>
         <div className="editor-column">
-          <TabBar />
           <ErrorBoundary label="editor">
             <Editor />
           </ErrorBoundary>

@@ -16,8 +16,9 @@ import type { Extension } from "@codemirror/state";
  */
 
 /** Inject a follow-link handler from the parent component.
- *  newTab: true = open in new tab, false = replace current tab */
-export const wikilinkFollowRef = { current: null as ((link: string, newTab: boolean) => void) | null };
+ *  newTab: true = open in new tab, false = replace current tab
+ *  otherPane: true = open in the other pane (Cmd+Shift+Click) */
+export const wikilinkFollowRef = { current: null as ((link: string, newTab: boolean, otherPane: boolean) => void) | null };
 
 const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
 
@@ -104,7 +105,7 @@ const wikilinkClickHandler = EditorView.domEventHandlers({
     const linkText = text.trim();
     if (linkText && wikilinkFollowRef.current) {
       event.preventDefault();
-      wikilinkFollowRef.current(linkText, event.metaKey);
+      wikilinkFollowRef.current(linkText, event.metaKey, event.metaKey && event.shiftKey);
     }
     return true;
   },
@@ -118,7 +119,7 @@ const wikilinkClickHandler = EditorView.domEventHandlers({
     const linkText = extractLinkText(text);
     if (linkText && wikilinkFollowRef.current) {
       event.preventDefault();
-      wikilinkFollowRef.current(linkText, true);
+      wikilinkFollowRef.current(linkText, true, event.shiftKey);
     }
     return true;
   },
@@ -132,7 +133,7 @@ const wikilinkKeymap = keymap.of([
       const pos = view.state.selection.main.head;
       const linkText = wikilinkAtPos(view, pos);
       if (linkText && wikilinkFollowRef.current) {
-        wikilinkFollowRef.current(linkText, false);
+        wikilinkFollowRef.current(linkText, false, false);
         return true;
       }
       return false;
