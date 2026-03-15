@@ -2425,14 +2425,28 @@
     cursor: default;
   }
 
-  .settings-objects-prop-type {
-    font-size: 12px;
-    padding: 2px 4px;
+  .settings-objects-prop-type-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 2px 6px;
     background: var(--bg-surface);
     color: var(--text-secondary);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
     cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .settings-objects-prop-type-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--border-default);
+  }
+
+  .context-menu-item.active {
+    color: var(--text-accent);
+    background: var(--accent-muted);
   }
 
   .settings-objects-prop-name {

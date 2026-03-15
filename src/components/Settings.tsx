@@ -982,6 +982,49 @@ const PROPERTY_TYPES = [
   { value: "link", label: "Link", icon: "link" },
 ];
 
+function PropTypeButton({ type, onChange }: { type: string; onChange: (t: string) => void }) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const current = PROPERTY_TYPES.find((pt) => pt.value === type) || PROPERTY_TYPES[0];
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setMenu(null);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menu]);
+
+  return (
+    <>
+      <span
+        className="settings-objects-prop-type-btn"
+        title={`Type: ${current.label} (right-click to change)`}
+        onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); }}
+        onClick={(e) => { setMenu({ x: e.clientX, y: e.clientY }); }}
+      >
+        <Icon name={current.icon} size={12} />
+        {current.label}
+      </span>
+      {menu && (
+        <div ref={ref} className="context-menu" style={{ left: menu.x, top: menu.y, position: "fixed", zIndex: 1100 }}>
+          {PROPERTY_TYPES.map((pt) => (
+            <div
+              key={pt.value}
+              className={`context-menu-item ${pt.value === type ? "active" : ""}`}
+              onClick={() => { onChange(pt.value); setMenu(null); }}
+            >
+              <Icon name={pt.icon} size={12} />
+              <span style={{ marginLeft: 6 }}>{pt.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function ObjectsSection() {
   const [types, setTypes] = useState<ObjectType[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -1114,31 +1157,24 @@ function ObjectsSection() {
                         <Icon name="chevron-down" size={12} />
                       </button>
                     </div>
-                    <select
-                      className="settings-objects-prop-type"
-                      value={prop.type}
-                      onChange={(e) => {
-                        const patch: Partial<PropertyDef> = { type: e.target.value };
-                        // Clear options when switching away from select/multiselect
-                        if (e.target.value !== "select" && e.target.value !== "multiselect") {
-                          patch.options = undefined;
-                        }
-                        // Add empty options when switching to select/multiselect
-                        if ((e.target.value === "select" || e.target.value === "multiselect") && !prop.options) {
-                          patch.options = [];
-                        }
-                        updateProperty(selectedIdx, pi, patch);
-                      }}
-                    >
-                      {PROPERTY_TYPES.map((pt) => (
-                        <option key={pt.value} value={pt.value}>{pt.label}</option>
-                      ))}
-                    </select>
                     <input
                       className="settings-objects-prop-name"
                       value={prop.key}
                       onChange={(e) => updateProperty(selectedIdx, pi, { key: e.target.value })}
                       placeholder="Property name"
+                    />
+                    <PropTypeButton
+                      type={prop.type}
+                      onChange={(newType) => {
+                        const patch: Partial<PropertyDef> = { type: newType };
+                        if (newType !== "select" && newType !== "multiselect") {
+                          patch.options = undefined;
+                        }
+                        if ((newType === "select" || newType === "multiselect") && !prop.options) {
+                          patch.options = [];
+                        }
+                        updateProperty(selectedIdx, pi, patch);
+                      }}
                     />
                     <button
                       className="settings-objects-prop-delete"

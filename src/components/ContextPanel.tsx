@@ -326,9 +326,17 @@ function PropertiesSection({
   const handleChange = useCallback(
     (key: string, val: FrontmatterValue) => {
       setFrontmatter((prev) => {
-        const updated = { ...prev, [key]: val };
+        // Coerce string values that look like booleans or numbers
+        let coerced = val;
+        if (typeof val === "string") {
+          const lower = val.toLowerCase().trim();
+          if (lower === "true") coerced = true;
+          else if (lower === "false") coerced = false;
+          else if (val.trim() !== "" && !isNaN(Number(val))) coerced = Number(val);
+        }
+        const updated = { ...prev, [key]: coerced };
         // Remove null/undefined keys for cleanliness
-        if (val == null) delete updated[key];
+        if (coerced == null) delete updated[key];
         scheduleSave(updated);
         return updated;
       });
