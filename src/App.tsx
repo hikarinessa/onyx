@@ -34,6 +34,7 @@ import { loadAndApplyConfig } from "./lib/configBridge";
 import { clearEditorCache, migrateEditorCache, cancelPendingSave, lastSavedContent, replaceTabContent } from "./components/Editor";
 import { updateRecentDocPath, markRecentDocDeleted } from "./lib/recentDocs";
 import { selectAllTabs } from "./stores/app";
+import { internalDragActive } from "./components/Sidebar";
 
 interface FsChangeEvent {
   kind: "create" | "modify" | "remove" | "rename";
@@ -550,6 +551,10 @@ export default function App() {
       }
 
       if (kind === "modify") {
+        // Bump tree version — on macOS, Finder moves can appear as generic
+        // Modify events instead of Modify(Name), so the tree needs to refresh.
+        store.bumpFileTreeVersion();
+
         const modifyTab = selectAllTabs(store).find((t) => t.path === path);
         if (modifyTab) {
           if (!modifyTab.modified) {
@@ -571,7 +576,7 @@ export default function App() {
     const unlistenDragDrop = getCurrentWebview().onDragDropEvent((event) => {
       if (cancelled) return;
       const { type } = event.payload;
-      if (type === "enter" || type === "over") {
+      if ((type === "enter" || type === "over") && !internalDragActive) {
         setDragOver(true);
       } else if (type === "leave") {
         setDragOver(false);

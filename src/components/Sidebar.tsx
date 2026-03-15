@@ -8,6 +8,38 @@ import * as fileOps from "../lib/fileOps";
 import type { DirEntry } from "../types";
 import { BookmarkStrip } from "./BookmarkStrip";
 import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
+
+// Flag to suppress Tauri's native drag-drop overlay during internal tree drags
+export let internalDragActive = false;
+
+function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder }: {
+  x: number; y: number;
+  onClose: () => void;
+  onNewNote: () => void;
+  onNewFolder: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div ref={ref} className="context-menu" style={{ left: x, top: y, position: "fixed", zIndex: 1000 }}>
+      <div className="context-menu-item" onClick={onNewNote}>New Note</div>
+      <div className="context-menu-item" onClick={onNewFolder}>New Folder</div>
+    </div>
+  );
+}
 import { SearchPanel } from "./SearchPanel";
 import { Icon } from "./Icon";
 import { IconPicker } from "./IconPicker";
@@ -142,7 +174,9 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
         onDragStart={(e) => {
           e.dataTransfer.setData("text/plain", entry.path);
           e.dataTransfer.effectAllowed = "move";
+          internalDragActive = true;
         }}
+        onDragEnd={() => { internalDragActive = false; }}
         onDragOver={(e) => {
           if (!entry.is_dir) return;
           e.preventDefault();
@@ -216,6 +250,7 @@ export function Sidebar() {
     new Map()
   );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [rootDirMenu, setRootDirMenu] = useState<{ x: number; y: number; dirPath: string } | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [iconPickerDirId, setIconPickerDirId] = useState<string | null>(null);
   const [orphansCollapsed, setOrphansCollapsed] = useState(false);
@@ -467,6 +502,11 @@ export function Sidebar() {
                 className="sidebar-header"
                 style={{ borderLeft: `2px solid ${dir.color}` }}
                 onClick={() => toggleDirCollapsed(dir.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setRootDirMenu({ x: e.clientX, y: e.clientY, dirPath: dir.path });
+                }}
               >
                 <span className="sidebar-header-chevron">
                   <Icon name={isCollapsed ? "chevron-right" : "chevron-down"} size={14} />
@@ -483,31 +523,6 @@ export function Sidebar() {
                 </span>
                 <span className="sidebar-header-label">{dir.label}</span>
                 <div className="sidebar-header-actions">
-                  <button
-                    className="sidebar-header-btn"
-                    title="New Note"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleNewNoteInDir(dir.path);
-                    }}
-                  >
-                    <Icon name="plus" size={14} />
-                  </button>
-                  <button
-                    className="sidebar-header-btn"
-                    title="New Folder"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      try {
-                        const folderPath = await fileOps.createFolder(dir.path);
-                        setRenamingPath(folderPath);
-                      } catch (err) {
-                        console.error("Failed to create folder:", err);
-                      }
-                    }}
-                  >
-                    <Icon name="folder-plus" size={14} />
-                  </button>
                   <button
                     className="sidebar-header-btn"
                     title="Remove Directory"
@@ -635,6 +650,24 @@ export function Sidebar() {
           onRename={handleRename}
           onDelete={handleDelete}
           onReveal={handleReveal}
+        />
+      )}
+
+      {rootDirMenu && (
+        <RootDirContextMenu
+          x={rootDirMenu.x}
+          y={rootDirMenu.y}
+          onClose={() => setRootDirMenu(null)}
+          onNewNote={() => { handleNewNoteInDir(rootDirMenu.dirPath); setRootDirMenu(null); }}
+          onNewFolder={async () => {
+            try {
+              const folderPath = await fileOps.createFolder(rootDirMenu.dirPath);
+              setRenamingPath(folderPath);
+            } catch (err) {
+              console.error("Failed to create folder:", err);
+            }
+            setRootDirMenu(null);
+          }}
         />
       )}
     </div>

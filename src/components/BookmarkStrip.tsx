@@ -102,6 +102,7 @@ export function BookmarkStrip() {
                 onClick={(e) => handleBookmarkClick(bookmark, e.metaKey)}
                 title={bookmark.path}
               >
+                <span className="tree-item-chevron" />
                 <span className="tree-item-icon">
                   <Icon name={bookmark.global ? "bookmark-check" : "bookmark"} size={14} />
                 </span>

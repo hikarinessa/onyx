@@ -595,26 +595,21 @@ export function ContextPanel() {
     return () => document.removeEventListener("mousedown", close);
   }, [calendarMenu]);
 
-  const handleDeletePeriodicNote = useCallback(async () => {
-    if (!calendarMenu) return;
-    const { isoDate } = calendarMenu;
+  const handleDeletePeriodicNote = useCallback(async (isoDate: string) => {
     setCalendarMenu(null);
     try {
+      // Use create_periodic_note to resolve the path (returns existing file without creating)
       const result = await invoke<{ path: string; created: boolean }>("create_periodic_note", {
         periodType: "daily",
         date: isoDate,
       });
       if (!result.created) {
-        // File exists — confirm and delete
-        const confirmed = window.confirm("Delete this daily note?");
-        if (confirmed) {
-          await fileOps.deleteFile(result.path);
-        }
+        await fileOps.deleteFile(result.path);
       }
     } catch (err) {
       console.error("Failed to delete periodic note:", err);
     }
-  }, [calendarMenu]);
+  }, []);
 
   return (
     <div className={`context-panel ${visible ? "" : "collapsed"}`}>
@@ -628,9 +623,9 @@ export function ContextPanel() {
           <div
             className="context-menu"
             style={{ left: calendarMenu.x, top: calendarMenu.y, position: "fixed" }}
-            onClick={() => setCalendarMenu(null)}
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="context-menu-item destructive" onClick={handleDeletePeriodicNote}>
+            <div className="context-menu-item destructive" onClick={() => handleDeletePeriodicNote(calendarMenu.isoDate)}>
               Delete daily note
             </div>
           </div>
