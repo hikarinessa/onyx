@@ -9,9 +9,6 @@ import type { DirEntry } from "../types";
 import { BookmarkStrip } from "./BookmarkStrip";
 import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
 
-// Flag to suppress Tauri's native drag-drop overlay during internal tree drags
-export let internalDragActive = false;
-
 // Track dragged file path via module variable (dataTransfer.getData unreliable in WebKit)
 let draggedFilePath: string | null = null;
 
@@ -184,18 +181,20 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
           draggedFilePath = entry.path;
           e.dataTransfer.setData("text/plain", entry.path);
           e.dataTransfer.effectAllowed = "move";
-          internalDragActive = true;
+          useAppStore.getState().setInternalDrag(true);
         }}
-        onDragEnd={() => { internalDragActive = false; draggedFilePath = null; }}
+        onDragEnd={() => { useAppStore.getState().setInternalDrag(false); draggedFilePath = null; }}
         onDragOver={(e) => {
           if (!entry.is_dir || !draggedFilePath) return;
           e.preventDefault();
+          e.stopPropagation();
           e.dataTransfer.dropEffect = "move";
           setDropOver(true);
         }}
         onDragLeave={() => setDropOver(false)}
         onDrop={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           setDropOver(false);
           if (!entry.is_dir || !draggedFilePath) return;
           const sourcePath = draggedFilePath;

@@ -169,6 +169,10 @@ interface AppState {
   addDeletedPath: (path: string) => void;
   removeDeletedPath: (path: string) => void;
 
+  // Internal drag flag (suppresses Tauri native drop overlay)
+  internalDrag: boolean;
+  setInternalDrag: (active: boolean) => void;
+
   // Sidebar tabs
   sidebarTab: "files" | "search";
   setSidebarTab: (tab: "files" | "search") => void;
@@ -697,6 +701,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     next.delete(path);
     return { deletedPaths: next };
   }),
+
+  internalDrag: false,
+  setInternalDrag: (active) => set({ internalDrag: active }),
 
   sidebarTab: "files",
   setSidebarTab: (tab) => set({ sidebarTab: tab }),

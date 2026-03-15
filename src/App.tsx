@@ -34,7 +34,6 @@ import { loadAndApplyConfig } from "./lib/configBridge";
 import { clearEditorCache, migrateEditorCache, cancelPendingSave, lastSavedContent, replaceTabContent } from "./components/Editor";
 import { updateRecentDocPath, markRecentDocDeleted } from "./lib/recentDocs";
 import { selectAllTabs } from "./stores/app";
-import { internalDragActive } from "./components/Sidebar";
 
 interface FsChangeEvent {
   kind: "create" | "modify" | "remove" | "rename";
@@ -576,12 +575,13 @@ export default function App() {
     const unlistenDragDrop = getCurrentWebview().onDragDropEvent((event) => {
       if (cancelled) return;
       const { type } = event.payload;
-      if ((type === "enter" || type === "over") && !internalDragActive) {
+      if ((type === "enter" || type === "over") && !useAppStore.getState().internalDrag) {
         setDragOver(true);
       } else if (type === "leave") {
         setDragOver(false);
       } else if (type === "drop") {
         setDragOver(false);
+        if (useAppStore.getState().internalDrag) return; // Internal sidebar drag — handled by HTML5 drop
         for (const filePath of event.payload.paths) {
           if (filePath.endsWith(".md")) {
             const name = filePath.split("/").pop() || filePath;
