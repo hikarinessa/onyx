@@ -7,6 +7,7 @@ import { Calendar } from "./Calendar";
 import { createOrOpenPeriodicNote } from "../lib/periodicNotes";
 import { getCached, setCache } from "../lib/ipcCache";
 import { Icon } from "./Icon";
+import * as fileOps from "../lib/fileOps";
 
 // ── Types ──
 
@@ -542,6 +543,7 @@ export function ContextPanel() {
   };
 
   const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [calendarMenu, setCalendarMenu] = useState<{ isoDate: string; x: number; y: number } | null>(null);
   const creatingRef = useRef(false);
 
   const handleDateClick = async (isoDate: string, newTab: boolean) => {
@@ -580,13 +582,58 @@ export function ContextPanel() {
     }
   };
 
+  const handleDateContextMenu = useCallback((isoDate: string, hasNote: boolean, x: number, y: number) => {
+    if (!hasNote) return;
+    setCalendarMenu({ isoDate, x, y });
+  }, []);
+
+  // Close calendar context menu on outside click
+  useEffect(() => {
+    if (!calendarMenu) return;
+    const close = () => setCalendarMenu(null);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [calendarMenu]);
+
+  const handleDeletePeriodicNote = useCallback(async () => {
+    if (!calendarMenu) return;
+    const { isoDate } = calendarMenu;
+    setCalendarMenu(null);
+    try {
+      const result = await invoke<{ path: string; created: boolean }>("create_periodic_note", {
+        periodType: "daily",
+        date: isoDate,
+      });
+      if (!result.created) {
+        // File exists — confirm and delete
+        const confirmed = window.confirm("Delete this daily note?");
+        if (confirmed) {
+          await fileOps.deleteFile(result.path);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete periodic note:", err);
+    }
+  }, [calendarMenu]);
+
   return (
     <div className={`context-panel ${visible ? "" : "collapsed"}`}>
       {/* Calendar — pinned */}
       <div className="context-panel-pinned">
-        <Calendar onDateClick={handleDateClick} onWeekClick={handleWeekClick} />
+        <Calendar onDateClick={handleDateClick} onWeekClick={handleWeekClick} onDateContextMenu={handleDateContextMenu} />
         {calendarError && (
           <div className="calendar-error">{calendarError}</div>
+        )}
+        {calendarMenu && (
+          <div
+            className="context-menu"
+            style={{ left: calendarMenu.x, top: calendarMenu.y, position: "fixed" }}
+            onClick={() => setCalendarMenu(null)}
+          >
+            <div className="context-menu-item destructive" onClick={handleDeletePeriodicNote}>
+              Delete daily note
+            </div>
+          </div>
         )}
       </div>
 

@@ -39,6 +39,7 @@ export interface AppConfig {
     auto_save_ms: number;
     spellcheck: boolean;
     new_note_location: string;
+    hide_empty_folders: boolean;
   };
   style: {
     accent_color: string;

@@ -78,9 +78,10 @@ interface TreeNodeProps {
   onContextMenu: (e: React.MouseEvent, entry: DirEntry) => void;
   onRenameSubmit: (entry: DirEntry, newName: string) => void;
   onRenameCancel: () => void;
+  onFileDrop: (sourcePath: string, targetDir: string) => void;
 }
 
-function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion, onFileClick, onContextMenu, onRenameSubmit, onRenameCancel }: TreeNodeProps) {
+function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion, onFileClick, onContextMenu, onRenameSubmit, onRenameCancel, onFileDrop }: TreeNodeProps) {
   const expandedSubdirs = useAppStore((s) => s.expandedSubdirs);
   const toggleSubdirExpanded = useAppStore((s) => s.toggleSubdirExpanded);
   const expanded = entry.is_dir && expandedSubdirs.includes(entry.path);
@@ -128,14 +129,36 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
   const isActive = entry.path === activeFilePath;
   const isMarkdown = entry.extension === "md";
   const isRenaming = renamingPath === entry.path;
+  const [dropOver, setDropOver] = useState(false);
 
   return (
     <div className={entry.is_dir ? "tree-directory" : "tree-file"}>
       <div
-        className={`tree-item ${isActive ? "active" : ""}`}
+        className={`tree-item ${isActive ? "active" : ""} ${dropOver ? "drop-target" : ""}`}
         style={{ "--indent": depth } as React.CSSProperties}
         onClick={isRenaming ? undefined : toggle}
         onContextMenu={(e) => onContextMenu(e, entry)}
+        draggable={!entry.is_dir && !isRenaming}
+        onDragStart={(e) => {
+          e.dataTransfer.setData("text/plain", entry.path);
+          e.dataTransfer.effectAllowed = "move";
+        }}
+        onDragOver={(e) => {
+          if (!entry.is_dir) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setDropOver(true);
+        }}
+        onDragLeave={() => setDropOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDropOver(false);
+          if (!entry.is_dir) return;
+          const sourcePath = e.dataTransfer.getData("text/plain");
+          if (sourcePath && !sourcePath.startsWith(entry.path + "/")) {
+            onFileDrop(sourcePath, entry.path);
+          }
+        }}
       >
         <span className="tree-item-chevron">
           {entry.is_dir
@@ -171,6 +194,7 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
               onContextMenu={onContextMenu}
               onRenameSubmit={onRenameSubmit}
               onRenameCancel={onRenameCancel}
+              onFileDrop={onFileDrop}
             />
           ))}
         </div>
@@ -356,6 +380,17 @@ export function Sidebar() {
     setRenamingPath(null);
   };
 
+  const handleFileDrop = async (sourcePath: string, targetDir: string) => {
+    const fileName = sourcePath.split("/").pop();
+    if (!fileName) return;
+    const newPath = `${targetDir}/${fileName}`;
+    try {
+      await fileOps.renameFile(sourcePath, newPath);
+    } catch (err) {
+      console.error("Failed to move file:", err);
+    }
+  };
+
   const handleRenameCancel = () => {
     setRenamingPath(null);
   };
@@ -499,6 +534,7 @@ export function Sidebar() {
                       onContextMenu={handleContextMenu}
                       onRenameSubmit={handleRenameSubmit}
                       onRenameCancel={handleRenameCancel}
+                      onFileDrop={handleFileDrop}
                     />
                   ))}
                 </div>

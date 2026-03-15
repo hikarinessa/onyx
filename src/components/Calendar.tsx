@@ -52,6 +52,7 @@ function toISOWeekString(date: Date): string {
 interface CalendarProps {
   onDateClick: (isoDate: string, newTab: boolean) => void;
   onWeekClick: (isoWeek: string, newTab: boolean) => void;
+  onDateContextMenu?: (isoDate: string, hasNote: boolean, x: number, y: number) => void;
 }
 
 function useToday(): Date {
@@ -68,7 +69,7 @@ function useToday(): Date {
   return today;
 }
 
-export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
+export function Calendar({ onDateClick, onWeekClick, onDateContextMenu }: CalendarProps) {
   const today = useToday();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -253,6 +254,12 @@ export function Calendar({ onDateClick, onWeekClick }: CalendarProps) {
                     tabIndex={cell.isCurrentMonth ? 0 : -1}
                     aria-label={`${cell.day} ${MONTH_NAMES[cell.month]} ${cell.year}${hasNote ? ", has note" : ""}`}
                     onClick={(e) => onDateClick(isoDate, e.metaKey)}
+                    onContextMenu={(e) => {
+                      if (onDateContextMenu) {
+                        e.preventDefault();
+                        onDateContextMenu(isoDate, hasNote, e.clientX, e.clientY);
+                      }
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();

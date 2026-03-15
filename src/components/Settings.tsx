@@ -269,6 +269,13 @@ function GeneralSection({
         />
       </SettingRow>
 
+      <SettingRow label="Hide empty folders" description="Hide folders that contain no markdown files">
+        <Toggle
+          checked={config.behavior.hide_empty_folders}
+          onChange={(v) => updateConfig({ behavior: { hide_empty_folders: v } })}
+        />
+      </SettingRow>
+
       <SettingRow label="Default new note location">
         <select
           className="settings-select"

@@ -45,6 +45,7 @@ pub struct BehaviorConfig {
     pub auto_save_ms: u32,
     pub spellcheck: bool,
     pub new_note_location: String,
+    pub hide_empty_folders: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,6 +132,7 @@ impl Default for BehaviorConfig {
             auto_save_ms: 500,
             spellcheck: true,
             new_note_location: "first_dir".to_string(),
+            hide_empty_folders: true,
         }
     }
 }

@@ -610,6 +610,12 @@
     color: var(--text-accent);
   }
 
+  .tree-item.drop-target {
+    background: var(--accent-muted);
+    outline: 1px dashed var(--accent);
+    outline-offset: -1px;
+  }
+
   .tree-item-chevron {
     width: 12px;
     height: 16px;
