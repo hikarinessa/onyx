@@ -1,5 +1,7 @@
 # Onyx
 
+!! I do not advice to use this tool in your workflow yet, it has not been tested thoroughly
+
 A lightweight, offline-first markdown note-taking app. Built with Tauri 2, React 18, CodeMirror 6, and SQLite.
 
 Onyx is designed as a fast, native alternative to Electron-based note apps. It uses ~30-50MB of RAM compared to 300-800MB for comparable tools.
