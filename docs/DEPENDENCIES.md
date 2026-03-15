@@ -1,6 +1,6 @@
 # Onyx — Dependencies & Reference
 
-Researched packages, crates, and reference projects to avoid reinventing the wheel.
+Actual dependencies used in the project, with rationale. Updated for v0.10.0.
 
 ---
 
@@ -8,96 +8,68 @@ Researched packages, crates, and reference projects to avoid reinventing the whe
 
 | Category | Crate | Version | Why |
 |----------|-------|---------|-----|
-| SQLite | `rusqlite` + `bundled` feature | 0.38 | Sync, thin C wrapper, FTS5 included with `bundled`. Skip tauri-plugin-sql — Rust owns the data layer |
-| Migrations | `rusqlite_migration` | 1 | Uses SQLite's `user_version` pragma. No tracking table overhead |
-| File watching | `notify` + `notify-debouncer-full` | 8.2 / 0.5 | Industry standard (rust-analyzer, deno, cargo-watch). Debouncer adds file ID tracking |
-| YAML | `serde_yaml_ng` | 0.10 | ⚠️ `serde_yaml` is deprecated, `serde_yml` has RustSec advisory (RUSTSEC-2025-0068). This is the maintained fork |
-| Markdown | `pulldown-cmark` | 0.12 | Has **native `[[wikilink]]` support** (`ENABLE_WIKILINKS`). Streaming iterator, no AST allocation |
-| Templates | `minijinja` | 2 | 10x faster compile than handlebars/tera. `{{ var }}` syntax. By Armin Ronacher (Flask/Jinja2 creator) |
-| MCP server | `rmcp` + `axum` | 0.16 / 0.8 | Official Rust MCP SDK. Streamable HTTP transport built-in. Axum fits naturally in Tauri's tokio runtime |
-| Dir traversal | `ignore` | 0.4 | From ripgrep — combines walkdir + .gitignore filtering in one. Also has parallel walker |
-| OS trash | `trash` | 5.2 | Cross-platform native trash (macOS, Windows, FreeDesktop) |
-| Fuzzy search | `nucleo-matcher` | 0.3 | From Helix editor, ~6x faster than fuzzy-matcher |
-| Dates | `chrono` | 0.4 | Ecosystem standard. `NaiveDate` for periodic note paths (`%Y-%m-%d`) |
-| CPU parallelism | `rayon` | 1.10 | Work-stealing thread pool for background indexing. Tokio for async I/O, rayon for CPU-bound |
-| Serialization | `serde` + `derive` | 1 | Used by nearly everything above |
+| SQLite | `rusqlite` + `bundled` feature | 0.33 | Sync, thin C wrapper. `bundled` includes FTS5 |
+| File watching | `notify` | 8.2 | Industry standard (rust-analyzer, deno, cargo-watch). Custom debounce thread for reindex + rescan handling |
+| Dir traversal | `walkdir` | 2.5 | Recursive directory walking for indexer reconciliation |
+| Dir traversal (filtered) | `ignore` | 0.4 | From ripgrep — combines walkdir + .gitignore filtering. Used for content search |
+| YAML | `serde_yaml_ng` | 0.10 | `serde_yaml` is deprecated, `serde_yml` has RustSec advisory. This is the maintained fork |
+| Regex | `regex` | 1 | Wikilink + tag extraction from markdown content |
+| Templates | `minijinja` | 2 | 10x faster compile than handlebars/tera. `{{ var }}` syntax for periodic note templates |
+| Dates | `chrono` | 0.4 | `NaiveDate` for periodic note paths, ISO week handling |
+| OS trash | `trash` | 5 | Cross-platform native trash (macOS, Windows, FreeDesktop) |
+| Paths | `dirs-next` | 2.0 | XDG-compliant data directory resolution (`~/.onyx`) |
+| macOS UI | `cocoa` + `objc` | 0.26 / 0.2.7 | NSSpellChecker for native spellcheck, App Nap prevention, window corner radius |
+| Serialization | `serde` + `serde_json` | 1 | JSON serialization for IPC, config, frontmatter |
+| Logging | `log` + `tauri-plugin-log` | 0.4 / 2 | Structured logging from Rust to WebView console |
+| Tauri | `tauri` | 2.10 | App framework, IPC, window management, event system |
+
+### Not Yet Used (planned)
+
+| Crate | Purpose | When |
+|-------|---------|------|
+| `notify-debouncer-full` | Rename coalescing + file ID tracking | If external rename detection proves unreliable (see FS_REACTIVITY_SPEC.md §3.7) |
+| `rmcp` + `axum` | MCP server (streamable HTTP) | Phase 11+ |
+| `nucleo-matcher` | Fuzzy search for quick open | Phase 11+ (currently using SQL LIKE) |
+| `rayon` | Parallel indexing for large vaults | If reconciliation proves slow at scale |
+| `pulldown-cmark` | Markdown AST parsing | If we need structural analysis beyond regex extraction |
 
 ### Concurrency Pattern
 
-- **tokio** (provided by Tauri) — async I/O, channels, timers, file watching event loop
-- **rayon** — CPU-bound work (parsing thousands of markdown files during indexing)
-- **tokio::sync::mpsc** + `app_handle.emit()` — Rust-to-frontend event emission
-- Do NOT use `tokio::spawn_blocking` for CPU-heavy work — it starves the blocking thread pool
+- **tokio** (provided by Tauri) — async I/O, IPC command handling
+- **std::thread** — background indexer, watcher debounce processor, reconciliation
+- **Mutex<T>** — shared state (DB, watcher, config). All DB access behind single Mutex
+- **app.emit()** — Rust-to-frontend event emission for `fs:change` events
 
 ---
 
 ## Frontend (`package.json`)
 
-| Category | Package | Size (gzip) | Why |
-|----------|---------|-------------|-----|
-| Editor | `@codemirror/lang-markdown` + `@lezer/markdown` | ~30kB | Core CM6 markdown. GFM tables, tasks, code blocks included |
-| Frontmatter | `@codemirror/lang-yaml` | ~5kB | `yamlFrontmatter()` wrapper — handles `---` blocks natively |
-| Code highlighting | `@codemirror/language-data` | lazy | 50+ languages loaded on demand inside fenced code blocks |
-| Wikilinks/tags | `lezer-markdown-obsidian` | tiny | Lezer extensions for `[[links]]`, `#tags`, `![[embeds]]`, `==highlights==` |
-| Search/replace | `@codemirror/search` | ~5kB | Regex, case sensitivity, whole word. Included in basicSetup |
-| Theme reference | `@codemirror/theme-one-dark` | ~3kB | Structural reference for building our custom dark theme |
-| File tree | `@headless-tree/react` | ~10kB | Headless, 100k+ item virtualization, async data. Successor to react-complex-tree |
-| Tab reorder | `@dnd-kit/sortable` | ~10kB | Drag-to-reorder tabs. Tab bar itself is custom (~50 lines) |
-| Context menu | `@radix-ui/react-context-menu` | ~6kB | Accessible, unstyled, works with plain CSS |
-| Command palette | `cmdk` | ~7kB | Headless, used by Vercel/Linear/Raycast. Built on Radix |
-| Dialogs | `@radix-ui/react-dialog` | ~5kB | Shares internals with context menu (Radix) |
-| Calendar | `react-day-picker` | ~8kB | Zero deps, headless, custom modifiers for dot indicators on days with notes |
-| Split panes | `react-resizable-panels` | ~12kB | By bvaughn (React core team). CSS-based, collapsible panels |
-| Toasts | `sonner` | ~3kB | `toast.promise()` for indexing progress, MCP write confirmations |
-| Dates | `date-fns` (tree-shaken) | ~4kB | Functional, tree-shakes to just what you import |
-| Keyboard shortcuts | `react-hotkeys-hook` | ~3kB | `useHotkeys('mod+o', handler)` — `mod` = Cmd on Mac, Ctrl on Windows |
-| State | `zustand` 5 + persist/immer/devtools middleware | ~5kB | All middleware ships built-in as of v5 |
+| Category | Package | Why |
+|----------|---------|-----|
+| Editor | `@codemirror/*` (lang-markdown, lang-yaml, language-data, autocomplete, search, state, view) | Core CM6 markdown editing stack |
+| Editor theme | `@codemirror/theme-one-dark` | Structural reference for custom dark theme |
+| Editor wikilinks | `lezer-markdown-obsidian` (vendored in extensions) | Wikilink + tag + highlight parser nodes |
+| Table editing | `@tgrosinger/md-advanced-tables` | Table formatting + column operations, adapted via tableAdapter.ts |
+| UI framework | `react` + `react-dom` | 19.2 — UI rendering |
+| State | `zustand` | 5.0 — minimal state management. Pane-aware store with memoized selectors |
+| Tauri IPC | `@tauri-apps/api` + `@tauri-apps/plugin-dialog` + `@tauri-apps/plugin-fs` | Tauri 2 frontend bindings |
+| macOS styling | `@cloudworxx/tauri-plugin-mac-rounded-corners` | Window corner radius fix for Tauri on macOS |
 
-**Total frontend library overhead: ~73kB gzipped** (~200-250kB decompressed)
+### Built Custom (replaced planned dependencies)
 
-### CM6 Notes
+These were in the original research but we built lightweight custom implementations instead:
 
-- **Wikilink/tag parsing:** `lezer-markdown-obsidian` gives us the parser layer. The decoration/widget layer (hiding markup in live preview, rendering checkboxes, interactive tables) is always custom CM6 extensions.
-- **Live preview:** Use CM6's `Decoration.replace()` + `ViewPlugin` to hide markup when cursor is outside the node. Study `codemirror-rich-markdoc` for the pattern.
-- **Table editing:** No standalone CM6 package exists. Zettlr built a custom `TableEditor` module — study theirs.
-- **Outliner (indent/outdent):** No standalone package. Typically 50-100 lines of keymap code.
-- **Word count / cursor position:** Custom `ViewPlugin`, ~30 lines.
-- **Auto-save:** `EditorView.updateListener.of(update => { if (update.docChanged) debouncedSave() })`.
-- **Vim mode:** `@replit/codemirror-vim` if we ever want it (Tier 2+).
-
----
-
-## Tauri 2 Plugins (Official)
-
-| Plugin | NPM Package | Purpose |
-|--------|-------------|---------|
-| File System | `@tauri-apps/plugin-fs` | Built-in file access with scoped permissions |
-| Global Shortcuts | `@tauri-apps/plugin-global-shortcut` | OS-level shortcuts (when window unfocused) |
-| Clipboard | `@tauri-apps/plugin-clipboard-manager` | Text read/write |
-| Store | `@tauri-apps/plugin-store` | Persistent key-value storage for settings |
-| Window State | `@tauri-apps/plugin-window-state` | Persist/restore window size & position across launches |
-| Single Instance | `@tauri-apps/plugin-single-instance` | Prevent duplicate app instances |
-| Dialog | `@tauri-apps/plugin-dialog` | Native file open/save dialogs |
-| Updater | `@tauri-apps/plugin-updater` | Auto-update via GitHub Releases (later) |
-
-### Titlebar
-
-Tauri v2 native: set `decorations: false` in `tauri.conf.json`, use `data-tauri-drag-region` on HTML elements. Optional: `tauri-controls` for native-looking window buttons per OS.
-
-### System Tray
-
-Core Tauri feature (not a plugin). Enable `tray-icon` feature flag, use `TrayIconBuilder`.
-
----
-
-## Key Findings
-
-1. **`serde_yaml` is dead** — must use `serde_yaml_ng` (original deprecated, first fork has security advisory)
-2. **pulldown-cmark has native `[[wikilink]]` support** — `Options::ENABLE_WIKILINKS`, no custom Rust parser needed
-3. **`lezer-markdown-obsidian`** gives CM6 wikilink + tag + embed parsing — saves significant frontend work
-4. **Official Rust MCP SDK exists** (`rmcp`) with streamable HTTP transport — no manual protocol implementation
-5. **`minijinja`** is 10x faster than alternatives for template compilation — perfect for `{{date}}` substitution
-6. **`nucleo-matcher`** (from Helix) is ~6x faster than fuzzy-matcher — great for quick open
+| Planned | Lines | Why custom |
+|---------|-------|------------|
+| `@headless-tree/react` (file tree) | Sidebar.tsx ~591 | Custom tree with inline rename, context menu, directory colors — simpler than adapting headless tree |
+| `@dnd-kit/sortable` (tab reorder) | TabBar.tsx ~103 | Native HTML5 drag works fine for tab reorder |
+| `cmdk` (command palette) | CommandPalette.tsx ~123 | Custom palette with fuzzy search is trivial |
+| `@radix-ui/react-context-menu` | SidebarContextMenu.tsx ~120 | Custom context menu avoids Radix dependency |
+| `react-day-picker` (calendar) | Calendar.tsx ~273 | Custom calendar with week numbers + periodic note dots |
+| `react-resizable-panels` (split panes) | Editor.tsx ~625 | Custom pane layout with draggable divider, max 3 panes |
+| `react-hotkeys-hook` | keybindings.ts ~174 | Custom keybinding registry with conflict detection |
+| `sonner` (toasts) | — | Not yet needed — errors go to console or status bar |
+| `date-fns` | — | `chrono` handles dates in Rust; JS uses native Date |
 
 ---
 
@@ -109,10 +81,40 @@ Ranked by direct relevance to Onyx.
 
 | Project | Stack | Stars | Study For | URL |
 |---------|-------|-------|-----------|-----|
+| **Lumina Note** | Tauri v2 + React 18 + CM6 + Zustand + SQLite | 727 | CM6 live markdown, wikilinks, three editor modes | https://github.com/blueberrycongee/Lumina-Note |
+| **Otterly** | Tauri + Svelte + SQLite FTS5 + ProseMirror | 108 | Hexagonal architecture, FTS5 search, wikilink tracking | https://github.com/ajkdrag/otterly |
+
+### CM6 Editor References
+
+| Project | Stars | Study For | URL |
+|---------|-------|-----------|-----|
+| **Zettlr** | 12.6k | Best CM6 editor setup, table editor | https://github.com/Zettlr/Zettlr |
+| **MarkEdit** | 3.8k | Native app + CM6 webview hybrid | https://github.com/MarkEdit-app/MarkEdit |
+| **codemirror-rich-markdoc** | ~100 | Live preview `Decoration.replace()` pattern | https://github.com/segphault/codemirror-rich-markdoc |
+
+### Key Findings
+
+1. **`serde_yaml` is dead** — must use `serde_yaml_ng`
+2. **`lezer-markdown-obsidian`** gives CM6 wikilink + tag parsing — saved significant work
+3. **Most planned frontend deps weren't needed** — custom implementations are simpler and smaller
+4. **`notify` raw + custom debounce** works well enough; `notify-debouncer-full` deferred until needed
+
+---
+
+## Appendix: Pre-Build Research (historical)
+
+Research conducted before implementation. Star counts from Feb/Mar 2026.
+
+### Reference Projects — Full List
+
+#### Near-Identical Stack
+
+| Project | Stack | Stars | Study For | URL |
+|---------|-------|-------|-----------|-----|
 | **Lumina Note** | Tauri v2 + React 18 + CM6 + Zustand + SQLite | 727 | CM6 live markdown, wikilinks, three editor modes, database views | https://github.com/blueberrycongee/Lumina-Note |
 | **Otterly** | Tauri + Svelte + SQLite FTS5 + ProseMirror | 108 | Hexagonal architecture, FTS5 search, wikilink + backlink tracking | https://github.com/ajkdrag/otterly |
 
-### CM6 Editor References
+#### CM6 Editor References
 
 | Project | Stack | Stars | Study For | URL |
 |---------|-------|-------|-----------|-----|
@@ -123,102 +125,67 @@ Ranked by direct relevance to Onyx.
 | **codemirror-rich-markdoc** | CM6 extension | ~100 | Live preview pattern — hiding markup via `Decoration.replace()` | https://github.com/segphault/codemirror-rich-markdoc |
 | **lezer-markdown-obsidian** | Lezer parser extensions | 7 | Wikilink, tag, embed, highlight parser nodes for CM6 | https://github.com/erykwalder/lezer-markdown-obsidian |
 
-### Architecture Patterns
+#### Architecture Patterns
 
 | Project | Stack | Stars | Study For | URL |
 |---------|-------|-------|-----------|-----|
-| **Otterly** | Tauri + Svelte + SQLite FTS5 + ProseMirror | 108 | Best Rust backend of all candidates. See "Otterly Deep Dive" below | https://github.com/ajkdrag/otterly |
-| **AppFlowy** | Flutter + Rust | 68.5k | Rust backend architecture, event-driven frontend↔Rust communication | https://github.com/AppFlowy-IO/AppFlowy |
+| **Otterly** | Tauri + Svelte + SQLite FTS5 + ProseMirror | 108 | Best Rust backend of all candidates | https://github.com/ajkdrag/otterly |
+| **AppFlowy** | Flutter + Rust | 68.5k | Rust backend architecture, event-driven frontend-Rust communication | https://github.com/AppFlowy-IO/AppFlowy |
 | **Anytype** | Electron + React + Go middleware | 7.2k | Typed objects system design (validates our `object-types.json` approach) | https://github.com/anyproto/anytype-ts |
 | **HelixNotes** | Tauri 2 + SvelteKit + Tantivy | — | Full-text search via Tantivy, graph view, Obsidian import | https://codeberg.org/ArkHost/HelixNotes |
 
-### Otterly Deep Dive — Rust Patterns to Reference
+#### Otterly Deep Dive — Rust Patterns
 
-Otterly's frontend (Svelte + ProseMirror) is irrelevant to Onyx, but their Rust backend is the best-structured of all candidates evaluated. Specific files to study when implementing each phase:
+Otterly's Rust backend was the best-structured of all candidates. Key files studied:
 
-**Phase 1 — File I/O & Watching:**
-- `src-tauri/src/features/notes/service.rs` — Atomic writes (temp file + rename), conflict detection via mtime, path traversal protection (`reject_symlink_components`, `resolve_under_vault_root`). Proper security thinking.
-- `src-tauri/src/features/watcher/service.rs` — Clean `notify` integration with event classification (note changes vs asset changes), excluded folder filtering, graceful shutdown via channel signaling.
+- **File I/O:** `features/notes/service.rs` — Atomic writes, conflict detection via mtime, path traversal protection
+- **Watcher:** `features/watcher/service.rs` — Clean `notify` integration with event classification, graceful shutdown
+- **Search:** `features/search/db.rs` — FTS5 with BM25 ranking, batch indexing, cancellation via AtomicBool
+- **Links:** `features/search/link_parser.rs` — Wikilink + markdown link extraction, backlink graph queries
 
-**Phase 2 — SQLite Indexing & Search:**
-- `src-tauri/src/features/search/db.rs` — FTS5 schema with BM25 ranking, batch indexing (100 files at a time), cancellation via `AtomicBool`, separate reader/writer connections. Worker thread per vault with mpsc command channel.
-- Three-table design: `notes`, `notes_fts` (FTS5 virtual table), `outlinks`.
+Architecture patterns we adopted: A1 (atomic writes), A2 (mtime conflict detection), A3 (path traversal protection). Deferred: A5 (separate reader/writer connections), A6 (worker thread per vault), A7 (folder cache with TTL).
 
-**Phase 3 — Links & Backlinks:**
-- `src-tauri/src/features/search/link_parser.rs` — Extracts both `[[wikilinks]]` and `[markdown](links)` using comrak. Handles relative path resolution, link rewriting on file moves. Stores in `outlinks` table. `get_backlinks()` and `get_outlinks()` query the link graph. `suggest_planned()` finds unresolved links sorted by reference count.
+#### Obsidian Plugin References
 
-**Architecture patterns worth adapting:**
-- A1. **Atomic file writes**: Write to temp file, then rename. Prevents corruption on crash.
-- A2. **Conflict detection**: Compare mtime before writing. If file changed on disk since last read, warn instead of overwriting.
-- A3. **Path traversal protection**: Validate all paths resolve within registered directories. Prevents `../../etc/passwd` attacks via wikilinks or MCP.
-- A4. **Batch indexing with cancellation**: Index in chunks of 100, check `AtomicBool` between batches. Allows aborting on shutdown or re-index request.
-- A5. **Separate SQLite connections**: Reader connection (shared/WAL) + writer connection (exclusive). Reads never block on writes.
-- A6. **Worker thread per vault**: Each registered directory gets its own indexing worker with an mpsc command channel. Clean shutdown via channel drop.
-- A7. **Folder cache with TTL**: 30s TTL + LRU eviction for directory listings. Avoids hammering the filesystem.
+| Plugin | Stars | Studied For | URL |
+|--------|-------|-------------|-----|
+| **periodic-notes** | 1.3k | Date-to-filepath mapping, template application | https://github.com/liamcain/obsidian-periodic-notes |
+| **dataview** | 8.6k | YAML frontmatter indexing, typed data model | https://github.com/blacksmithgu/obsidian-dataview |
+| **outliner** | 1.3k | List manipulation, keyboard-driven indent/outdent | https://github.com/vslinko/obsidian-outliner |
+| **calendar** | 2.1k | Calendar widget rendering | https://github.com/liamcain/obsidian-calendar-plugin |
 
-### Obsidian Plugin Source (for feature implementation patterns)
+#### Other Tauri Note Apps
 
-| Plugin | Stars | Study For | URL |
-|--------|-------|-----------|-----|
-| **periodic-notes** | 1.3k | Date-to-filepath mapping, template application, calendar set management | https://github.com/liamcain/obsidian-periodic-notes |
-| **dataview** | 8.6k | YAML frontmatter indexing, typed data model, query execution | https://github.com/blacksmithgu/obsidian-dataview |
-| **outliner** | 1.3k | List manipulation operations, keyboard-driven indent/outdent/move | https://github.com/vslinko/obsidian-outliner |
-| **calendar** | 2.1k | Calendar widget rendering. UI is a separate Svelte package | https://github.com/liamcain/obsidian-calendar-plugin |
-| **calendar-ui** | — | Standalone Svelte calendar widget (adapt patterns to React) | https://github.com/liamcain/obsidian-calendar-ui |
+| Project | Stack | Stars | URL |
+|---------|-------|-------|-----|
+| **NoteGen** | Tauri + Next.js + React | 11k | https://github.com/codexu/note-gen |
+| **Rhyolite** | Tauri + Rust-heavy | 180 | https://github.com/lockedmutex/rhyolite |
+| **Open Note** | Tauri + React + TipTap | — | https://github.com/JeremiasVillane/open-note |
 
-### Other Tauri Note Apps
+#### Cautionary Tales
 
-| Project | Stack | Stars | Notes | URL |
-|---------|-------|-------|-------|-----|
-| **NoteGen** | Tauri + Next.js + React | 11k | AI-enhanced notes with RAG/MCP. Shows Tauri can scale | https://github.com/codexu/note-gen |
-| **Rhyolite** | Tauri + Rust-heavy | 180 | Primarily Rust markdown editor | https://github.com/lockedmutex/rhyolite |
-| **Open Note** | Tauri + React + TypeScript + TipTap | — | React+Tauri patterns, PDF export | https://github.com/JeremiasVillane/open-note |
+| Project | Stars | Lesson |
+|---------|-------|--------|
+| **Notable** | 23.6k | Proved demand for "markdown + YAML + tags". Went closed-source, community backlash |
+| **MarkText** | 54.4k | Built custom editor engine (Muya) instead of using CM6 — maintenance burden killed the project |
 
-### Cautionary Tales
-
-| Project | Stars | Lesson | URL |
-|---------|-------|--------|-----|
-| **Notable** | 23.6k | Proved demand for "markdown files + YAML frontmatter + tags". Went closed-source, community backlash | https://github.com/notable/notable |
-| **MarkText** | 54.4k | Built custom editor engine (Muya) instead of using CM6 — maintenance burden killed the project | https://github.com/marktext/marktext |
-
----
-
-## Crate Reference (`Cargo.toml`)
+### Original Cargo.toml Plan (pre-build)
 
 ```toml
-# SQLite
 rusqlite = { version = "0.38", features = ["bundled"] }
 rusqlite_migration = "1"
-
-# File watching
 notify = "8.2"
 notify-debouncer-full = "0.5"
-
-# YAML frontmatter
 serde_yaml_ng = "0.10"
 serde = { version = "1", features = ["derive"] }
-
-# Markdown parsing
 pulldown-cmark = "0.12"
-
-# Templates
 minijinja = "2"
-
-# MCP server
 rmcp = { version = "0.16", features = ["transport-streamable-http-server", "server"] }
 axum = "0.8"
-
-# File utilities
 ignore = "0.4"
 trash = "5.2"
-
-# Fuzzy search
 nucleo-matcher = "0.3"
-
-# Date/time
 chrono = { version = "0.4", features = ["serde"] }
-
-# Concurrency
 rayon = "1.10"
-tokio = { version = "1", features = ["sync"] }  # Tauri provides the runtime
+tokio = { version = "1", features = ["sync"] }
 ```

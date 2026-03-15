@@ -722,7 +722,7 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 - ✅ Rescan handling: FSEvents overflow triggers targeted directory reconciliation
 - ✅ Remove events buffered 300ms to handle macOS watcher rename race
 
-See `docs/FS_REACTIVITY_SPEC.md` for full design spec.
+See `docs/Archive/FS_REACTIVITY_SPEC.md` for the original design spec.
 
 ---
 
