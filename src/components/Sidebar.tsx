@@ -182,6 +182,7 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
         draggable={!entry.is_dir && !isRenaming}
         onDragStart={(e) => {
           draggedFilePath = entry.path;
+          e.dataTransfer.setData("text/plain", entry.path);
           e.dataTransfer.effectAllowed = "move";
           internalDragActive = true;
         }}
