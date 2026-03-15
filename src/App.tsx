@@ -575,13 +575,12 @@ export default function App() {
     const unlistenDragDrop = getCurrentWebview().onDragDropEvent((event) => {
       if (cancelled) return;
       const { type } = event.payload;
-      if ((type === "enter" || type === "over") && !useAppStore.getState().internalDrag) {
+      if (type === "enter" || type === "over") {
         setDragOver(true);
       } else if (type === "leave") {
         setDragOver(false);
       } else if (type === "drop") {
         setDragOver(false);
-        if (useAppStore.getState().internalDrag) return; // Internal sidebar drag — handled by HTML5 drop
         for (const filePath of event.payload.paths) {
           if (filePath.endsWith(".md")) {
             const name = filePath.split("/").pop() || filePath;

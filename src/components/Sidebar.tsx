@@ -9,8 +9,14 @@ import type { DirEntry } from "../types";
 import { BookmarkStrip } from "./BookmarkStrip";
 import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
 
-// Track dragged file path via module variable (dataTransfer.getData unreliable in WebKit)
-let draggedFilePath: string | null = null;
+// Pointer-based drag state (HTML5 drag-drop doesn't work in Tauri — native handler intercepts drops)
+let dragState: {
+  sourcePath: string;
+  sourceEl: HTMLElement;
+  startY: number;
+  active: boolean;
+} | null = null;
+let currentDropTarget: string | null = null;
 
 function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder, onReveal, onUnregister }: {
   x: number; y: number;
@@ -116,10 +122,9 @@ interface TreeNodeProps {
   onContextMenu: (e: React.MouseEvent, entry: DirEntry) => void;
   onRenameSubmit: (entry: DirEntry, newName: string) => void;
   onRenameCancel: () => void;
-  onFileDrop: (sourcePath: string, targetDir: string) => void;
 }
 
-function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion, onFileClick, onContextMenu, onRenameSubmit, onRenameCancel, onFileDrop }: TreeNodeProps) {
+function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion, onFileClick, onContextMenu, onRenameSubmit, onRenameCancel }: TreeNodeProps) {
   const expandedSubdirs = useAppStore((s) => s.expandedSubdirs);
   const toggleSubdirExpanded = useAppStore((s) => s.toggleSubdirExpanded);
   const expanded = entry.is_dir && expandedSubdirs.includes(entry.path);
@@ -167,42 +172,22 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
   const isActive = entry.path === activeFilePath;
   const isMarkdown = entry.extension === "md";
   const isRenaming = renamingPath === entry.path;
-  const [dropOver, setDropOver] = useState(false);
 
   return (
     <div className={entry.is_dir ? "tree-directory" : "tree-file"}>
       <div
-        className={`tree-item ${isActive ? "active" : ""} ${dropOver ? "drop-target" : ""}`}
+        className={`tree-item ${isActive ? "active" : ""}`}
         style={{ "--indent": depth } as React.CSSProperties}
         onClick={isRenaming ? undefined : toggle}
         onContextMenu={(e) => onContextMenu(e, entry)}
-        draggable={!entry.is_dir && !isRenaming}
-        onDragStart={(e) => {
-          draggedFilePath = entry.path;
-          e.dataTransfer.setData("text/plain", entry.path);
-          e.dataTransfer.effectAllowed = "move";
-          useAppStore.getState().setInternalDrag(true);
+        onPointerDown={(e) => {
+          // Only initiate drag for files (not dirs), left button, not renaming
+          if (entry.is_dir || isRenaming || e.button !== 0) return;
+          const el = e.currentTarget;
+          dragState = { sourcePath: entry.path, sourceEl: el, startY: e.clientY, active: false };
         }}
-        onDragEnd={() => { useAppStore.getState().setInternalDrag(false); draggedFilePath = null; }}
-        onDragOver={(e) => {
-          if (!entry.is_dir || !draggedFilePath) return;
-          e.preventDefault();
-          e.stopPropagation();
-          e.dataTransfer.dropEffect = "move";
-          setDropOver(true);
-        }}
-        onDragLeave={() => setDropOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setDropOver(false);
-          if (!entry.is_dir || !draggedFilePath) return;
-          const sourcePath = draggedFilePath;
-          draggedFilePath = null;
-          if (sourcePath && !sourcePath.startsWith(entry.path + "/")) {
-            onFileDrop(sourcePath, entry.path);
-          }
-        }}
+        data-tree-path={entry.path}
+        data-tree-dir={entry.is_dir ? "true" : undefined}
       >
         <span className="tree-item-chevron">
           {entry.is_dir
@@ -238,7 +223,6 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
               onContextMenu={onContextMenu}
               onRenameSubmit={onRenameSubmit}
               onRenameCancel={onRenameCancel}
-              onFileDrop={onFileDrop}
             />
           ))}
         </div>
@@ -361,6 +345,87 @@ export function Sidebar() {
     };
   }, [loadDirectories]);
 
+  // Pointer-based drag-and-drop for moving files into folders
+  useEffect(() => {
+    const DRAG_THRESHOLD = 5;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!dragState) return;
+
+      // Activate drag after threshold
+      if (!dragState.active) {
+        if (Math.abs(e.clientY - dragState.startY) < DRAG_THRESHOLD) return;
+        dragState.active = true;
+        dragState.sourceEl.style.opacity = "0.4";
+        document.body.style.cursor = "grabbing";
+      }
+
+      // Hit-test: find the folder element under the pointer
+      const els = document.elementsFromPoint(e.clientX, e.clientY);
+      const folderEl = els.find(
+        (el) => el instanceof HTMLElement && el.dataset.treeDir === "true"
+      ) as HTMLElement | undefined;
+
+      const newTarget = folderEl?.dataset.treePath ?? null;
+
+      // Don't allow dropping into the file's own parent
+      if (newTarget && dragState.sourcePath.startsWith(newTarget + "/")) {
+        if (currentDropTarget) {
+          document.querySelector(`[data-tree-path="${CSS.escape(currentDropTarget)}"]`)?.classList.remove("drop-target");
+          currentDropTarget = null;
+        }
+        return;
+      }
+
+      if (newTarget !== currentDropTarget) {
+        // Remove old highlight
+        if (currentDropTarget) {
+          document.querySelector(`[data-tree-path="${CSS.escape(currentDropTarget)}"]`)?.classList.remove("drop-target");
+        }
+        // Add new highlight
+        if (newTarget) {
+          folderEl?.classList.add("drop-target");
+        }
+        currentDropTarget = newTarget;
+      }
+    };
+
+    const handlePointerUp = () => {
+      if (!dragState) return;
+      const wasActive = dragState.active;
+      const sourcePath = dragState.sourcePath;
+
+      // Reset visual state
+      dragState.sourceEl.style.opacity = "";
+      document.body.style.cursor = "";
+      if (currentDropTarget) {
+        document.querySelector(`[data-tree-path="${CSS.escape(currentDropTarget)}"]`)?.classList.remove("drop-target");
+      }
+
+      // Perform the move
+      if (wasActive && currentDropTarget) {
+        const targetDir = currentDropTarget;
+        const fileName = sourcePath.split("/").pop();
+        if (fileName) {
+          const newPath = `${targetDir}/${fileName}`;
+          fileOps.renameFile(sourcePath, newPath).catch((err) =>
+            console.error("Failed to move file:", err)
+          );
+        }
+      }
+
+      dragState = null;
+      currentDropTarget = null;
+    };
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, []);
+
   const handleFileClick = async (path: string, name: string, metaKey: boolean) => {
     if (!name.endsWith(".md")) return;
 
@@ -423,17 +488,6 @@ export function Sidebar() {
       console.error("Failed to rename:", err);
     }
     setRenamingPath(null);
-  };
-
-  const handleFileDrop = async (sourcePath: string, targetDir: string) => {
-    const fileName = sourcePath.split("/").pop();
-    if (!fileName) return;
-    const newPath = `${targetDir}/${fileName}`;
-    try {
-      await fileOps.renameFile(sourcePath, newPath);
-    } catch (err) {
-      console.error("Failed to move file:", err);
-    }
   };
 
   const handleRenameCancel = () => {
@@ -548,7 +602,6 @@ export function Sidebar() {
                       onContextMenu={handleContextMenu}
                       onRenameSubmit={handleRenameSubmit}
                       onRenameCancel={handleRenameCancel}
-                      onFileDrop={handleFileDrop}
                     />
                   ))}
                 </div>
