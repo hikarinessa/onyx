@@ -909,9 +909,13 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    width: 72px;
+    width: 82px;
     flex-shrink: 0;
     line-height: 1.6;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    cursor: context-menu;
   }
 
   .prop-required {

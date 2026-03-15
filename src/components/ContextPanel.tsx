@@ -183,6 +183,21 @@ function PropertyField({
 
 // ── Properties section ──
 
+const PROP_TYPES = [
+  { value: "text", label: "Text", icon: "type" },
+  { value: "number", label: "Number", icon: "hash" },
+  { value: "date", label: "Date", icon: "calendar" },
+  { value: "checkbox", label: "Checkbox", icon: "check-square" },
+  { value: "select", label: "Select", icon: "list" },
+  { value: "multiselect", label: "Multi-select", icon: "list-checks" },
+  { value: "tags", label: "Tags", icon: "tag" },
+  { value: "link", label: "Link", icon: "link" },
+];
+
+function iconForType(type: string): string {
+  return PROP_TYPES.find((t) => t.value === type)?.icon || "type";
+}
+
 function inferPropertyType(val: unknown): string {
   if (Array.isArray(val)) return "tags";
   if (typeof val === "boolean") return "checkbox";
@@ -252,6 +267,9 @@ function PropertiesSection({
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([]);
   const [loading, setLoading] = useState(true);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Per-property type overrides for untyped notes (user right-click to change)
+  const [typeOverrides, setTypeOverrides] = useState<Record<string, string>>({});
+  const [propTypeMenu, setPropTypeMenu] = useState<{ key: string; x: number; y: number } | null>(null);
 
   // Load frontmatter + object types when path or saveVersion changes
   useEffect(() => {
@@ -323,20 +341,41 @@ function PropertiesSection({
     [path],
   );
 
+  // Close property type menu on outside click
+  useEffect(() => {
+    if (!propTypeMenu) return;
+    const close = () => setPropTypeMenu(null);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [propTypeMenu]);
+
+  const handleChangePropertyType = useCallback(
+    (key: string, newType: string) => {
+      setTypeOverrides((prev) => ({ ...prev, [key]: newType }));
+      // Convert the value to match the new type
+      setFrontmatter((prev) => {
+        if (!prev) return prev;
+        const oldVal = prev[key];
+        let newVal: FrontmatterValue = oldVal;
+        if (newType === "checkbox") newVal = Boolean(oldVal);
+        else if (newType === "number") newVal = Number(oldVal) || 0;
+        else if (newType === "tags") newVal = Array.isArray(oldVal) ? oldVal : oldVal ? [String(oldVal)] : [];
+        else if (newType === "text" || newType === "link") newVal = oldVal != null ? String(oldVal) : "";
+        else if (newType === "date") newVal = typeof oldVal === "string" ? oldVal : "";
+        const updated = { ...prev, [key]: newVal };
+        scheduleSave(updated);
+        return updated;
+      });
+      setPropTypeMenu(null);
+    },
+    [scheduleSave],
+  );
+
   const handleChange = useCallback(
     (key: string, val: FrontmatterValue) => {
       setFrontmatter((prev) => {
-        // Coerce string values that look like booleans or numbers
-        let coerced = val;
-        if (typeof val === "string") {
-          const lower = val.toLowerCase().trim();
-          if (lower === "true") coerced = true;
-          else if (lower === "false") coerced = false;
-          else if (val.trim() !== "" && !isNaN(Number(val))) coerced = Number(val);
-        }
-        const updated = { ...prev, [key]: coerced };
-        // Remove null/undefined keys for cleanliness
-        if (coerced == null) delete updated[key];
+        const updated = { ...prev, [key]: val };
+        if (val == null) delete updated[key];
         scheduleSave(updated);
         return updated;
       });
@@ -378,7 +417,8 @@ function PropertiesSection({
               {/* Typed: render all defined properties (even empty ones) */}
               {matchedType.properties.map((def) => (
                 <div key={def.key} className="prop-row">
-                  <div className="prop-label" title={def.key}>
+                  <div className="prop-label" title={`${def.key} (${def.type})`}>
+                    <Icon name={iconForType(def.type)} size={10} />
                     {def.key}
                     {def.required && <span className="prop-required">*</span>}
                   </div>
@@ -395,13 +435,20 @@ function PropertiesSection({
               {Object.entries(frontmatter)
                 .filter(([key]) => key !== "type" && !matchedType.properties.some((p) => p.key === key))
                 .map(([key, val]) => {
-                  const inferredType = inferPropertyType(val);
+                  const effectiveType = typeOverrides[key] || inferPropertyType(val);
                   return (
                     <div key={key} className="prop-row prop-row-extra">
-                      <div className="prop-label" title={key}>{key}</div>
+                      <div
+                        className="prop-label"
+                        title={`${key} (${effectiveType}) — click to change type`}
+                        onContextMenu={(e) => { e.preventDefault(); setPropTypeMenu({ key, x: e.clientX, y: e.clientY }); }}
+                      >
+                        <Icon name={iconForType(effectiveType)} size={10} />
+                        {key}
+                      </div>
                       <div className="prop-value">
                         <PropertyField
-                          def={{ key, type: inferredType }}
+                          def={{ key, type: effectiveType }}
                           value={val}
                           onChange={(v) => handleChange(key, v)}
                         />
@@ -415,15 +462,22 @@ function PropertiesSection({
             </>
           ) : (
             <>
-              {/* Untyped: raw key-value editor */}
+              {/* Untyped: raw key-value editor — right-click label to change type */}
               {Object.entries(frontmatter).map(([key, val]) => {
-                const inferredType = inferPropertyType(val);
+                const effectiveType = typeOverrides[key] || inferPropertyType(val);
                 return (
                   <div key={key} className="prop-row">
-                    <div className="prop-label" title={key}>{key}</div>
+                    <div
+                      className="prop-label"
+                      title={`${key} (${effectiveType}) — click to change type`}
+                      onContextMenu={(e) => { e.preventDefault(); setPropTypeMenu({ key, x: e.clientX, y: e.clientY }); }}
+                    >
+                      <Icon name={iconForType(effectiveType)} size={10} />
+                      {key}
+                    </div>
                     <div className="prop-value">
                       <PropertyField
-                        def={{ key, type: inferredType }}
+                        def={{ key, type: effectiveType }}
                         value={val}
                         onChange={(v) => handleChange(key, v)}
                       />
@@ -438,6 +492,25 @@ function PropertiesSection({
           )}
           {/* Add property row */}
           <AddPropertyRow onAdd={(key) => handleChange(key, "")} />
+          {/* Property type picker menu */}
+          {propTypeMenu && (
+            <div
+              className="context-menu"
+              style={{ left: propTypeMenu.x, top: propTypeMenu.y, position: "fixed", zIndex: 1100 }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {PROP_TYPES.map((pt) => (
+                <div
+                  key={pt.value}
+                  className={`context-menu-item ${(typeOverrides[propTypeMenu.key] || inferPropertyType(frontmatter?.[propTypeMenu.key])) === pt.value ? "active" : ""}`}
+                  onClick={() => handleChangePropertyType(propTypeMenu.key, pt.value)}
+                >
+                  <Icon name={pt.icon} size={12} />
+                  <span style={{ marginLeft: 6 }}>{pt.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
