@@ -51,6 +51,13 @@ Present a numbered list of candidate issues with:
 
 Then offer: `[R4] Create selected issues` — let the user pick which ones to create (e.g., "R4 1,3,5" to create items 1, 3, and 5)
 
+## Stale Branches
+
+Check for local branches that have been merged into main and can be pruned:
+- `git branch --merged main` — list branches fully merged into main
+- Exclude `main` itself and any branch currently checked out
+- If any found, list them and offer: `[R6] Prune merged branches` (deletes local only, not remote)
+
 ## Release Build
 
 - If a version was bumped AND pushed to main, ask if the user wants a release build

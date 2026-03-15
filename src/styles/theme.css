@@ -187,8 +187,56 @@
     --syntax-highlight-bg: rgba(255, 204, 0, 0.25);
   }
 
+
+  :root[data-theme="forest"] {
+    color-scheme: light;
+
+    /* Content area — warm cream */
+    --bg-base: #f8f3eb;
+    --bg-surface: #ede7dd;
+    --bg-elevated: #e4ded4;
+    --bg-hover: #dbd4ca;
+    --bg-active: #d2cbbf;
+
+    --text-primary: #2c3030;
+    --text-secondary: #5a6262;
+    --text-tertiary: #8a9292;
+    --text-accent: #2e7d7d;
+
+    --border-subtle: #ddd5cb;
+    --border-default: #cec6bc;
+    --border-strong: #beb6ac;
+
+    --accent: #2e7d7d;
+    --accent-hover: #3a8f8f;
+    --accent-muted: rgba(46, 125, 125, 0.12);
+
+    --status-modified: #c47a1a;
+    --status-error: #c04040;
+    --status-success: #2e7d32;
+
+    --tag-bg: rgba(46, 125, 125, 0.10);
+    --tag-text: #2e7d7d;
+    --link-color: #2e7d7d;
+    --link-broken: #c04040;
+
+    --inline-code-bg: rgba(46, 125, 125, 0.08);
+    --code-block-bg: #e4ded4;
+
+    --heading-2-color: #2e7d7d;
+
+    --syntax-markup: #8a9292;
+    --syntax-hr: #beb6ac;
+    --syntax-meta: #8a9292;
+    --syntax-comment: #8a9292;
+    --syntax-list-marker: #2e7d7d;
+    --syntax-strikethrough: #8a9292;
+    --syntax-highlight-bg: rgba(200, 170, 50, 0.25);
+  }
+
   :root[data-theme="warm"] {
     --bg-base: #1c1917;
+
     --bg-surface: #221f1c;
     --bg-elevated: #292523;
     --bg-hover: #332e2b;
@@ -219,4 +267,45 @@
     --syntax-strikethrough: var(--text-secondary);
     --syntax-highlight-bg: rgba(212, 165, 116, 0.2);
   }
+}
+
+/* Forest theme — dark teal chrome overrides (unlayered to beat @layer layout) */
+:root[data-theme="forest"] .sidebar,
+:root[data-theme="forest"] .titlebar,
+:root[data-theme="forest"] .tabbar,
+:root[data-theme="forest"] .statusbar {
+  --bg-surface: #2a4a4e;
+  --bg-elevated: #325458;
+  --bg-hover: #385e62;
+  --bg-active: #436a6e;
+  --bg-base: #244044;
+  --text-primary: #e4dfda;
+  --text-secondary: #aaa5a0;
+  --text-tertiary: #707878;
+  --border-subtle: #345a5e;
+  --border-default: #446a6e;
+  --border-strong: #547a7e;
+  --accent: #6ec6c6;
+  --accent-hover: #80d2d2;
+  --accent-muted: rgba(110, 198, 198, 0.2);
+  --status-modified: #e8a44a;
+  --status-error: #e87474;
+  --status-success: #4ae88a;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* Active tab bridges chrome → content */
+:root[data-theme="forest"] .tabbar .tab.active {
+  background: #f8f3eb;
+  color: #2c3030;
+}
+
+:root[data-theme="forest"] .tabbar .tab.active .tab-close {
+  color: #8a9292;
+}
+
+:root[data-theme="forest"] .tabbar .tab.active .tab-close:hover {
+  color: #2c3030;
+  background: #dbd4ca;
 }

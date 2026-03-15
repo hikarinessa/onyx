@@ -460,6 +460,7 @@ const THEME_SWATCHES: Record<string, { bg: string; surface: string; accent: stri
   light: { bg: "#ffffff", surface: "#eeeef0", accent: "#6b5ce7", text: "#1d1d1f" },
   warm2: { bg: "#232323", surface: "#2d2d2d", accent: "#00a3d7", text: "#ebebeb" },
   warm: { bg: "#1c1917", surface: "#292523", accent: "#d4a574", text: "#ede8e3" },
+  forest: { bg: "#f8f3eb", surface: "#2a4a4e", accent: "#2e7d7d", text: "#2c3030" },
 };
 
 function AppearanceSection({
