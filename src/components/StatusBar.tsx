@@ -13,10 +13,12 @@ export function StatusBar() {
   const saveConflictPath = useAppStore((s) => s.saveConflictPath);
   const lintErrors = useAppStore((s) => s.lintErrors);
   const lintWarnings = useAppStore((s) => s.lintWarnings);
+  const deletedPaths = useAppStore((s) => s.deletedPaths);
 
   const toggleEditorMode = useAppStore((s) => s.toggleEditorMode);
 
   const hasConflict = saveConflictPath != null && saveConflictPath === activeTabPath;
+  const isDeleted = activeTabPath != null && deletedPaths.has(activeTabPath);
 
   const handleReload = async () => {
     if (!saveConflictPath) return;
@@ -54,6 +56,11 @@ export function StatusBar() {
         )}
       </div>
       <div className="statusbar-right">
+        {isDeleted && (
+          <span className="statusbar-conflict" title="This file was deleted from disk. Use Cmd+S or File > Save As to save elsewhere.">
+            File deleted from disk
+          </span>
+        )}
         {hasConflict && (
           <span
             className="statusbar-conflict"

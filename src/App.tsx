@@ -31,7 +31,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
 import { invalidateCache } from "./lib/ipcCache";
 import { loadAndApplyConfig } from "./lib/configBridge";
-import { clearEditorCache, migrateEditorCache, cancelPendingSave } from "./components/Editor";
+import { clearEditorCache, migrateEditorCache, cancelPendingSave, lastSavedContent, replaceTabContent } from "./components/Editor";
 import { updateRecentDocPath, markRecentDocDeleted } from "./lib/recentDocs";
 
 interface FsChangeEvent {
@@ -474,16 +474,26 @@ export default function App() {
         // Track as deleted for auto-save guard
         store.addDeletedPath(path);
 
-        // Close affected tabs (file or folder prefix match)
+        // Handle affected tabs (file or folder prefix match)
         const prefix = path.endsWith("/") ? path : path + "/";
         const affected = store.tabs.filter(
           (t) => t.path === path || t.path.startsWith(prefix)
         );
-        for (const tab of affected) {
+
+        // Clean tabs → close silently. Dirty tabs → keep open with visual indicator.
+        const toClose = affected.filter((t) => !t.modified);
+        const toMark = affected.filter((t) => t.modified);
+
+        for (const tab of toClose) {
           clearEditorCache(tab.path);
         }
-        if (affected.length > 0) {
-          store.removeTabs(affected.map((t) => t.id));
+        if (toClose.length > 0) {
+          store.removeTabs(toClose.map((t) => t.id));
+        }
+        // Dirty tabs stay open — deletedPaths membership is the visual signal
+        // (TabBar and StatusBar check this for styling)
+        for (const tab of toMark) {
+          store.addDeletedPath(tab.path);
         }
 
         // Refresh tree + bookmarks
@@ -527,7 +537,27 @@ export default function App() {
         // Refresh tree for new files
         store.bumpFileTreeVersion();
       }
-      // "modify" events from the watcher don't need tree refresh
+      // "modify" from watcher — auto-reload clean tabs, conflict prompt for dirty
+      if (kind === "modify") {
+        const openTab = store.tabs.find((t) => t.path === path);
+        if (openTab) {
+          if (!openTab.modified) {
+            // Clean tab: auto-reload if content actually changed
+            invoke<string>("read_file", { path }).then((newContent) => {
+              const cached = lastSavedContent.get(openTab.id);
+              if (cached !== undefined && cached !== newContent) {
+                replaceTabContent(openTab.id, newContent);
+                lastSavedContent.set(openTab.id, newContent);
+              }
+            }).catch(() => {
+              // File may have been deleted between event and read — ignore
+            });
+          } else {
+            // Dirty tab: mark conflict so user sees the reload prompt
+            store.setSaveConflictPath(path);
+          }
+        }
+      }
     });
 
     // Tauri 2 native drag-drop (HTML5 File.path doesn't exist in Tauri 2)

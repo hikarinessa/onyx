@@ -14,6 +14,8 @@ export function TabBar({ paneId }: { paneId?: string }) {
   const reorderTabs = useAppStore((s) => s.reorderTabs);
   const setActivePane = useAppStore((s) => s.setActivePane);
 
+  const deletedPaths = useAppStore((s) => s.deletedPaths);
+
   const tabs = pane.tabs;
   const activeTabId = pane.activeTabId;
   const isActivePane = pane.id === activePaneId;
@@ -64,7 +66,9 @@ export function TabBar({ paneId }: { paneId?: string }) {
           key={tab.id}
           className={`tab ${tab.id === activeTabId ? "active" : ""} ${
             dragIndex === i ? "dragging" : ""
-          } ${dropIndex === i && dragIndex !== i ? "drop-target" : ""}`}
+          } ${dropIndex === i && dragIndex !== i ? "drop-target" : ""} ${
+            deletedPaths.has(tab.path) ? "tab-deleted" : ""
+          }`}
           draggable
           onClick={() => {
             if (!isActivePane) setActivePane(pane.id);

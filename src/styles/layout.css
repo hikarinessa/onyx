@@ -255,6 +255,15 @@
     flex-shrink: 0;
   }
 
+  .tab-deleted {
+    font-style: italic;
+    opacity: 0.6;
+  }
+  .tab-deleted .tab-label {
+    text-decoration: line-through;
+    color: var(--status-error, #e55);
+  }
+
   .tab-close {
     width: 16px;
     height: 16px;
