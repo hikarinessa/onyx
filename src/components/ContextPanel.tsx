@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, selectActiveTabPath, selectActiveTabName, type AccordionState } from "../stores/app";
+import { useAppStore, selectActiveTabPath, selectActiveTabName, selectAllTabs, type AccordionState } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import { replaceTabContent } from "./Editor";
 import { Calendar } from "./Calendar";
@@ -309,9 +309,11 @@ function PropertiesSection({
           });
           // Sync the editor: read file back from disk so CM6 has the new frontmatter
           const content = await invoke<string>("read_file", { path });
-          const activeTabId = useAppStore.getState().activeTabId;
-          if (activeTabId) {
-            replaceTabContent(activeTabId, content);
+          // Find tab ID by path across all panes (compat getter is broken)
+          const allTabs = selectAllTabs(useAppStore.getState());
+          const tab = allTabs.find((t) => t.path === path);
+          if (tab) {
+            replaceTabContent(tab.id, content);
           }
         } catch (err) {
           console.error("Failed to update frontmatter:", err);
