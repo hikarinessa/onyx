@@ -549,19 +549,19 @@ export default function App() {
         store.bumpFileTreeVersion();
       }
 
-      if (kind === "modify") {
-        // Bump tree version — on macOS, Finder moves can appear as generic
-        // Modify events instead of Modify(Name), so the tree needs to refresh.
-        store.bumpFileTreeVersion();
+      // Auto-reload open tabs on external changes.
+      // Covers "modify" (normal edits) and "create" (atomic rename-over, e.g. git checkout).
+      if (kind === "modify" || kind === "create") {
+        if (kind === "modify") store.bumpFileTreeVersion();
 
-        const modifyTab = selectAllTabs(store).find((t) => t.path === path);
-        if (modifyTab) {
-          if (!modifyTab.modified) {
+        const changedTab = selectAllTabs(store).find((t) => t.path === path);
+        if (changedTab) {
+          if (!changedTab.modified) {
             invoke<string>("read_file", { path }).then((newContent) => {
-              const cached = lastSavedContent.get(modifyTab.id);
+              const cached = lastSavedContent.get(changedTab.id);
               if (cached !== undefined && cached !== newContent) {
-                replaceTabContent(modifyTab.id, newContent);
-                lastSavedContent.set(modifyTab.id, newContent);
+                replaceTabContent(changedTab.id, newContent);
+                lastSavedContent.set(changedTab.id, newContent);
               }
             }).catch(() => {});
           } else {
