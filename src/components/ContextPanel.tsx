@@ -183,6 +183,31 @@ function PropertyField({
 
 // ── Properties section ──
 
+/** Context menu that clamps itself to viewport bounds */
+function ClampedMenu({ x, y, children }: { x: number; y: number; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x, y });
+  useEffect(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const pad = 8;
+    setPos({
+      x: Math.min(x, window.innerWidth - rect.width - pad),
+      y: Math.min(y, window.innerHeight - rect.height - pad),
+    });
+  }, [x, y]);
+  return (
+    <div
+      ref={ref}
+      className="context-menu"
+      style={{ left: pos.x, top: pos.y, position: "fixed", zIndex: 1100 }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+}
+
 const PROP_TYPES = [
   { value: "text", label: "Text", icon: "type" },
   { value: "number", label: "Number", icon: "hash" },
@@ -525,11 +550,7 @@ function PropertiesSection({
           <AddPropertyRow onAdd={(key) => handleChange(key, "")} />
           {/* Property type picker menu */}
           {propTypeMenu && (
-            <div
-              className="context-menu"
-              style={{ left: propTypeMenu.x, top: propTypeMenu.y, position: "fixed", zIndex: 1100 }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
+            <ClampedMenu x={propTypeMenu.x} y={propTypeMenu.y}>
               {PROP_TYPES.map((pt) => (
                 <div
                   key={pt.value}
@@ -540,15 +561,11 @@ function PropertiesSection({
                   <span style={{ marginLeft: 6 }}>{pt.label}</span>
                 </div>
               ))}
-            </div>
+            </ClampedMenu>
           )}
           {/* Type assign/change menu */}
           {typeAssignMenu && (
-            <div
-              className="context-menu"
-              style={{ left: typeAssignMenu.x, top: typeAssignMenu.y, position: "fixed", zIndex: 1100 }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
+            <ClampedMenu x={typeAssignMenu.x} y={typeAssignMenu.y}>
               {objectTypes.map((t) => (
                 <div
                   key={t.name}
@@ -568,7 +585,7 @@ function PropertiesSection({
                   </div>
                 </>
               )}
-            </div>
+            </ClampedMenu>
           )}
         </div>
       )}
@@ -835,15 +852,11 @@ export function ContextPanel() {
           <div className="calendar-error">{calendarError}</div>
         )}
         {calendarMenu && (
-          <div
-            className="context-menu"
-            style={{ left: calendarMenu.x, top: calendarMenu.y, position: "fixed" }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
+          <ClampedMenu x={calendarMenu.x} y={calendarMenu.y}>
             <div className="context-menu-item destructive" onClick={() => handleDeletePeriodicNote(calendarMenu.isoDate)}>
               Delete daily note
             </div>
-          </div>
+          </ClampedMenu>
         )}
       </div>
 

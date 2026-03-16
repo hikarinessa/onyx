@@ -871,7 +871,7 @@
   .prop-delete:hover { color: var(--status-error); }
 
   .prop-label-typed {
-    color: var(--text-accent);
+    color: var(--accent);
     cursor: default;
   }
 
