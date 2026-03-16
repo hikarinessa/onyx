@@ -11,12 +11,12 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 1 (Skeleton) | 0.1.0 |
 | Phase 2 (Core Editor) | 0.2.0 |
 | Phase 3 (Links & Connections) | 0.3.0 |
-| Phase 4 (Typed Objects) | 0.4.0 |
-| Phase 4.5 (File Ops & Cache) | 0.4.5 |
-| Phase 4.6 (Hardening) | 0.4.6 |
-| Phase 5 (Periodic Notes) | 0.5.0 |
-| Phase 5.X (Backfill) | 0.5.X |
-| Phase 6 (Palette & Theming) | 0.6.0 |
+| Phase 4 (Typed Objects) | 0.4.0 ✅ |
+| Phase 4.5 (File Ops & Cache) | 0.4.5 ✅ |
+| Phase 4.6 (Hardening) | 0.4.6 ✅ |
+| Phase 5 (Periodic Notes) | 0.5.0 ✅ |
+| Phase 5.X (Backfill) | 0.5.X ✅ |
+| Phase 6 (Palette & Theming) | 0.6.0 ✅ |
 | Phase 7 (Preview & Navigation) | 0.7.0 ✅ |
 | Phase 7.5 (Hardening & CSS) | 0.7.5 ✅ |
 | Phase 7.6 (Settings Window) | 0.7.6 ✅ |
@@ -25,8 +25,7 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 8 (Tables) | 0.8.0 ✅ |
 | Phase 9 (Per-Block Features + Full-Text Search) | 0.9.0 ✅ |
 | Phase 10 (Split Panes + FS Reactivity) | 0.10.0 ✅ |
-| Phase 11 (MCP Server) | 0.11.0 |
-| Phase 12 (Tier 2) | 0.12.0 |
+| Phase 11 (Tier 2 Features) | 0.11.0 |
 
 Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
@@ -476,13 +475,13 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 7.4 **Inline editable title** ✅ — Editable H1 above editor, renames file on commit
 7.5 **Editor polish** ✅ — Italic uses `_`, symbol wrap extended, outliner Option+Up/Down, layout restructure
 
-### Deferred
+### Deferred (completed in later phases)
 
-- **Split panes** — Cmd+click opens in split, draggable divider, per-pane tab bar
-- **Outline section** — Heading outline in context panel with click-to-scroll
-- **Linting** — Inline lint decorations, auto-fix on save, status bar indicator
-- **Embeds** — `![[note]]` rendered inline (read-only, 2-level depth cap)
-- **Tag chips** — Tags rendered as styled chips in live preview
+- **Split panes** ✅ — Phase 10
+- **Outline section** ✅ — Phase 7.5
+- **Linting** ✅ — Phase 9
+- **Embeds** — `![[note]]` rendered inline (read-only, 2-level depth cap) → #39
+- **Tag chips** — Tags rendered as styled chips in live preview → #40
 
 **Milestone:** The editor looks and feels great. Live preview makes writing pleasant. The app is genuinely usable as a daily driver.
 
@@ -514,7 +513,7 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 ### Note-App Gotchas
 
 7.5.11 **mtime check before write** ✅ — `read_file` records mtime in `last_read_mtimes` map; `write_file` checks mtime before writing, rejects if externally modified. Map capped at 500 entries
-7.5.12 **Self-write detection audit** — Deferred (watcher suppression window needs testing under load)
+7.5.12 **Self-write detection audit** ✅ — Handled via `fs:change` event architecture in Phase 10
 7.5.13 **No-op write optimization** ✅ — Combined with mtime check: mtime-first (cheap), content fallback only on first save
 
 ### Orphan Notes & External File Opening
@@ -523,15 +522,10 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 7.5.15 **Drag-drop `.md` files** — Deferred to Phase 8
 7.5.16 **Finder "Open With Onyx"** — Deferred to Phase 8
 
-### Deferred from Phase 7
+### Deferred from Phase 7 (completed in later phases)
 
-7.5.17 **Linting extension** — Deferred to Phase 8
-7.5.18 **Outline section in context panel** — Already implemented in Phase 6
-
-7.5.18 **Outline section in context panel**
-- Extract headings via regex, update on save + tab switch
-- Click heading → `scrollToLine(lineNumber)`
-- Indented by heading level, placed between Properties and Backlinks
+7.5.17 **Linting extension** ✅ — Implemented in Phase 9
+7.5.18 **Outline section in context panel** ✅ — Implemented in Phase 6
 
 **Milestone:** The app is hardened — CSS is layered, themes switch cleanly, IPC is cached, timers survive App Nap, external edits don't silently overwrite. Linting and outline round out the editor experience.
 

@@ -297,16 +297,18 @@ function PropertiesSection({
   const [propTypeMenu, setPropTypeMenu] = useState<{ key: string; x: number; y: number } | null>(null);
   const [typeAssignMenu, setTypeAssignMenu] = useState<{ x: number; y: number } | null>(null);
 
-  // Load frontmatter + object types when path or saveVersion changes
+  // Load object types once on mount (they're global, not per-file)
+  useEffect(() => {
+    invoke<ObjectType[]>("get_object_types").then(setObjectTypes).catch(() => {});
+  }, []);
+
+  // Load frontmatter when path or saveVersion changes
   useEffect(() => {
     let stale = false;
     setLoading(true);
 
-    Promise.all([
-      invoke<string | null>("get_file_frontmatter", { path }),
-      invoke<ObjectType[]>("get_object_types"),
-    ])
-      .then(([fmJson, types]) => {
+    invoke<string | null>("get_file_frontmatter", { path })
+      .then((fmJson) => {
         if (stale) return;
         let parsed: FrontmatterMap | null = null;
         if (fmJson) {
@@ -318,14 +320,12 @@ function PropertiesSection({
           }
         }
         setFrontmatter(parsed);
-        setObjectTypes(types);
         setLoading(false);
         onTypeDetected(!!(parsed && parsed.type));
       })
       .catch(() => {
         if (stale) return;
         setFrontmatter(null);
-        setObjectTypes([]);
         setLoading(false);
         onTypeDetected(false);
       });
@@ -442,10 +442,7 @@ function PropertiesSection({
         <span className="collapse-arrow"><Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} /></span>
         <Icon name="list" size={14} />
         Properties
-        {frontmatter && (() => {
-          const count = Object.keys(frontmatter).filter((k) => k !== "type").length;
-          return count > 0 ? ` (${count})` : null;
-        })()}
+        {frontmatter ? ` (${Object.keys(frontmatter).filter((k) => k !== "type").length})` : " (0)"}
         {matchedType && (
           <span
             className="prop-type-badge"
@@ -455,13 +452,18 @@ function PropertiesSection({
             {matchedType.name}
           </span>
         )}
-        {!matchedType && !loading && objectTypes.length > 0 && (
+        {!matchedType && !loading && (
           <button
             className="prop-type-assign"
-            title="Assign an object type"
-            onClick={(e) => { e.stopPropagation(); setTypeAssignMenu({ x: e.clientX, y: e.clientY }); }}
+            title={objectTypes.length > 0 ? "Assign an object type" : "No object types defined — create one in Settings → Objects"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (objectTypes.length > 0) {
+                setTypeAssignMenu({ x: e.clientX, y: e.clientY });
+              }
+            }}
           >
-            <Icon name="plus" size={10} />
+            <Icon name="box" size={12} />
           </button>
         )}
       </div>
@@ -629,7 +631,7 @@ function RecentDocuments({
       >
         <span className="collapse-arrow"><Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} /></span>
         <Icon name="clock" size={14} />
-        Recent ({recents.length})
+        Recent
       </div>
       {expanded && (
         <div className="recent-docs-list">
