@@ -442,6 +442,10 @@ function PropertiesSection({
         <span className="collapse-arrow"><Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} /></span>
         <Icon name="list" size={14} />
         Properties
+        {frontmatter && (() => {
+          const count = Object.keys(frontmatter).filter((k) => k !== "type").length;
+          return count > 0 ? ` (${count})` : null;
+        })()}
         {matchedType && (
           <span
             className="prop-type-badge"
@@ -451,7 +455,7 @@ function PropertiesSection({
             {matchedType.name}
           </span>
         )}
-        {frontmatter && !matchedType && objectTypes.length > 0 && (
+        {!matchedType && !loading && objectTypes.length > 0 && (
           <button
             className="prop-type-assign"
             title="Assign an object type"
