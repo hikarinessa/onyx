@@ -3,7 +3,7 @@ import { useAppStore, type AccordionState, type EditorMode } from "../stores/app
 import { openFileInEditor } from "./openFile";
 import { getActiveThemeId, applyTheme } from "./themes";
 
-const SAVE_INTERVAL_MS = 30_000;
+const SAVE_INTERVAL_MS = 10_000;
 const SESSION_BACKUP_KEY = "onyx-session-backup";
 /** Legacy key from pre-4.6 localStorage-only sessions */
 const SESSION_LEGACY_KEY = "onyx-session";
@@ -58,7 +58,9 @@ function getSessionData(): SessionData {
 
 /** Save session to ~/.onyx/session.json via Rust (async, reliable) */
 export function saveSession(): void {
-  const json = JSON.stringify(getSessionData());
+  const data = getSessionData();
+  console.log("[session] save — collapsedDirs:", data.collapsedDirs, "expandedSubdirs:", data.expandedSubdirs?.length);
+  const json = JSON.stringify(data);
   invoke("write_session", { json }).catch((err) =>
     console.error("Failed to save session:", err)
   );
@@ -122,27 +124,20 @@ export async function restoreSession(): Promise<void> {
     applyTheme(data.themeId);
   }
 
-  // Restore panel visibility
-  const state = useAppStore.getState();
-  if (data.sidebarVisible !== state.sidebarVisible) {
-    state.toggleSidebar();
-  }
-  if (data.contextPanelVisible !== state.contextPanelVisible) {
-    state.toggleContextPanel();
-  }
+  // Restore panel visibility (use setState, not toggle — StrictMode runs effects twice)
+  useAppStore.setState({
+    sidebarVisible: data.sidebarVisible,
+    contextPanelVisible: data.contextPanelVisible,
+  });
 
-  // Restore collapsed directories
+  // Restore collapsed directories + expanded subdirectories
+  // Use setState directly (not toggle) — toggle is not idempotent and React
+  // StrictMode runs effects twice, which would undo the restore.
   if (data.collapsedDirs && data.collapsedDirs.length > 0) {
-    for (const dirId of data.collapsedDirs) {
-      state.toggleDirCollapsed(dirId);
-    }
+    useAppStore.setState({ collapsedDirs: data.collapsedDirs });
   }
-
-  // Restore expanded subdirectories
   if (data.expandedSubdirs && data.expandedSubdirs.length > 0) {
-    for (const path of data.expandedSubdirs) {
-      state.toggleSubdirExpanded(path);
-    }
+    useAppStore.setState({ expandedSubdirs: data.expandedSubdirs });
   }
 
   // Restore accordion state

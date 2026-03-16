@@ -46,6 +46,7 @@ Consolidated from CLAUDE.md and ARCHITECTURE.md. Items are grouped by area, not 
 ## Open — UI & State
 
 - **Stale store in `openFileInEditor`.** `openFile.ts:29` — `getState()` snapshot goes stale across `await` boundaries. If the user switches tabs during IPC round-trips, `replaceActiveTab` can replace the wrong tab.
+- ~~**Session restore not idempotent.**~~ Fixed: `restoreSession` now uses `setState()` directly instead of `toggle*` functions. React StrictMode runs effects twice, so toggle-based restore would undo itself on the second call. Any future restore code must use direct state assignment, never toggles.
 - **Focus trapping.** Command palette and QuickOpen overlays don't trap Tab focus. Keyboard-only users can Tab behind the overlay.
 - **Tab reorder accessibility.** Drag-to-reorder is mouse-only. Add Cmd+Shift+Left/Right for keyboard users.
 - **ARIA on command palette.** Category headers need `role="separator"` or group wrapping for screen readers.
