@@ -75,6 +75,9 @@ import {
   Sun, Moon, CloudSun, CloudRain, CloudSnow, Wind, Umbrella,
   Leaf, TreePine, Flower2, Mountain, Waves,
 
+  // Lists & Checks
+  CheckSquare, List, ListChecks, Tag,
+
   // Shapes & Misc
   Square, Triangle, Diamond, Hexagon, Octagon, Pentagon,
   Sparkles, Flame, Snowflake, Droplets,
@@ -128,7 +131,8 @@ export const ICON_MAP: Record<string, LucideIcon> = {
   "undo": Undo2, "redo": Redo2,
 
   // Actions
-  "plus": Plus, "minus": Minus, "x": X, "check": Check,
+  "plus": Plus, "minus": Minus, "x": X, "check": Check, "check-square": CheckSquare,
+  "list": List, "list-checks": ListChecks, "tag": Tag,
   "refresh-cw": RefreshCw, "rotate-ccw": RotateCcw,
   "search": Search, "filter": Filter,
   "sort-asc": SortAsc, "sort-desc": SortDesc,

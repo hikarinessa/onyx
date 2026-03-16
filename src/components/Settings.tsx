@@ -16,12 +16,13 @@ import {
 import type { AppConfig, ThemeColorOverrides, HeadingStyle } from "../lib/configTypes";
 import { Icon } from "./Icon";
 
-type Section = "general" | "editor" | "appearance" | "keybindings" | "about";
+type Section = "general" | "editor" | "appearance" | "objects" | "keybindings" | "about";
 
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "general", label: "General", icon: "settings" },
   { id: "editor", label: "Editor", icon: "type" },
   { id: "appearance", label: "Appearance", icon: "palette" },
+  { id: "objects", label: "Objects", icon: "box" },
   { id: "keybindings", label: "Keybindings", icon: "keyboard" },
   { id: "about", label: "About", icon: "info" },
 ];
@@ -143,6 +144,7 @@ export function Settings() {
           {section === "appearance" && (
             <AppearanceSection config={config} updateConfig={updateConfig} />
           )}
+          {section === "objects" && <ObjectsSection />}
           {section === "keybindings" && <KeybindingsSection />}
           {section === "about" && <AboutSection />}
         </div>
@@ -949,6 +951,322 @@ function AppearanceSection({
           spellCheck={false}
         />
       </div>
+    </div>
+  );
+}
+
+// ── Section: Objects ──
+
+interface ObjectType {
+  name: string;
+  properties: PropertyDef[];
+}
+
+interface PropertyDef {
+  key: string;
+  type: string;
+  required?: boolean;
+  options?: string[];
+  min?: number;
+  max?: number;
+}
+
+const PROPERTY_TYPES = [
+  { value: "text", label: "Text", icon: "type" },
+  { value: "number", label: "Number", icon: "hash" },
+  { value: "date", label: "Date", icon: "calendar" },
+  { value: "checkbox", label: "Checkbox", icon: "check-square" },
+  { value: "select", label: "Select", icon: "list" },
+  { value: "multiselect", label: "Multi-select", icon: "list-checks" },
+  { value: "tags", label: "Tags", icon: "tag" },
+  { value: "link", label: "Link", icon: "link" },
+];
+
+function PropTypeButton({ type, onChange }: { type: string; onChange: (t: string) => void }) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const current = PROPERTY_TYPES.find((pt) => pt.value === type) || PROPERTY_TYPES[0];
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setMenu(null);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menu]);
+
+  return (
+    <>
+      <span
+        className="settings-objects-prop-type-btn"
+        title={`Type: ${current.label} (right-click to change)`}
+        onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); }}
+        onClick={(e) => { setMenu({ x: e.clientX, y: e.clientY }); }}
+      >
+        <Icon name={current.icon} size={12} />
+        {current.label}
+      </span>
+      {menu && (
+        <div ref={ref} className="context-menu" style={{ left: menu.x, top: menu.y, position: "fixed", zIndex: 1100 }}>
+          {PROPERTY_TYPES.map((pt) => (
+            <div
+              key={pt.value}
+              className={`context-menu-item ${pt.value === type ? "active" : ""}`}
+              onClick={() => { onChange(pt.value); setMenu(null); }}
+            >
+              <Icon name={pt.icon} size={12} />
+              <span style={{ marginLeft: 6 }}>{pt.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function ObjectsSection() {
+  const [types, setTypes] = useState<ObjectType[]>([]);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [dirty, setDirty] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load types on mount
+  useEffect(() => {
+    invoke<ObjectType[]>("get_object_types").then(setTypes).catch(console.error);
+  }, []);
+
+  const saveTypes = useCallback((updated: ObjectType[]) => {
+    setTypes(updated);
+    setDirty(true);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      invoke("save_object_types", { json: JSON.stringify(updated) })
+        .then(() => setDirty(false))
+        .catch(console.error);
+    }, 500);
+  }, []);
+
+  const addType = () => {
+    const name = `Type ${types.length + 1}`;
+    const updated = [...types, { name, properties: [] }];
+    saveTypes(updated);
+    setSelectedIdx(updated.length - 1);
+  };
+
+  const deleteType = (idx: number) => {
+    const updated = types.filter((_, i) => i !== idx);
+    saveTypes(updated);
+    setSelectedIdx(Math.min(selectedIdx, Math.max(0, updated.length - 1)));
+  };
+
+  const updateType = (idx: number, patch: Partial<ObjectType>) => {
+    const updated = types.map((t, i) => i === idx ? { ...t, ...patch } : t);
+    saveTypes(updated);
+  };
+
+  const addProperty = (typeIdx: number) => {
+    const t = types[typeIdx];
+    const prop: PropertyDef = { key: "", type: "text" };
+    updateType(typeIdx, { properties: [...t.properties, prop] });
+  };
+
+  const updateProperty = (typeIdx: number, propIdx: number, patch: Partial<PropertyDef>) => {
+    const t = types[typeIdx];
+    const props = t.properties.map((p, i) => i === propIdx ? { ...p, ...patch } : p);
+    updateType(typeIdx, { properties: props });
+  };
+
+  const deleteProperty = (typeIdx: number, propIdx: number) => {
+    const t = types[typeIdx];
+    updateType(typeIdx, { properties: t.properties.filter((_, i) => i !== propIdx) });
+  };
+
+  const moveProperty = (typeIdx: number, fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= types[typeIdx].properties.length) return;
+    const t = types[typeIdx];
+    const props = [...t.properties];
+    const [moved] = props.splice(fromIdx, 1);
+    props.splice(toIdx, 0, moved);
+    updateType(typeIdx, { properties: props });
+  };
+
+  const selected = types[selectedIdx];
+
+  return (
+    <div className="settings-objects">
+      <div className="settings-objects-list">
+        <div className="settings-objects-list-header">
+          <span>Object Types</span>
+          <button className="settings-objects-add" onClick={addType} title="New type">
+            <Icon name="plus" size={14} />
+          </button>
+        </div>
+        {types.map((t, i) => (
+          <div
+            key={i}
+            className={`settings-objects-item ${i === selectedIdx ? "active" : ""}`}
+            onClick={() => setSelectedIdx(i)}
+          >
+            <Icon name="box" size={14} />
+            <span>{t.name || "Untitled"}</span>
+            <span className="settings-objects-count">{t.properties.length}</span>
+          </div>
+        ))}
+        {types.length === 0 && (
+          <div className="settings-objects-empty">No types defined</div>
+        )}
+      </div>
+      <div className="settings-objects-detail">
+        {selected ? (
+          <>
+            <div className="settings-objects-detail-header">
+              <input
+                className="settings-objects-name"
+                value={selected.name}
+                onChange={(e) => updateType(selectedIdx, { name: e.target.value })}
+                placeholder="Type name"
+              />
+              <button
+                className="settings-objects-delete"
+                onClick={() => deleteType(selectedIdx)}
+                title="Delete type"
+              >
+                <Icon name="trash-2" size={14} />
+              </button>
+            </div>
+            <div className="settings-objects-props">
+              {selected.properties.map((prop, pi) => (
+                <div key={pi} className="settings-objects-prop">
+                  <div className="settings-objects-prop-row">
+                    <div className="settings-objects-prop-arrows">
+                      <button
+                        className="settings-objects-prop-arrow"
+                        onClick={() => moveProperty(selectedIdx, pi, pi - 1)}
+                        disabled={pi === 0}
+                        title="Move up"
+                      >
+                        <Icon name="chevron-up" size={12} />
+                      </button>
+                      <button
+                        className="settings-objects-prop-arrow"
+                        onClick={() => moveProperty(selectedIdx, pi, pi + 1)}
+                        disabled={pi === selected.properties.length - 1}
+                        title="Move down"
+                      >
+                        <Icon name="chevron-down" size={12} />
+                      </button>
+                    </div>
+                    <input
+                      className="settings-objects-prop-name"
+                      value={prop.key}
+                      onChange={(e) => updateProperty(selectedIdx, pi, { key: e.target.value })}
+                      placeholder="Property name"
+                    />
+                    <PropTypeButton
+                      type={prop.type}
+                      onChange={(newType) => {
+                        const patch: Partial<PropertyDef> = { type: newType };
+                        if (newType !== "select" && newType !== "multiselect") {
+                          patch.options = undefined;
+                        }
+                        if ((newType === "select" || newType === "multiselect") && !prop.options) {
+                          patch.options = [];
+                        }
+                        updateProperty(selectedIdx, pi, patch);
+                      }}
+                    />
+                    <button
+                      className="settings-objects-prop-delete"
+                      onClick={() => deleteProperty(selectedIdx, pi)}
+                      title="Remove property"
+                    >
+                      <Icon name="x" size={12} />
+                    </button>
+                  </div>
+                  {/* Enum options editor for select/multiselect */}
+                  {(prop.type === "select" || prop.type === "multiselect") && (
+                    <EnumOptionsEditor
+                      options={prop.options || []}
+                      onChange={(opts) => updateProperty(selectedIdx, pi, { options: opts })}
+                    />
+                  )}
+                  {/* Number min/max */}
+                  {prop.type === "number" && (
+                    <div className="settings-objects-prop-range">
+                      <label>
+                        Min
+                        <input
+                          type="number"
+                          value={prop.min ?? ""}
+                          onChange={(e) => updateProperty(selectedIdx, pi, {
+                            min: e.target.value ? Number(e.target.value) : undefined,
+                          })}
+                        />
+                      </label>
+                      <label>
+                        Max
+                        <input
+                          type="number"
+                          value={prop.max ?? ""}
+                          onChange={(e) => updateProperty(selectedIdx, pi, {
+                            max: e.target.value ? Number(e.target.value) : undefined,
+                          })}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <button className="settings-objects-add-prop" onClick={() => addProperty(selectedIdx)}>
+                <Icon name="plus" size={12} />
+                Add property
+              </button>
+            </div>
+            {dirty && <div className="settings-objects-saving">Saving...</div>}
+          </>
+        ) : (
+          <div className="settings-objects-empty-detail">
+            Select a type or create one
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EnumOptionsEditor({ options, onChange }: { options: string[]; onChange: (opts: string[]) => void }) {
+  const [newValue, setNewValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const addOption = () => {
+    const trimmed = newValue.trim();
+    if (!trimmed || options.includes(trimmed)) return;
+    onChange([...options, trimmed]);
+    setNewValue("");
+    inputRef.current?.focus();
+  };
+
+  return (
+    <div className="settings-objects-enum">
+      <div className="settings-objects-enum-pills">
+        {options.map((opt, i) => (
+          <span key={i} className="settings-objects-enum-pill">
+            {opt}
+            <button onClick={() => onChange(options.filter((_, j) => j !== i))}>
+              <Icon name="x" size={10} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <input
+        ref={inputRef}
+        className="settings-objects-enum-input"
+        value={newValue}
+        onChange={(e) => setNewValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOption(); } }}
+        placeholder="Add option..."
+      />
     </div>
   );
 }

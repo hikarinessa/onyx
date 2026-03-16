@@ -8,15 +8,15 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 
 | Phase | Version |
 |-------|---------|
-| Phase 1 (Skeleton) | 0.1.0 |
-| Phase 2 (Core Editor) | 0.2.0 |
-| Phase 3 (Links & Connections) | 0.3.0 |
-| Phase 4 (Typed Objects) | 0.4.0 |
-| Phase 4.5 (File Ops & Cache) | 0.4.5 |
-| Phase 4.6 (Hardening) | 0.4.6 |
-| Phase 5 (Periodic Notes) | 0.5.0 |
-| Phase 5.X (Backfill) | 0.5.X |
-| Phase 6 (Palette & Theming) | 0.6.0 |
+| Phase 1 (Skeleton) | 0.1.0 ✅ |
+| Phase 2 (Core Editor) | 0.2.0 ✅ |
+| Phase 3 (Links & Connections) | 0.3.0 ✅ |
+| Phase 4 (Typed Objects) | 0.4.0 ✅ |
+| Phase 4.5 (File Ops & Cache) | 0.4.5 ✅ |
+| Phase 4.6 (Hardening) | 0.4.6 ✅ |
+| Phase 5 (Periodic Notes) | 0.5.0 ✅ |
+| Phase 5.X (Backfill) | 0.5.X ✅ |
+| Phase 6 (Palette & Theming) | 0.6.0 ✅ |
 | Phase 7 (Preview & Navigation) | 0.7.0 ✅ |
 | Phase 7.5 (Hardening & CSS) | 0.7.5 ✅ |
 | Phase 7.6 (Settings Window) | 0.7.6 ✅ |
@@ -25,8 +25,7 @@ Version tracks phase completion: `0.PHASE.PATCH`. The phase number is the minor 
 | Phase 8 (Tables) | 0.8.0 ✅ |
 | Phase 9 (Per-Block Features + Full-Text Search) | 0.9.0 ✅ |
 | Phase 10 (Split Panes + FS Reactivity) | 0.10.0 ✅ |
-| Phase 11 (MCP Server) | 0.11.0 |
-| Phase 12 (Tier 2) | 0.12.0 |
+| Phase 11 (Tier 2 Features) | 0.11.0 |
 
 Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
@@ -476,13 +475,13 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 7.4 **Inline editable title** ✅ — Editable H1 above editor, renames file on commit
 7.5 **Editor polish** ✅ — Italic uses `_`, symbol wrap extended, outliner Option+Up/Down, layout restructure
 
-### Deferred
+### Deferred (completed in later phases)
 
-- **Split panes** — Cmd+click opens in split, draggable divider, per-pane tab bar
-- **Outline section** — Heading outline in context panel with click-to-scroll
-- **Linting** — Inline lint decorations, auto-fix on save, status bar indicator
-- **Embeds** — `![[note]]` rendered inline (read-only, 2-level depth cap)
-- **Tag chips** — Tags rendered as styled chips in live preview
+- **Split panes** ✅ — Phase 10
+- **Outline section** ✅ — Phase 7.5
+- **Linting** ✅ — Phase 9
+- **Embeds** — `![[note]]` rendered inline (read-only, 2-level depth cap) → #39
+- **Tag chips** — Tags rendered as styled chips in live preview → #40
 
 **Milestone:** The editor looks and feels great. Live preview makes writing pleasant. The app is genuinely usable as a daily driver.
 
@@ -514,7 +513,7 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 ### Note-App Gotchas
 
 7.5.11 **mtime check before write** ✅ — `read_file` records mtime in `last_read_mtimes` map; `write_file` checks mtime before writing, rejects if externally modified. Map capped at 500 entries
-7.5.12 **Self-write detection audit** — Deferred (watcher suppression window needs testing under load)
+7.5.12 **Self-write detection audit** ✅ — Handled via `fs:change` event architecture in Phase 10
 7.5.13 **No-op write optimization** ✅ — Combined with mtime check: mtime-first (cheap), content fallback only on first save
 
 ### Orphan Notes & External File Opening
@@ -523,15 +522,10 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 7.5.15 **Drag-drop `.md` files** — Deferred to Phase 8
 7.5.16 **Finder "Open With Onyx"** — Deferred to Phase 8
 
-### Deferred from Phase 7
+### Deferred from Phase 7 (completed in later phases)
 
-7.5.17 **Linting extension** — Deferred to Phase 8
-7.5.18 **Outline section in context panel** — Already implemented in Phase 6
-
-7.5.18 **Outline section in context panel**
-- Extract headings via regex, update on save + tab switch
-- Click heading → `scrollToLine(lineNumber)`
-- Indented by heading level, placed between Properties and Backlinks
+7.5.17 **Linting extension** ✅ — Implemented in Phase 9
+7.5.18 **Outline section in context panel** ✅ — Implemented in Phase 6
 
 **Milestone:** The app is hardened — CSS is layered, themes switch cleanly, IPC is cached, timers survive App Nap, external edits don't silently overwrite. Linting and outline round out the editor experience.
 
@@ -626,10 +620,7 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 
 ### Deferred from 7.5
 
-7.6.12 **Linting extension** (carried forward)
-- `@codemirror/lint` with markdown rules
-- Auto-fix on save: trim trailing whitespace, ensure final newline
-- Settings: enable/disable individual lint rules
+7.6.12 **Linting extension** ✅ — Implemented in Phase 9 (10 autofix + 4 warning rules, autofix on save, LintPanel)
 
 7.6.13 **Drag-drop `.md` files** (carried forward)
 - Handle Tauri `drag-drop` event on the window
@@ -651,7 +642,7 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 - Tab/Shift-Tab/Enter/Escape cell navigation
 - 16 command palette commands (insert/delete rows+cols, move, align, sort, transpose, format)
 - TSV paste auto-converts to GFM tables
-- See `PHASE9_PLAN.md` for implementation details (file retains original name)
+- See `docs/Archive/PHASE9_PLAN.md` for implementation details
 
 ---
 
@@ -732,20 +723,20 @@ Build incrementally as desired. Includes original Tier 2 items plus medium-prior
 
 ### Core Tier 2
 
-- 11.1 Slash commands (`/h1`, `/table`, `/template`, `/divider`)
-- 11.2 Natural language dates (`@today` → `[[2026-03-11]]`)
-- 11.3 Custom sort (drag-to-reorder in sidebar)
-- 11.4 Sort by modified date (sidebar sort mode toggle)
-- 11.5 Heatmap calendar (activity visualization)
-- 11.6 Tracker widgets (inline charts from frontmatter data)
-- 11.7 Text extraction / OCR (images, PDFs)
-- 11.8 Print / PDF export
-- 11.9 Canvas read-only viewer (parse `.canvas` JSON, render visual)
+- 11.1 Slash commands (`/h1`, `/table`, `/template`, `/divider`) — #27
+- 11.2 Natural language dates (`@today` → `[[2026-03-11]]`) — #28
+- 11.3 Custom sort (drag-to-reorder in sidebar) — #29
+- 11.4 Sort by modified date (sidebar sort mode toggle) — #30
+- 11.5 Heatmap calendar (activity visualization) — #31
+- 11.6 Tracker widgets (inline charts from frontmatter data) — #32
+- 11.7 Text extraction / OCR (images, PDFs) — #33
+- 11.8 Print / PDF export — #34
+- 11.9 Canvas read-only viewer (parse `.canvas` JSON, render visual) — #35
 
 ### Architecture (when hitting pain points)
 
-- 11.A1 Sidebar virtualization (react-vtree) — when file tree > 2,000 nodes
-- 11.A2 Zustand store splitting — when `app.ts` > 600 lines
+- 11.A1 Sidebar virtualization (react-vtree) — when file tree > 2,000 nodes — #36
+- 11.A2 Zustand store splitting — when `app.ts` > 600 lines (currently ~746 lines)
 - 11.A3 Composition root extraction — when `App.tsx` wiring > 100 lines
 - 11.A4 External file conflict detection UI — when users report data loss
 - 11.A5 Search result streaming (Tauri channels) — when search > 300ms
@@ -753,14 +744,14 @@ Build incrementally as desired. Includes original Tier 2 items plus medium-prior
 
 ### CSS & Theming (medium term)
 
-- 11.C1 OKLCH primitive color tokens — accent color picker derives variants from one hue
-- 11.C2 **User-created themes** — `~/.onyx/themes/*.json` loaded at startup, appear alongside built-ins in Settings. Each file defines a theme with:
+- 11.C1 OKLCH primitive color tokens — accent color picker derives variants from one hue — #37
+- 11.C2 **User-created themes** — #38 — `~/.onyx/themes/*.json` loaded at startup, appear alongside built-ins in Settings. Each file defines a theme with:
   - `name`, `id`, optional `base` (inherit from "dark"/"light"/"warm" — only override what you change)
   - `colors` section: all 9 base colors (bg_base, bg_surface, bg_elevated, text_primary/secondary/tertiary, accent, border_default/subtle) plus derived (hover, active, muted, tag, link, status)
   - `headings` section: per-level size + color
   - `elements` section: blockquote, link, code, tag styling
   - Infrastructure already exists: `configBridge.ts` applies vars, `theme.css` defines `data-theme` selectors, Settings has per-theme color tabs. Remaining work: Rust `load_user_themes()` to scan `~/.onyx/themes/`, dynamic CSS injection for user themes (can't use static `theme.css` selectors), theme import/export in Settings, "Duplicate theme" button to fork a built-in
-- 11.C3 Theme editor/preview — live preview, contrast ratio warnings, "Save as theme" button to export current overrides
+- 11.C3 Theme editor/preview — live preview, contrast ratio warnings, "Save as theme" button to export current overrides — #12
 
 ### Deferred Gotchas (when scale demands)
 
@@ -771,8 +762,8 @@ Build incrementally as desired. Includes original Tier 2 items plus medium-prior
 
 ### Deferred from Phase 7
 
-- 11.D1 Embeds — `![[note]]` rendered inline (read-only, 2-level depth cap)
-- 11.D2 Tag chips — Tags rendered as styled chips in live preview
+- 11.D1 Embeds — `![[note]]` rendered inline (read-only, 2-level depth cap) — #39
+- 11.D2 Tag chips — Tags rendered as styled chips in live preview — #40
 
 ---
 

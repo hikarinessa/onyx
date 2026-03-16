@@ -124,7 +124,7 @@ For full architecture details, see `docs/ARCHITECTURE.md`. Key patterns an AI as
 
 ## IPC Commands
 
-All Tauri commands are defined in `src-tauri/src/commands.rs`. See that file for full signatures. Major groups: file ops, directory management, search & index, bookmarks (directory + global), typed objects & frontmatter, periodic notes, autocomplete & metadata, session, path allowlist (orphan files), config & keybindings.
+All Tauri commands are defined in `src-tauri/src/commands.rs`. See that file for full signatures. Major groups: file ops, directory management, search & index, bookmarks (directory + global), typed objects & frontmatter (`get_object_types`, `save_object_types`, `update_frontmatter`), periodic notes, autocomplete & metadata, session, path allowlist (orphan files), config & keybindings.
 
 ## Build & Run
 
