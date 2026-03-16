@@ -226,6 +226,7 @@ function tryParseTable(text: string): Table | null {
 
 // ── Patterns ──
 
+const BLOCKQUOTE_RE = /^(\s*>)\s?/;
 const THEMATIC_BREAK_RE = /^[ ]{0,3}([-*_])[ ]*(?:\1[ ]*){2,}$/;
 const HEADING_RE = /^(#{1,6})\s+/;
 const BOLD_ITALIC_RE = /\*{3}(.+?)\*{3}/g;
@@ -368,6 +369,20 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
       // Skip the focus line — show raw markdown there
       if (i === cursorLine) continue;
 
+      // ── Blockquotes ──
+      const bqMatch = text.match(BLOCKQUOTE_RE);
+      if (bqMatch) {
+        // Line decoration for the left border
+        builder.add(
+          line.from,
+          line.from,
+          Decoration.line({ class: "cm-preview-blockquote" })
+        );
+        // Hide the "> " marker
+        builder.add(line.from, line.from + bqMatch[0].length, DECO_REPLACE);
+        continue;
+      }
+
       // ── Thematic breaks (---, ***, ___) ──
       if (THEMATIC_BREAK_RE.test(text)) {
         builder.add(
@@ -420,10 +435,13 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
           );
         }
         // Process inline decorations on text after the checkbox marker
-        const afterCb = text.slice(cbMatch[0].length);
-        if (afterCb.length > 0) {
-          const cbContentLine = { from: line.from + cbMatch[0].length, to: line.to };
-          addInlineDecorations(builder, cbContentLine, afterCb);
+        // (skip when checked — DECO_CHECKED already covers the full range)
+        if (!checked) {
+          const afterCb = text.slice(cbMatch[0].length);
+          if (afterCb.length > 0) {
+            const cbContentLine = { from: line.from + cbMatch[0].length, to: line.to };
+            addInlineDecorations(builder, cbContentLine, afterCb);
+          }
         }
         continue;
       }
@@ -692,7 +710,7 @@ const previewTheme = EditorView.theme({
     margin: "0.15em 0",
   },
   ".cm-preview-highlight": {
-    background: "rgba(255, 204, 0, 0.3)",
+    background: "var(--syntax-highlight-bg, rgba(255, 204, 0, 0.3))",
     borderRadius: "2px",
     padding: "1px 0",
   },

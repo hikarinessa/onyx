@@ -3025,10 +3025,19 @@
     background: var(--bg-hover);
   }
 
+  .cm-preview-blockquote {
+    border-left: none !important;
+    padding-left: 28px !important;
+    background-image: linear-gradient(var(--blockquote-border-color, var(--accent)), var(--blockquote-border-color, var(--accent))) !important;
+    background-size: 2px 100% !important;
+    background-position: 10px 0 !important;
+    background-repeat: no-repeat !important;
+  }
+
   .cm-preview-bullet {
     color: var(--syntax-list-marker);
     font-size: 1.2em;
     line-height: 1;
-    margin: 0 3px;
+    margin: 0 5px 0 2px;
   }
 
