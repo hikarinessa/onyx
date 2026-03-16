@@ -270,6 +270,7 @@ function PropertiesSection({
   // Per-property type overrides for untyped notes (user right-click to change)
   const [typeOverrides, setTypeOverrides] = useState<Record<string, string>>({});
   const [propTypeMenu, setPropTypeMenu] = useState<{ key: string; x: number; y: number } | null>(null);
+  const [typeAssignMenu, setTypeAssignMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Load frontmatter + object types when path or saveVersion changes
   useEffect(() => {
@@ -341,13 +342,14 @@ function PropertiesSection({
     [path],
   );
 
-  // Close property type menu on outside click
+  // Close menus on outside click
   useEffect(() => {
-    if (!propTypeMenu) return;
-    const close = () => setPropTypeMenu(null);
+    const active = propTypeMenu || typeAssignMenu;
+    if (!active) return;
+    const close = () => { setPropTypeMenu(null); setTypeAssignMenu(null); };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
-  }, [propTypeMenu]);
+  }, [propTypeMenu, typeAssignMenu]);
 
   const handleChangePropertyType = useCallback(
     (key: string, newType: string) => {
@@ -389,11 +391,22 @@ function PropertiesSection({
     ? objectTypes.find((t) => t.name.toLowerCase() === typeName.toLowerCase())
     : undefined;
 
-  const label = frontmatter
-    ? matchedType
-      ? `Properties (${matchedType.name})`
-      : "Properties"
-    : "Properties";
+  const handleAssignType = useCallback(
+    (typeName: string | null) => {
+      setFrontmatter((prev) => {
+        const updated = { ...prev };
+        if (typeName) {
+          updated.type = typeName.toLowerCase();
+        } else {
+          delete updated.type;
+        }
+        scheduleSave(updated);
+        return updated;
+      });
+      setTypeAssignMenu(null);
+    },
+    [scheduleSave],
+  );
 
   return (
     <div className="context-panel-section">
@@ -403,7 +416,25 @@ function PropertiesSection({
       >
         <span className="collapse-arrow"><Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} /></span>
         <Icon name="list" size={14} />
-        {label}
+        Properties
+        {matchedType && (
+          <span
+            className="prop-type-badge"
+            title="Right-click to change or remove type"
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setTypeAssignMenu({ x: e.clientX, y: e.clientY }); }}
+          >
+            {matchedType.name}
+          </span>
+        )}
+        {frontmatter && !matchedType && objectTypes.length > 0 && (
+          <button
+            className="prop-type-assign"
+            title="Assign an object type"
+            onClick={(e) => { e.stopPropagation(); setTypeAssignMenu({ x: e.clientX, y: e.clientY }); }}
+          >
+            <Icon name="plus" size={10} />
+          </button>
+        )}
       </div>
 
       {expanded && (
@@ -417,7 +448,7 @@ function PropertiesSection({
               {/* Typed: render all defined properties (even empty ones) */}
               {matchedType.properties.map((def) => (
                 <div key={def.key} className="prop-row">
-                  <div className="prop-label" title={`${def.key} (${def.type})`}>
+                  <div className="prop-label prop-label-typed" title={`${def.key} (${def.type}) — defined by ${matchedType.name}`}>
                     <Icon name={iconForType(def.type)} size={10} />
                     {def.key}
                     {def.required && <span className="prop-required">*</span>}
@@ -509,6 +540,34 @@ function PropertiesSection({
                   <span style={{ marginLeft: 6 }}>{pt.label}</span>
                 </div>
               ))}
+            </div>
+          )}
+          {/* Type assign/change menu */}
+          {typeAssignMenu && (
+            <div
+              className="context-menu"
+              style={{ left: typeAssignMenu.x, top: typeAssignMenu.y, position: "fixed", zIndex: 1100 }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {objectTypes.map((t) => (
+                <div
+                  key={t.name}
+                  className={`context-menu-item ${matchedType?.name === t.name ? "active" : ""}`}
+                  onClick={() => handleAssignType(t.name)}
+                >
+                  <Icon name="box" size={12} />
+                  <span style={{ marginLeft: 6 }}>{t.name}</span>
+                </div>
+              ))}
+              {matchedType && (
+                <>
+                  <div className="context-menu-separator" />
+                  <div className="context-menu-item destructive" onClick={() => handleAssignType(null)}>
+                    <Icon name="x" size={12} />
+                    <span style={{ marginLeft: 6 }}>Remove type</span>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

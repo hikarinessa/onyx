@@ -870,6 +870,40 @@
   .prop-row:hover .prop-delete { opacity: 1; }
   .prop-delete:hover { color: var(--status-error); }
 
+  .prop-label-typed {
+    color: var(--text-accent);
+    cursor: default;
+  }
+
+  .prop-type-badge {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: var(--accent-muted);
+    color: var(--text-accent);
+    cursor: context-menu;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .prop-type-assign {
+    margin-left: auto;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    cursor: pointer;
+  }
+  .prop-type-assign:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
   .prop-add {
     display: flex;
     align-items: center;
