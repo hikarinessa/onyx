@@ -870,10 +870,6 @@
   .prop-row:hover .prop-delete { opacity: 1; }
   .prop-delete:hover { color: var(--status-error); }
 
-  .prop-label-typed {
-    color: var(--accent);
-    cursor: default;
-  }
 
   .prop-type-badge {
     margin-left: auto;
@@ -950,6 +946,11 @@
     align-items: center;
     gap: 3px;
     cursor: context-menu;
+  }
+
+  .prop-label.prop-label-typed {
+    color: var(--accent);
+    cursor: default;
   }
 
   .prop-required {
