@@ -12,6 +12,7 @@ import {
   foldGutter,
   foldKeymap,
   unfoldEffect,
+  indentUnit,
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
@@ -26,12 +27,12 @@ import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension } from "../extensions/livePreview";
-import { lintingExtension, autofixContent } from "../extensions/linting";
+import { lintingExtension, autofixContent, applyLintFix } from "../extensions/linting";
 import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
 import { lintKeymap } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
-import { getAutoSaveMs, setRemeasureHook, isAutofixOnSave } from "../lib/configBridge";
+import { getAutoSaveMs, setRemeasureHook, isAutofixOnSave, getShowLineNumbers, getTabSize } from "../lib/configBridge";
 import { EditorPane } from "./EditorPane";
 import { TabBar } from "./TabBar";
 
@@ -95,8 +96,8 @@ const onyxHighlightStyle = HighlightStyle.define([
   { tag: tags.strong, fontWeight: "700" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.monospace, fontFamily: "var(--font-mono)", background: "var(--bg-elevated)" },
-  { tag: tags.link, color: "var(--link-color)" },
-  { tag: tags.url, color: "var(--link-color)" },
+  { tag: tags.link, color: "var(--link-color)", textDecoration: "var(--link-underline, underline)" },
+  { tag: tags.url, color: "var(--link-color)", textDecoration: "var(--link-underline, underline)" },
   { tag: tags.quote, color: "var(--text-tertiary)", fontStyle: "italic" },
   { tag: tags.strikethrough, color: "var(--syntax-strikethrough)", textDecoration: "line-through" },
   { tag: tags.meta, color: "var(--syntax-meta)" },
@@ -268,7 +269,8 @@ function buildExtensions(): Extension[] {
       },
     }),
     foldGutter(),
-    lineNumbers(),
+    ...(getShowLineNumbers() ? [lineNumbers()] : []),
+    indentUnit.of(" ".repeat(getTabSize())),
     onyxTheme,
     EditorView.lineWrapping,
     updateListener,
@@ -419,6 +421,14 @@ export function applyLintFixAll() {
       changes: { from: 0, to: view.state.doc.length, insert: fixed },
     });
   }
+  view.focus();
+}
+
+/** Apply fix for a single lint issue by ID */
+export function applyLintFixSingle(issueId: string) {
+  const view = getEditorView();
+  if (!view) return;
+  applyLintFix(issueId, view);
   view.focus();
 }
 

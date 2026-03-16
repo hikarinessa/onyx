@@ -258,11 +258,20 @@ const consistentListMarker: LintRule = (doc) => {
       if (firstMarker === null) {
         firstMarker = marker;
       } else if (marker !== firstMarker) {
+        const from = line.from + match[1].length;
+        const to = from + 1;
+        const expected = firstMarker;
         diagnostics.push({
-          from: line.from + match[1].length,
-          to: line.from + match[1].length + 1,
-          severity: "warning",
-          message: `Inconsistent list marker "${marker}" (expected "${firstMarker}")`,
+          from,
+          to,
+          severity: "error",
+          message: `Inconsistent list marker "${marker}" (expected "${expected}")`,
+          actions: [{
+            name: "Fix",
+            apply: (view) => {
+              view.dispatch({ changes: { from, to, insert: expected } });
+            },
+          }],
         });
       }
     }
@@ -275,14 +284,14 @@ const hrStyle: LintRule = (doc) => {
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i);
     const trimmed = line.text.trim();
-    if (/^[-*_]{3,}$/.test(trimmed) && trimmed !== "***" && trimmed !== "---") {
-      // Allow --- only at doc start (frontmatter)
+    if (/^[-*_]{3,}$/.test(trimmed) && trimmed !== "---") {
+      // Allow --- at doc start (frontmatter delimiter)
       if (trimmed === "---" && i <= 2) continue;
       diagnostics.push({
         from: line.from,
         to: line.to,
         severity: "warning",
-        message: "Use *** for horizontal rules",
+        message: "Use --- for horizontal rules",
       });
     }
   }
@@ -347,6 +356,21 @@ export function autofixContent(content: string): string {
   if (rules.trailing_newline) result = result.replace(/\n*$/, "\n");
   if (rules.atx_spacing) result = result.replace(/^(#{1,6})([^ #\n])/gm, "$1 $2");
   if (rules.reversed_links) result = result.replace(/\(([^)]+)\)\[([^\]]+)\]/g, "[$1]($2)");
+  if (rules.consistent_list_marker) {
+    const lines = result.split("\n");
+    let firstMarker: string | null = null;
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/^(\s*)([-*+]) /);
+      if (m) {
+        if (firstMarker === null) {
+          firstMarker = m[2];
+        } else if (m[2] !== firstMarker) {
+          lines[i] = lines[i].substring(0, m[1].length) + firstMarker + lines[i].substring(m[1].length + 1);
+        }
+      }
+    }
+    result = lines.join("\n");
+  }
 
   return result;
 }
@@ -355,11 +379,23 @@ export function autofixContent(content: string): string {
 // CM6 Extension
 // ---------------------------------------------------------------------------
 
+/** Map of issue ID → Diagnostic (with actions). Refreshed each lint pass. */
+const diagnosticMap = new Map<string, Diagnostic>();
+
+/** Apply the fix action for a single lint issue by ID. */
+export function applyLintFix(issueId: string, view: import("@codemirror/view").EditorView): boolean {
+  const d = diagnosticMap.get(issueId);
+  if (!d?.actions?.length) return false;
+  d.actions[0].apply(view, d.from, d.to);
+  return true;
+}
+
 export function lintingExtension(): Extension[] {
   const lintSource = linter((view) => {
     if (!isLintingEnabled()) {
       useAppStore.getState().setLintDiagnostics([]);
       useAppStore.getState().setLintCounts(0, 0);
+      diagnosticMap.clear();
       return [];
     }
 
@@ -374,6 +410,7 @@ export function lintingExtension(): Extension[] {
     }
 
     // Push serializable issues to the store for the lint panel
+    diagnosticMap.clear();
     let errors = 0;
     let warnings = 0;
     const issues: LintIssue[] = diagnostics.map((d, i) => {
@@ -381,8 +418,10 @@ export function lintingExtension(): Extension[] {
       const sev = d.severity === "error" ? "error" as const : "warning" as const;
       if (sev === "error") errors++;
       else warnings++;
+      const id = `${d.from}-${d.to}-${i}`;
+      diagnosticMap.set(id, d);
       return {
-        id: `${d.from}-${d.to}-${i}`,
+        id,
         from: d.from,
         to: d.to,
         line: line.number,

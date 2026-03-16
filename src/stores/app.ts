@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { type Pane, type PaneState, MAX_PANES, createPane, defaultPaneState } from "./panes";
+import { getDefaultEditorMode } from "../lib/configBridge";
 
 export type EditorMode = "source" | "preview";
 
@@ -348,7 +349,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const id = path;
-    const tab: Tab = { id, path, name, modified: false, editorMode: "preview", navBack: [], navForward: [] };
+    const tab: Tab = { id, path, name, modified: false, editorMode: getDefaultEditorMode() as EditorMode, navBack: [], navForward: [] };
     set({
       paneState: {
         ...paneState,

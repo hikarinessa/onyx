@@ -60,13 +60,18 @@ export function applyTheme(themeId: string) {
   }
 }
 
-export function restoreTheme() {
+export function restoreTheme(configTheme?: string) {
   try {
     const saved = localStorage.getItem("onyx-theme");
     if (saved) {
       applyTheme(saved);
+      return;
     }
   } catch {
     // ignore
+  }
+  // Fall back to config value if localStorage is empty
+  if (configTheme) {
+    applyTheme(configTheme);
   }
 }

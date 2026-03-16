@@ -11,6 +11,9 @@ let autoSaveMs = 500;
 let lintingEnabled = true;
 let autofixOnSave = false;
 let spellcheckEnabled = false;
+let defaultEditorMode: string = "preview";
+let showLineNumbers = true;
+let tabSize = 4;
 
 // Per-rule flags (all default true)
 let ruleTrailingSpaces = true;
@@ -39,6 +42,18 @@ export function isAutofixOnSave(): boolean {
 
 export function isSpellcheckEnabled(): boolean {
   return spellcheckEnabled;
+}
+
+export function getDefaultEditorMode(): string {
+  return defaultEditorMode;
+}
+
+export function getShowLineNumbers(): boolean {
+  return showLineNumbers;
+}
+
+export function getTabSize(): number {
+  return tabSize;
 }
 
 export function getLintRules() {
@@ -204,6 +219,11 @@ export function applyConfig(config: AppConfig) {
     s.setProperty("--font-mono", `"${config.appearance.mono_font}", "SF Mono", monospace`);
   }
 
+  // Editor settings
+  defaultEditorMode = config.editor.default_mode || "preview";
+  showLineNumbers = config.editor.show_line_numbers ?? true;
+  tabSize = config.editor.tab_size ?? 4;
+
   // Behavior
   autoSaveMs = config.behavior.auto_save_ms;
   spellcheckEnabled = config.behavior.spellcheck;
@@ -280,6 +300,9 @@ export async function loadAndApplyConfig() {
   try {
     const config = await invoke<AppConfig>("get_config");
     applyConfig(config);
+    // Restore theme from config as fallback if localStorage is empty
+    const { restoreTheme } = await import("./themes");
+    restoreTheme(config.appearance.theme);
   } catch (err) {
     console.error("Failed to load config:", err);
   }

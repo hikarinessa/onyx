@@ -1,5 +1,5 @@
 import { useAppStore, type LintIssue } from "../stores/app";
-import { scrollToPosition, applyLintFixAll } from "./Editor";
+import { scrollToPosition, applyLintFixAll, applyLintFixSingle } from "./Editor";
 import { Icon } from "./Icon";
 
 export function LintPanel() {
@@ -14,13 +14,17 @@ export function LintPanel() {
   const hasFixable = diagnostics.some((d) => d.fixable);
 
   const handleClick = (issue: LintIssue) => {
-    scrollToPosition(issue.from);
+    if (issue.fixable) {
+      applyLintFixSingle(issue.id);
+    } else {
+      scrollToPosition(issue.from);
+    }
   };
 
   return (
     <div className="lint-panel">
       <div className="lint-panel-header">
-        <span className="lint-panel-title">Problems</span>
+        <span className="lint-panel-title">Linter</span>
         <span className="lint-panel-counts">
           {errors.length > 0 && (
             <span className="lint-count-error">{errors.length} errors</span>
@@ -78,6 +82,9 @@ export function LintPanel() {
                   />
                 </span>
                 <span className="lint-issue-message">{issue.message}</span>
+                {issue.fixable && (
+                  <span className="lint-issue-fix-hint">Fix</span>
+                )}
                 <span className="lint-issue-location">
                   Ln {issue.line}, Col {issue.col}
                 </span>

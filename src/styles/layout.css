@@ -1639,6 +1639,19 @@
     white-space: nowrap;
   }
 
+  .lint-issue-fix-hint {
+    flex-shrink: 0;
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  .lint-issue:hover .lint-issue-fix-hint {
+    opacity: 1;
+  }
+
   .lint-issue-location {
     flex-shrink: 0;
     color: var(--text-tertiary);

@@ -59,7 +59,6 @@ function getSessionData(): SessionData {
 /** Save session to ~/.onyx/session.json via Rust (async, reliable) */
 export function saveSession(): void {
   const data = getSessionData();
-  console.log("[session] save — collapsedDirs:", data.collapsedDirs, "expandedSubdirs:", data.expandedSubdirs?.length);
   const json = JSON.stringify(data);
   invoke("write_session", { json }).catch((err) =>
     console.error("Failed to save session:", err)

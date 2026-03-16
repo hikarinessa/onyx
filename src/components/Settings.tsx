@@ -278,18 +278,6 @@ function GeneralSection({
         />
       </SettingRow>
 
-      <SettingRow label="Default new note location">
-        <select
-          className="settings-select"
-          value={config.behavior.new_note_location}
-          onChange={(e) =>
-            updateConfig({ behavior: { new_note_location: e.target.value } })
-          }
-        >
-          <option value="first_dir">First directory</option>
-          <option value="active_dir">Active directory</option>
-        </select>
-      </SettingRow>
     </div>
   );
 }
@@ -320,7 +308,7 @@ function EditorSection({
         </select>
       </SettingRow>
 
-      <SettingRow label="Show line numbers" description="Takes effect on restart">
+      <SettingRow label="Show line numbers in source mode" description="Takes effect on restart">
         <Toggle
           checked={config.editor.show_line_numbers}
           onChange={(v) =>
