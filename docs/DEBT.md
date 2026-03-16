@@ -61,6 +61,8 @@ Consolidated from CLAUDE.md and ARCHITECTURE.md. Items are grouped by area, not 
 - **Untyped property type inference is basic.** (#20) `ContextPanel.tsx` infers types via simple typeof checks. Won't handle edge cases like numeric strings, nested objects, or null.
 - **Split panes not yet implemented.** ARCHITECTURE.md specifies split panes but Phase 7 shipped without them. Planned for Phase 9.
 - **Compat getters `store.tabs` / `store.activeTabId` are fragile.** Zustand's `Object.assign` merge destroys `get` accessors on first `set()`. They work in React selectors but return stale data from imperative code (`getState().tabs`). All imperative callers have been migrated to `selectAllTabs()` / direct `paneState` access. Long-term: remove the compat getters entirely and make all consumers pane-aware.
+- **Sidebar drag-drop selects text during drag.** Pointer-based drag (replacing HTML5 drag which Tauri intercepts) doesn't suppress text selection. Needs `user-select: none` on body during drag or a drag overlay element.
+- **Object types not refreshed in properties panel after editing in Settings.** Types load once on component mount. Editing types in Settings requires switching files to see changes. Long-term: emit an event from Settings save and subscribe in PropertiesSection.
 
 ## Open — Database & Indexing
 

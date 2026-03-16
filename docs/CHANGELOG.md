@@ -34,6 +34,35 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 - Remove events buffered 300ms to handle macOS watcher rename race
 - `write_file` returns `DELETED:` error code (distinct from `CONFLICT:`) when file no longer exists
 
+## [0.10.1] — 2026-03-16
+
+### Added
+- **Object type editor** — Settings → Objects tab with master-detail CRUD, property type dropdown, drag-to-reorder
+- **Enum property support** — select/multiselect properties with inline pill editor for options
+- **Inline property creation** — "+Add property" row in properties panel with Enter to confirm
+- **Type assignment** — assign/change/remove object type via badge in properties header
+- **Property type icons** — all 8 property types (text, number, date, checkbox, select, multiselect, tags, link) have Lucide icons
+- **Right-click type picker** — change property input type on untyped notes via context menu
+- **New folder button** — root directory right-click context menu (New Note, New Folder, Reveal in Finder, Unregister)
+- **Drag-drop files into folders** — pointer-based drag in sidebar tree (bypasses Tauri native handler)
+- **Hide empty folders** — setting to hide folders with no .md files (default on)
+- **Delete daily notes** — right-click calendar date to delete periodic note
+- **Command palette Tab/Shift+Tab** — keyboard navigation + scroll-into-view
+
+### Fixed
+- Cmd+Option+[ now toggles sidebar instead of folding text (#15)
+- Finder file moves update sidebar tree (#23)
+- Bookmark icon changed from star to bookmark (#21)
+- Property delete/add now works (was broken by stale Zustand compat getter)
+- Viewport-clamped context menus (no more overflow off-screen)
+- Typed property labels use accent color for visual distinction
+
+### Changed
+- Directory headers brighter (text-primary), folder labels dimmer (text-secondary)
+- Context menus more compact (4px padding), letter-spacing 0.08em on all uppercase
+- Properties panel sections reduced padding
+- Object types load once on mount (not per-file), fixing assign button on empty notes
+
 ---
 
 ## [0.9.0] — 2026-03-14
