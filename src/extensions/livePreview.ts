@@ -99,6 +99,19 @@ class HRWidget extends WidgetType {
   }
 }
 
+class BulletWidget extends WidgetType {
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "cm-preview-bullet";
+    span.textContent = "•";
+    return span;
+  }
+
+  eq(): boolean {
+    return true;
+  }
+}
+
 // ── Table Widget ──
 
 const tableParseOpts: Options = optionsWithDefaults({
@@ -224,7 +237,9 @@ const ITALIC_UNDER_RE = /(?<![a-zA-Z0-9_])_([^_]+)_(?![a-zA-Z0-9_])/g;
 const STRIKETHROUGH_RE = /~~(.+?)~~/g;
 const HIGHLIGHT_RE = /==(.+?)==/g;
 const CHECKBOX_RE = /^(\s*[-*+]\s)\[([ x])\]\s/;
+const BULLET_RE = /^(\s*)([-*+])\s/;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+const INLINE_CODE_RE = /`([^`]+)`/g;
 
 // ── Hoisted decoration objects (immutable, reused across calls) ──
 
@@ -236,6 +251,7 @@ const DECO_STRIKETHROUGH = Decoration.mark({ class: "cm-preview-strikethrough" }
 const DECO_HIGHLIGHT = Decoration.mark({ class: "cm-preview-highlight" });
 const DECO_WIKILINK = Decoration.mark({ class: "cm-preview-wikilink" });
 const DECO_CHECKED = Decoration.mark({ class: "cm-preview-checked" });
+const DECO_CODE_NOOP = Decoration.mark({ class: "cm-preview-code" });
 
 // ── Pre-scan cache ──
 
@@ -387,10 +403,11 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
       if (cbMatch) {
         const checked = cbMatch[2] === "x";
         const bracketStart = line.from + cbMatch[1].length;
-        // Replace [ ] or [x] with checkbox widget
+        const indent = cbMatch[1].match(/^\s*/)?.[0].length ?? 0;
+        // Replace "- [ ] " (marker + checkbox + space) with just the checkbox widget
         builder.add(
-          bracketStart,
-          bracketStart + 4, // [x] + trailing space
+          line.from + indent,
+          bracketStart + 4, // through [x] + trailing space
           Decoration.replace({
             widget: new CheckboxWidget(checked, bracketStart),
           })
@@ -407,6 +424,26 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         if (afterCb.length > 0) {
           const cbContentLine = { from: line.from + cbMatch[0].length, to: line.to };
           addInlineDecorations(builder, cbContentLine, afterCb);
+        }
+        continue;
+      }
+
+      // ── Bullet list markers ──
+      const bulletMatch = text.match(BULLET_RE);
+      if (bulletMatch) {
+        const indent = bulletMatch[1].length;
+        const markerStart = line.from + indent;
+        // Replace the marker character (-, *, +) with a bullet dot
+        builder.add(
+          markerStart,
+          markerStart + 1,
+          Decoration.replace({ widget: new BulletWidget() })
+        );
+        // Process inline decorations on the rest of the line
+        const afterBullet = text.slice(bulletMatch[0].length);
+        if (afterBullet.length > 0) {
+          const contentLine = { from: line.from + bulletMatch[0].length, to: line.to };
+          addInlineDecorations(builder, contentLine, afterBullet);
         }
         continue;
       }
@@ -458,6 +495,7 @@ function addInlineDecorations(
   matchInline(ITALIC_UNDER_RE, 1, DECO_ITALIC);
   matchInline(STRIKETHROUGH_RE, 2, DECO_STRIKETHROUGH);
   matchInline(HIGHLIGHT_RE, 2, DECO_HIGHLIGHT);
+  matchInline(INLINE_CODE_RE, 1, DECO_CODE_NOOP);
 
   // Wikilinks
   WIKILINK_RE.lastIndex = 0;

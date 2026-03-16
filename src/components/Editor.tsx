@@ -11,6 +11,7 @@ import {
   codeFolding,
   foldGutter,
   foldKeymap,
+  unfoldEffect,
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
@@ -249,7 +250,23 @@ function buildExtensions(): Extension[] {
     history(),
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     syntaxHighlighting(onyxHighlightStyle),
-    codeFolding(),
+    codeFolding({
+      placeholderDOM(view) {
+        const btn = document.createElement("span");
+        btn.className = "cm-icon-btn";
+        btn.title = "Unfold";
+        btn.setAttribute("aria-label", "Unfold");
+        btn.setAttribute("role", "button");
+        btn.style.verticalAlign = "middle";
+        btn.style.margin = "0 2px";
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"/><path d="M12 8V2"/><path d="M4 12H2"/><path d="M10 12H8"/><path d="M16 12h-2"/><path d="M22 12h-2"/><path d="m15 19-3 3-3-3"/><path d="m15 5-3-3-3 3"/></svg>`;
+        btn.onclick = () => {
+          const pos = view.posAtDOM(btn);
+          view.dispatch({ effects: unfoldEffect.of({ from: pos, to: pos }) });
+        };
+        return btn;
+      },
+    }),
     foldGutter(),
     lineNumbers(),
     onyxTheme,

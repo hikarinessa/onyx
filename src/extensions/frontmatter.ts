@@ -116,7 +116,6 @@ const frontmatterTheme = EditorView.theme({
     fontSize: "0.85em !important",
     fontWeight: "normal !important",
     fontStyle: "normal !important",
-    opacity: "0.8",
   },
   ".cm-frontmatter-delimiter, .cm-frontmatter-delimiter *": {
     color: "var(--text-tertiary) !important",
@@ -124,7 +123,6 @@ const frontmatterTheme = EditorView.theme({
     fontSize: "0.85em !important",
     fontWeight: "normal !important",
     fontStyle: "normal !important",
-    opacity: "0.5",
   },
   ".cm-frontmatter-folded": {
     color: "var(--text-tertiary)",
