@@ -52,7 +52,9 @@ function computeBlocks(state: EditorState): BlockRange[] {
 
   tree.iterate({
     enter(node) {
-      if (node.from < fmEndPos) return false;
+      // Skip nodes inside frontmatter — but don't return false for container
+      // nodes (like Document) or we'd skip the entire tree
+      if (node.from < fmEndPos) return;
       if (BLOCK_TYPES.has(node.name)) {
         blocks.push({
           from: node.from,
@@ -148,36 +150,15 @@ const hoverTracker = ViewPlugin.fromClass(
     constructor(view: EditorView) {
       this.view = view;
 
-      // Create floating copy button with inline styles (CM6 theme scoping
-      // doesn't reliably reach absolutely-positioned children)
+      // Create floating copy button
       this.btn = document.createElement("div");
+      this.btn.className = "cm-icon-btn";
       this.btn.innerHTML = COPY_SVG;
       this.btn.title = "Copy block";
       Object.assign(this.btn.style, {
         position: "absolute",
         display: "none",
-        alignItems: "center",
-        justifyContent: "center",
-        width: "18px",
-        height: "18px",
-        color: "var(--text-tertiary)",
-        opacity: "0.4",
-        cursor: "pointer",
-        borderRadius: "4px",
         zIndex: "50",
-        transition: "opacity 0.15s, color 0.15s",
-      });
-      this.btn.addEventListener("mouseenter", () => {
-        this.btn.style.opacity = "1";
-        this.btn.style.color = "var(--text-primary)";
-        this.btn.style.background = "var(--bg-hover)";
-      });
-      this.btn.addEventListener("mouseleave", () => {
-        if (!this.btn.dataset.copied) {
-          this.btn.style.opacity = "0.4";
-          this.btn.style.color = "var(--text-tertiary)";
-          this.btn.style.background = "none";
-        }
       });
       this.btn.addEventListener("click", this.onCopy);
       view.dom.style.position = "relative";
