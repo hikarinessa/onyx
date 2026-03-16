@@ -223,7 +223,9 @@ function iconForType(type: string): string {
   return PROP_TYPES.find((t) => t.value === type)?.icon || "type";
 }
 
-function inferPropertyType(val: unknown): string {
+type PropType = PropertyDef["type"];
+
+function inferPropertyType(val: unknown): PropType {
   if (Array.isArray(val)) return "tags";
   if (typeof val === "boolean") return "checkbox";
   if (typeof val === "number") return "number";
@@ -293,7 +295,7 @@ function PropertiesSection({
   const [loading, setLoading] = useState(true);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Per-property type overrides for untyped notes (user right-click to change)
-  const [typeOverrides, setTypeOverrides] = useState<Record<string, string>>({});
+  const [typeOverrides, setTypeOverrides] = useState<Record<string, PropType>>({});
   const [propTypeMenu, setPropTypeMenu] = useState<{ key: string; x: number; y: number } | null>(null);
   const [typeAssignMenu, setTypeAssignMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -377,7 +379,7 @@ function PropertiesSection({
   }, [propTypeMenu, typeAssignMenu]);
 
   const handleChangePropertyType = useCallback(
-    (key: string, newType: string) => {
+    (key: string, newType: PropType) => {
       setTypeOverrides((prev) => ({ ...prev, [key]: newType }));
       // Convert the value to match the new type
       setFrontmatter((prev) => {
@@ -561,7 +563,7 @@ function PropertiesSection({
                 <div
                   key={pt.value}
                   className={`context-menu-item ${(typeOverrides[propTypeMenu.key] || inferPropertyType(frontmatter?.[propTypeMenu.key])) === pt.value ? "active" : ""}`}
-                  onClick={() => handleChangePropertyType(propTypeMenu.key, pt.value)}
+                  onClick={() => handleChangePropertyType(propTypeMenu.key, pt.value as PropType)}
                 >
                   <Icon name={pt.icon} size={12} />
                   <span style={{ marginLeft: 6 }}>{pt.label}</span>

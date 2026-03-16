@@ -25,7 +25,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 10 (Split Panes):** Complete
 - **Phase 11 (Tier 2 Features):** Planned
 
-**Current version:** 0.10.0
+**Current version:** 0.10.1
 
 ## Project Structure
 
