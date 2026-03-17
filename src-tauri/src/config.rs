@@ -46,6 +46,7 @@ pub struct BehaviorConfig {
     pub spellcheck: bool,
     pub new_note_location: String,
     pub hide_empty_folders: bool,
+    pub template_dirs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,6 +134,7 @@ impl Default for BehaviorConfig {
             spellcheck: true,
             new_note_location: "first_dir".to_string(),
             hide_empty_folders: true,
+            template_dirs: Vec::new(),
         }
     }
 }

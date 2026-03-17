@@ -4,6 +4,7 @@ import {
   type CompletionResult,
 } from "@codemirror/autocomplete";
 import { invoke } from "@tauri-apps/api/core";
+import { slashCommandCompletion } from "./slashCommands";
 
 /**
  * Wikilink autocomplete: triggered by [[
@@ -89,7 +90,7 @@ async function tagCompletion(
 
 export function autocompleteExtension() {
   return autocompletion({
-    override: [wikilinkCompletion, tagCompletion],
+    override: [wikilinkCompletion, tagCompletion, slashCommandCompletion],
     activateOnTyping: true,
     icons: false,
   });

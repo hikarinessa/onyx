@@ -40,6 +40,7 @@ export interface AppConfig {
     spellcheck: boolean;
     new_note_location: string;
     hide_empty_folders: boolean;
+    template_dirs: string[];
   };
   style: {
     accent_color: string;

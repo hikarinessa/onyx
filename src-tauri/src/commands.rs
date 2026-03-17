@@ -1249,6 +1249,44 @@ pub fn save_keybindings(json: String) -> Result<(), String> {
     crate::config::save_keybindings(&bindings)
 }
 
+// ── Templates ──
+
+#[derive(Debug, Serialize)]
+pub struct TemplateEntry {
+    pub name: String,
+    pub content: String,
+}
+
+#[tauri::command]
+pub fn list_templates(state: State<AppState>) -> Result<Vec<TemplateEntry>, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?;
+    let mut entries = Vec::new();
+
+    for dir in &config.behavior.template_dirs {
+        let dir_path = std::path::Path::new(dir);
+        if !dir_path.is_dir() { continue; }
+
+        if let Ok(read_dir) = std::fs::read_dir(dir_path) {
+            for entry in read_dir.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                    if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            entries.push(TemplateEntry {
+                                name: name.to_string(),
+                                content,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(entries)
+}
+
 // ── Spellcheck (macOS only) ──
 
 #[derive(Debug, Serialize)]
