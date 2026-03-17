@@ -23,9 +23,9 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 8 (Tables):** Complete
 - **Phase 9 (Per-Block Features + Full-Text Search):** Complete
 - **Phase 10 (Split Panes):** Complete
-- **Phase 11 (Tier 2 Features):** Planned
+- **Phase 11 (Tier 2 Features):** In progress (slash commands, callouts, tag chips, 13 new themes, theme preview)
 
-**Current version:** 0.10.1
+**Current version:** 0.10.2
 
 ## Project Structure
 
@@ -49,7 +49,8 @@ src/                          # Frontend (React + TypeScript)
 │   ├── StatusBar.tsx         #  110 lines — Cursor, word count, lint status, editor mode, file path, conflict/deleted indicators
 │   ├── QuickOpen.tsx         #  264 lines — Cmd+O fuzzy search + type: prefix queries
 │   ├── CommandPalette.tsx    #  123 lines — Cmd+P fuzzy command search
-│   ├── Settings.tsx          # 1162 lines — Settings modal (config, keybindings, themes, about)
+│   ├── Settings.tsx          # 1225 lines — Settings modal (config, keybindings, themes, templates, about)
+│   ├── ThemePreview.tsx      #   95 lines — Live CM6 preview pane for Appearance settings
 │   ├── Icon.tsx              #   20 lines — Lucide icon wrapper: <Icon name="folder" size={16} />
 │   ├── IconPicker.tsx        #  105 lines — Modal icon picker with search + categories
 │   ├── SearchPanel.tsx       #  247 lines — Full-text search panel (sidebar tab)
@@ -61,8 +62,9 @@ src/                          # Frontend (React + TypeScript)
 │   ├── formatting.ts         #  118 lines — CM6: Cmd+B/I/Shift+C toggle wrap (multi-cursor safe)
 │   ├── outliner.ts           #  160 lines — CM6: list item indent/outdent/move/enter
 │   ├── urlPaste.ts           #   30 lines — CM6: URL paste → markdown link
-│   ├── autocomplete.ts       #   96 lines — CM6: wikilink + tag autocomplete
-│   ├── livePreview.ts        #  690 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, strikethrough, highlight)
+│   ├── autocomplete.ts       #   99 lines — CM6: wikilink + tag + slash command autocomplete
+│   ├── slashCommands.ts      #  175 lines — CM6: slash commands (/table, /code, /callout, /today, /template)
+│   ├── livePreview.ts        #  980 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, callouts, tag chips)
 │   ├── symbolWrap.ts         #   61 lines — CM6: wrap selection with brackets/quotes/markdown on type
 │   ├── linting.ts            #  402 lines — CM6: markdown lint rules (10 autofix + 4 warning) + autofix on save
 │   ├── spellcheck.ts         #  188 lines — CM6: macOS native spellcheck integration
@@ -78,14 +80,14 @@ src/                          # Frontend (React + TypeScript)
 │   ├── ipcCache.ts           #   40 lines — TTL-based IPC query cache (reduces redundant Rust calls)
 │   ├── commands.ts           #   33 lines — Command registry for palette + menu bar
 │   ├── keybindings.ts        #  174 lines — Keybinding registry (parse, normalise, conflict detect, global keymap)
-│   ├── themes.ts             #   67 lines — Theme system (data-theme attribute switching)
+│   ├── themes.ts             #  137 lines — Theme system (18 built-in themes, data-theme attribute switching)
 │   ├── configBridge.ts       #  286 lines — Config bridge: loads Rust config → CSS custom properties, remeasure hook
 │   ├── configTypes.ts        #   87 lines — Typed config schema + defaults
 │   └── iconCatalog.ts        #  363 lines — Curated ~250 Lucide icons + category metadata
 └── styles/
     ├── reset.css             #   67 lines — CSS reset (@layer reset, prefers-reduced-motion)
-    ├── theme.css             #  222 lines — CSS layer order + custom properties (dark/light/warm via data-theme)
-    └── layout.css            # 2612 lines — Layout/component styles (@layer layout, components) + unlayered editor overrides
+    ├── theme.css             #  760 lines — CSS layer order + custom properties (18 themes via data-theme)
+    └── layout.css            # 2830 lines — Layout/component styles (@layer layout, components) + unlayered editor overrides
 
 src-tauri/                    # Backend (Rust)
 ├── Cargo.toml                # Dependencies
@@ -106,7 +108,7 @@ src-tauri/                    # Backend (Rust)
         └── mac_rounded_corners.rs # 217 lines — macOS window corner radius fix
 ```
 
-**Total:** ~18,100 lines (11,100 TS/TSX + 4,200 Rust + 2,900 CSS)
+**Total:** ~19,800 lines (12,000 TS/TSX + 4,200 Rust + 3,600 CSS)
 
 ## Architecture Essentials
 
