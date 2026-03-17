@@ -238,7 +238,6 @@ export function Sidebar() {
   const collapsedDirs = useAppStore((s) => s.collapsedDirs);
   const toggleDirCollapsed = useAppStore((s) => s.toggleDirCollapsed);
   const orphanPaths = useAppStore((s) => s.orphanPaths);
-  const orphanIcon = useAppStore((s) => s.orphanIcon);
   const [directories, setDirectories] = useState<RegisteredDirectory[]>([]);
   const [rootEntries, setRootEntries] = useState<Map<string, DirEntry[]>>(
     new Map()
@@ -357,8 +356,7 @@ export function Sidebar() {
         if (Math.abs(e.clientY - dragState.startY) < DRAG_THRESHOLD) return;
         dragState.active = true;
         dragState.sourceEl.style.opacity = "0.4";
-        document.body.style.cursor = "grabbing";
-        document.body.style.userSelect = "none";
+        document.body.classList.add("dragging");
       }
 
       // Hit-test: find the folder element under the pointer
@@ -398,8 +396,7 @@ export function Sidebar() {
 
       // Reset visual state
       dragState.sourceEl.style.opacity = "";
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      document.body.classList.remove("dragging");
       if (currentDropTarget) {
         document.querySelector(`[data-tree-path="${CSS.escape(currentDropTarget)}"]`)?.classList.remove("drop-target");
       }
@@ -622,15 +619,8 @@ export function Sidebar() {
             <span className="sidebar-header-chevron">
               <Icon name={orphansCollapsed ? "chevron-right" : "chevron-down"} size={14} />
             </span>
-            <span
-              className="sidebar-header-icon"
-              title="Change icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIconPickerDirId("__orphan__");
-              }}
-            >
-              <Icon name={orphanIcon} size={14} />
+            <span className="sidebar-header-icon">
+              <Icon name="folder-x" size={14} />
             </span>
             <span className="sidebar-header-label">Orphan Notes</span>
           </div>
@@ -675,19 +665,15 @@ export function Sidebar() {
 
       {iconPickerDirId && (
         <IconPicker
-          currentIcon={iconPickerDirId === "__orphan__" ? orphanIcon : (directories.find((d) => d.id === iconPickerDirId)?.icon || "folder")}
+          currentIcon={directories.find((d) => d.id === iconPickerDirId)?.icon || "folder"}
           onSelect={async (icon) => {
             const dirId = iconPickerDirIdRef.current;
             if (!dirId) return;
-            if (dirId === "__orphan__") {
-              useAppStore.getState().setOrphanIcon(icon);
-            } else {
-              try {
-                await invoke("update_directory_icon", { id: dirId, icon });
-                loadDirectories();
-              } catch (err) {
-                console.error("Failed to update directory icon:", err);
-              }
+            try {
+              await invoke("update_directory_icon", { id: dirId, icon });
+              loadDirectories();
+            } catch (err) {
+              console.error("Failed to update directory icon:", err);
             }
             setIconPickerDirId(null);
           }}

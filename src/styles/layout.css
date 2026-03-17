@@ -616,6 +616,11 @@
     outline-offset: -1px;
   }
 
+  body.dragging,
+  body.dragging * {
+    cursor: grabbing !important;
+  }
+
   .tree-item-chevron {
     width: 12px;
     height: 16px;

@@ -141,14 +141,15 @@ export async function restoreSession(): Promise<void> {
 
   // Restore accordion state
   if (data.accordionState) {
+    const store = useAppStore.getState();
     for (const [key, val] of Object.entries(data.accordionState)) {
-      state.setAccordionExpanded(key as keyof AccordionState, val);
+      store.setAccordionExpanded(key as keyof AccordionState, val);
     }
   }
 
   // Restore orphan icon
   if (data.orphanIcon) {
-    state.setOrphanIcon(data.orphanIcon);
+    useAppStore.getState().setOrphanIcon(data.orphanIcon);
   }
 
   // Restore orphan paths — allow in Rust, validate existence, remove dead ones
@@ -158,7 +159,7 @@ export async function restoreSession(): Promise<void> {
         await invoke("allow_path", { path: p });
         const exists = await invoke<boolean>("path_exists", { path: p });
         if (exists) {
-          state.addOrphanPath(p);
+          useAppStore.getState().addOrphanPath(p);
         } else {
           await invoke("disallow_path", { path: p });
         }

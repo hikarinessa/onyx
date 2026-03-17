@@ -678,7 +678,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   bumpSaveVersion: () => set((s) => ({ saveVersion: s.saveVersion + 1 })),
 
   orphanPaths: [],
-  orphanIcon: "file-x",
+  orphanIcon: "folder-x",
   addOrphanPath: (path) => set((s) => {
     if (s.orphanPaths.includes(path)) return s;
     return { orphanPaths: [...s.orphanPaths, path] };
