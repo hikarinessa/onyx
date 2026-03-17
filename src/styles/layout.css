@@ -3163,6 +3163,112 @@
     background-repeat: no-repeat !important;
   }
 
+  /* ── Callouts / Admonitions ── */
+
+  .cm-callout {
+    border-left: none !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    margin-left: 10px !important;
+    border-radius: 0 !important;
+  }
+
+  .cm-callout-header-line {
+    padding-top: 8px !important;
+    padding-bottom: 4px !important;
+    border-radius: 8px 8px 0 0 !important;
+    margin-top: 4px !important;
+  }
+
+  /* Solo header (no body follows) — full rounding */
+  .cm-callout-header-line + .cm-line:not(.cm-callout-body-line) {
+    /* handled by adjacent sibling — header gets bottom radius via last-body */
+  }
+
+  .cm-callout-body-line {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+  }
+
+  .cm-callout-body-line:last-child,
+  .cm-callout-body-line:has(+ .cm-line:not(.cm-callout-body-line)),
+  .cm-callout-body-line:has(+ .cm-line:not(.cm-callout)) {
+    padding-bottom: 8px !important;
+    border-radius: 0 0 8px 8px !important;
+    margin-bottom: 4px !important;
+  }
+
+  /* Header with no body lines — fully rounded */
+  .cm-callout-header-line:has(+ .cm-line:not(.cm-callout-body-line)),
+  .cm-callout-header-line:last-child {
+    border-radius: 8px !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 4px !important;
+  }
+
+  /* Header widget */
+  .cm-callout-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+  }
+
+  .cm-callout-icon {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .cm-callout-icon svg {
+    display: block;
+  }
+
+  .cm-callout-title {
+    font-size: 0.95em;
+  }
+
+  .cm-callout-fold {
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.5;
+    margin-left: 2px;
+  }
+
+  /* ── Callout color variants ── */
+
+  .cm-callout-note { background: oklch(0.55 0.10 250 / 0.10) !important; }
+  .cm-callout-note .cm-callout-header { color: oklch(0.55 0.10 250); }
+
+  .cm-callout-abstract { background: oklch(0.60 0.10 200 / 0.10) !important; }
+  .cm-callout-abstract .cm-callout-header { color: oklch(0.60 0.10 200); }
+
+  .cm-callout-info { background: oklch(0.60 0.10 230 / 0.10) !important; }
+  .cm-callout-info .cm-callout-header { color: oklch(0.60 0.10 230); }
+
+  .cm-callout-tip { background: oklch(0.60 0.10 170 / 0.10) !important; }
+  .cm-callout-tip .cm-callout-header { color: oklch(0.60 0.10 170); }
+
+  .cm-callout-success { background: oklch(0.60 0.12 145 / 0.10) !important; }
+  .cm-callout-success .cm-callout-header { color: oklch(0.60 0.12 145); }
+
+  .cm-callout-question { background: oklch(0.65 0.12 90 / 0.10) !important; }
+  .cm-callout-question .cm-callout-header { color: oklch(0.65 0.12 90); }
+
+  .cm-callout-warning { background: oklch(0.70 0.14 70 / 0.12) !important; }
+  .cm-callout-warning .cm-callout-header { color: oklch(0.70 0.14 70); }
+
+  .cm-callout-failure { background: oklch(0.60 0.15 25 / 0.10) !important; }
+  .cm-callout-failure .cm-callout-header { color: oklch(0.60 0.15 25); }
+
+  .cm-callout-danger { background: oklch(0.55 0.18 15 / 0.12) !important; }
+  .cm-callout-danger .cm-callout-header { color: oklch(0.55 0.18 15); }
+
+  .cm-callout-example { background: oklch(0.55 0.12 290 / 0.10) !important; }
+  .cm-callout-example .cm-callout-header { color: oklch(0.55 0.12 290); }
+
+  .cm-callout-quote { background: oklch(0.55 0.02 250 / 0.08) !important; }
+  .cm-callout-quote .cm-callout-header { color: var(--text-secondary); }
+
   .cm-preview-bullet {
     color: var(--syntax-list-marker);
     font-size: 1.2em;

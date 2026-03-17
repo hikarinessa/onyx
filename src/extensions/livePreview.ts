@@ -48,6 +48,135 @@ export const previewModeField = StateField.define<boolean>({
 
 // ── Widgets ──
 
+// ── Callout / Admonition types ──
+
+interface CalloutDef {
+  icon: string;
+  colorClass: string;
+  defaultTitle: string;
+}
+
+const CALLOUT_TYPES: Record<string, CalloutDef> = {
+  note: { icon: "pencil", colorClass: "callout-note", defaultTitle: "Note" },
+  abstract: { icon: "clipboard-list", colorClass: "callout-abstract", defaultTitle: "Abstract" },
+  summary: { icon: "clipboard-list", colorClass: "callout-abstract", defaultTitle: "Summary" },
+  info: { icon: "info", colorClass: "callout-info", defaultTitle: "Info" },
+  todo: { icon: "check-circle", colorClass: "callout-info", defaultTitle: "Todo" },
+  tip: { icon: "flame", colorClass: "callout-tip", defaultTitle: "Tip" },
+  hint: { icon: "lightbulb", colorClass: "callout-tip", defaultTitle: "Hint" },
+  important: { icon: "flame", colorClass: "callout-tip", defaultTitle: "Important" },
+  success: { icon: "check", colorClass: "callout-success", defaultTitle: "Success" },
+  check: { icon: "check", colorClass: "callout-success", defaultTitle: "Check" },
+  done: { icon: "check", colorClass: "callout-success", defaultTitle: "Done" },
+  question: { icon: "help-circle", colorClass: "callout-question", defaultTitle: "Question" },
+  faq: { icon: "help-circle", colorClass: "callout-question", defaultTitle: "FAQ" },
+  help: { icon: "help-circle", colorClass: "callout-question", defaultTitle: "Help" },
+  warning: { icon: "alert-triangle", colorClass: "callout-warning", defaultTitle: "Warning" },
+  caution: { icon: "alert-triangle", colorClass: "callout-warning", defaultTitle: "Caution" },
+  attention: { icon: "alert-triangle", colorClass: "callout-warning", defaultTitle: "Attention" },
+  failure: { icon: "x", colorClass: "callout-failure", defaultTitle: "Failure" },
+  fail: { icon: "x", colorClass: "callout-failure", defaultTitle: "Failure" },
+  missing: { icon: "x", colorClass: "callout-failure", defaultTitle: "Missing" },
+  danger: { icon: "zap", colorClass: "callout-danger", defaultTitle: "Danger" },
+  error: { icon: "zap", colorClass: "callout-danger", defaultTitle: "Error" },
+  bug: { icon: "bug", colorClass: "callout-danger", defaultTitle: "Bug" },
+  example: { icon: "list", colorClass: "callout-example", defaultTitle: "Example" },
+  quote: { icon: "quote", colorClass: "callout-quote", defaultTitle: "Quote" },
+  cite: { icon: "quote", colorClass: "callout-quote", defaultTitle: "Cite" },
+};
+
+function getCalloutDef(type: string): CalloutDef {
+  return CALLOUT_TYPES[type.toLowerCase()] ?? {
+    icon: "message-circle",
+    colorClass: "callout-note",
+    defaultTitle: type.charAt(0).toUpperCase() + type.slice(1),
+  };
+}
+
+// Inline SVG paths for callout icons (Lucide 24x24 viewBox, only the ~12 we need)
+const ICON_PATHS: Record<string, string> = {
+  "pencil": "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z|M15 5l4 4",
+  "clipboard-list": "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2|M12 11h4|M12 16h4|M8 11h.01|M8 16h.01;;rect:8,2,8,4,1,1",
+  "info": ";;circle:12,12,10|M12 16v-4|M12 8h.01",
+  "check-circle": ";;circle:12,12,10|M9 12l2 2 4-4",
+  "flame": "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z",
+  "lightbulb": "M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5|M9 18h6|M10 22h4",
+  "check": "M20 6L9 17l-5-5",
+  "help-circle": ";;circle:12,12,10|M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3|M12 17h.01",
+  "alert-triangle": "M21.73 18l-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3|M12 9v4|M12 17h.01",
+  "x": "M18 6L6 18|M6 6l12 12",
+  "zap": "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z",
+  "bug": "M8 2l1.88 1.88|M14.12 3.88L16 2|M9 7.13v-1a3.003 3.003 0 1 1 6 0v1|M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6|M12 20v-9|M6.53 9C4.6 8.8 3 7.1 3 5|M6 13H2|M3 21c0-2.1 1.7-3.9 3.8-4|M20.97 5c0 2.1-1.6 3.8-3.5 4|M22 13h-4|M17.2 17c2.1.1 3.8 1.9 3.8 4",
+  "list": "M3 12h.01|M3 18h.01|M3 6h.01|M8 12h13|M8 18h13|M8 6h13",
+  "quote": "M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z|M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z",
+  "message-circle": "M7.9 20A9 9 0 1 0 4 16.1L2 22Z",
+  "chevron-right": "M9 18l6-6-6-6",
+};
+
+function calloutIconSvg(name: string, size: number): string {
+  const raw = ICON_PATHS[name] || ICON_PATHS["message-circle"];
+  let inner = "";
+  for (const segment of raw.split("|")) {
+    if (segment.startsWith(";;circle:")) {
+      const [cx, cy, r] = segment.slice(9).split(",");
+      inner += `<circle cx="${cx}" cy="${cy}" r="${r}"/>`;
+    } else if (segment.startsWith(";;rect:")) {
+      const [x, y, w, h, rx, ry] = segment.slice(7).split(",");
+      inner += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" ry="${ry}"/>`;
+    } else if (segment.startsWith(";;")) {
+      // Parse mixed: ";;circle:cx,cy,r" embedded in a pipe-separated string
+      continue;
+    } else {
+      inner += `<path d="${segment}"/>`;
+    }
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+}
+
+class CalloutHeaderWidget extends WidgetType {
+  icon: string;
+  title: string;
+  foldable: boolean;
+  colorClass: string;
+
+  constructor(icon: string, title: string, foldable: boolean, colorClass: string) {
+    super();
+    this.icon = icon;
+    this.title = title;
+    this.foldable = foldable;
+    this.colorClass = colorClass;
+  }
+
+  toDOM(): HTMLElement {
+    const wrapper = document.createElement("span");
+    wrapper.className = `cm-callout-header ${this.colorClass}`;
+
+    const iconEl = document.createElement("span");
+    iconEl.className = "cm-callout-icon";
+    iconEl.innerHTML = calloutIconSvg(this.icon, 18);
+    wrapper.appendChild(iconEl);
+
+    const titleEl = document.createElement("span");
+    titleEl.className = "cm-callout-title";
+    titleEl.textContent = this.title;
+    wrapper.appendChild(titleEl);
+
+    if (this.foldable) {
+      const chevron = document.createElement("span");
+      chevron.className = "cm-callout-fold";
+      chevron.innerHTML = calloutIconSvg("chevron-right", 14);
+      wrapper.appendChild(chevron);
+    }
+
+    return wrapper;
+  }
+
+  eq(other: CalloutHeaderWidget): boolean {
+    return this.icon === other.icon && this.title === other.title &&
+      this.foldable === other.foldable && this.colorClass === other.colorClass;
+  }
+}
+
 class CheckboxWidget extends WidgetType {
   checked: boolean;
   bracketPos: number;
@@ -242,6 +371,7 @@ const BULLET_RE = /^(\s*)([-*+])\s/;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 const INLINE_CODE_RE = /`([^`]+)`/g;
 const TAG_RE = /(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
+const CALLOUT_RE = /^(\s*>)\s*\[!(\w+)\]([+-])?\s*(.*)/;
 
 // ── Hoisted decoration objects (immutable, reused across calls) ──
 
@@ -349,6 +479,8 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
     const endLine = doc.lineAt(to).number;
 
     let inCodeBlock = codeBlockStates.get(startLine) ?? false;
+    // Track active callout across consecutive blockquote lines
+    let activeCallout: { def: CalloutDef; foldable: boolean } | null = null;
 
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
@@ -364,18 +496,68 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
       // Track code blocks (must run even on cursor line to keep state correct)
       if (text.trimStart().startsWith("```")) {
         inCodeBlock = !inCodeBlock;
+        activeCallout = null;
         if (i === cursorLine) continue;
         continue;
       }
       if (inCodeBlock) continue;
 
+      // Reset callout tracking on non-blockquote lines
+      const bqMatch = text.match(BLOCKQUOTE_RE);
+      if (!bqMatch) {
+        activeCallout = null;
+      }
+
       // Skip the focus line — show raw markdown there
       if (i === cursorLine) continue;
 
-      // ── Blockquotes ──
-      const bqMatch = text.match(BLOCKQUOTE_RE);
+      // ── Blockquotes & Callouts ──
       if (bqMatch) {
-        // Line decoration for the left border
+        // Check if this is a callout header: > [!type]
+        const calloutMatch = text.match(CALLOUT_RE);
+        if (calloutMatch) {
+          const def = getCalloutDef(calloutMatch[2]);
+          const foldable = calloutMatch[3] === "-" || calloutMatch[3] === "+";
+          const rawTitle = calloutMatch[4]?.replace(/%% %%/, "").trim();
+          const title = rawTitle || def.defaultTitle;
+          activeCallout = { def, foldable };
+
+          // Line decoration for callout styling
+          builder.add(
+            line.from,
+            line.from,
+            Decoration.line({ class: `cm-callout cm-callout-header-line cm-${def.colorClass}` })
+          );
+          // Replace entire line content with callout header widget
+          builder.add(
+            line.from,
+            line.to,
+            Decoration.replace({
+              widget: new CalloutHeaderWidget(def.icon, title, foldable, def.colorClass),
+            })
+          );
+          continue;
+        }
+
+        // Continuation line inside a callout
+        if (activeCallout) {
+          builder.add(
+            line.from,
+            line.from,
+            Decoration.line({ class: `cm-callout cm-callout-body-line cm-${activeCallout.def.colorClass}` })
+          );
+          // Hide the "> " marker
+          builder.add(line.from, line.from + bqMatch[0].length, DECO_REPLACE);
+          // Process inline decorations on the content after "> "
+          const afterBq = text.slice(bqMatch[0].length);
+          if (afterBq.length > 0) {
+            const contentLine = { from: line.from + bqMatch[0].length, to: line.to };
+            addInlineDecorations(builder, contentLine, afterBq);
+          }
+          continue;
+        }
+
+        // Regular blockquote (no callout)
         builder.add(
           line.from,
           line.from,

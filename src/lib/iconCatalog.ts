@@ -35,7 +35,7 @@ import {
 
   // Communication
   Mail, MailOpen, Send, Inbox, Archive,
-  MessageSquare, MessageCircle,
+  MessageSquare, MessageCircle, Quote,
   Bell, BellOff, BellRing,
   Phone, PhoneCall,
 
@@ -164,7 +164,7 @@ export const ICON_MAP: Record<string, LucideIcon> = {
   // Communication
   "mail": Mail, "mail-open": MailOpen, "send": Send,
   "inbox": Inbox, "archive": Archive,
-  "message-square": MessageSquare, "message-circle": MessageCircle,
+  "message-square": MessageSquare, "message-circle": MessageCircle, "quote": Quote,
   "bell": Bell, "bell-off": BellOff, "bell-ring": BellRing,
   "phone": Phone, "phone-call": PhoneCall,
 
