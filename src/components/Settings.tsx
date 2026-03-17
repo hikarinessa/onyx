@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { ThemePreview } from "./ThemePreview";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { getAvailableThemes, applyTheme, getActiveThemeId } from "../lib/themes";
@@ -15,13 +16,15 @@ import {
 } from "../lib/keybindings";
 import type { AppConfig, ThemeColorOverrides, HeadingStyle } from "../lib/configTypes";
 import { Icon } from "./Icon";
+import { open } from "@tauri-apps/plugin-dialog";
 
-type Section = "general" | "editor" | "appearance" | "objects" | "keybindings" | "about";
+type Section = "general" | "editor" | "appearance" | "templates" | "objects" | "keybindings" | "about";
 
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "general", label: "General", icon: "settings" },
   { id: "editor", label: "Editor", icon: "type" },
   { id: "appearance", label: "Appearance", icon: "palette" },
+  { id: "templates", label: "Templates", icon: "file-text" },
   { id: "objects", label: "Objects", icon: "box" },
   { id: "keybindings", label: "Keybindings", icon: "keyboard" },
   { id: "about", label: "About", icon: "info" },
@@ -120,7 +123,11 @@ export function Settings() {
 
   return (
     <div className="settings-overlay" onClick={() => setVisible(false)}>
-      <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="settings-modal"
+        data-has-preview={section === "appearance" ? "" : undefined}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="settings-sidebar">
           <div className="settings-sidebar-title">Settings</div>
           {SECTIONS.map((s) => (
@@ -144,10 +151,18 @@ export function Settings() {
           {section === "appearance" && (
             <AppearanceSection config={config} updateConfig={updateConfig} />
           )}
+          {section === "templates" && (
+            <TemplatesSection config={config} updateConfig={updateConfig} />
+          )}
           {section === "objects" && <ObjectsSection />}
           {section === "keybindings" && <KeybindingsSection />}
           {section === "about" && <AboutSection />}
         </div>
+        {section === "appearance" && (
+          <div className="settings-preview-pane">
+            <ThemePreview configVersion={JSON.stringify(config).length} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -451,6 +466,19 @@ const THEME_SWATCHES: Record<string, { bg: string; surface: string; accent: stri
   warm2: { bg: "#232323", surface: "#2d2d2d", accent: "#00a3d7", text: "#ebebeb" },
   warm: { bg: "#1c1917", surface: "#292523", accent: "#d4a574", text: "#ede8e3" },
   cream: { bg: "#e8ded6", surface: "#006a81", accent: "#2e7d7d", text: "#2c3030" },
+  catppuccin: { bg: "#1e1e2e", surface: "#313244", accent: "#89b4fa", text: "#cdd6f4" },
+  nord: { bg: "#2e3440", surface: "#3b4252", accent: "#88c0d0", text: "#eceff4" },
+  "rose-pine": { bg: "#191724", surface: "#26233a", accent: "#ebbcba", text: "#e0def4" },
+  dracula: { bg: "#282a36", surface: "#44475a", accent: "#bd93f9", text: "#f8f8f2" },
+  gruvbox: { bg: "#282828", surface: "#3c3836", accent: "#83a598", text: "#ebdbb2" },
+  sakura: { bg: "#fdf6f4", surface: "#f5ebe8", accent: "#c45b84", text: "#3d2b2b" },
+  midnight: { bg: "#0a0e1a", surface: "#182030", accent: "#00d4aa", text: "#c8d8f0" },
+  campfire: { bg: "#1a1210", surface: "#2e201a", accent: "#e88a40", text: "#e8d4c4" },
+  aurora: { bg: "#0e1018", surface: "#1c202e", accent: "#50e8b0", text: "#d0d8e8" },
+  sandstorm: { bg: "#f4ece2", surface: "#ddd0c2", accent: "#c06030", text: "#3a3028" },
+  noir: { bg: "#141414", surface: "#222222", accent: "#d4a040", text: "#d8d8d8" },
+  velvet: { bg: "#1a1018", surface: "#2c202a", accent: "#d4a050", text: "#e0d4dc" },
+  reef: { bg: "#f0f6f6", surface: "#d8e6e6", accent: "#e05848", text: "#1a3030" },
 };
 
 function AppearanceSection({
@@ -1010,6 +1038,61 @@ function PropTypeButton({ type, onChange }: { type: string; onChange: (t: string
         </div>
       )}
     </>
+  );
+}
+
+// ── Section: Templates ──
+
+function TemplatesSection({
+  config,
+  updateConfig,
+}: {
+  config: AppConfig;
+  updateConfig: (partial: Record<string, unknown>) => void;
+}) {
+  const dirs = config.behavior.template_dirs ?? [];
+
+  const addDir = async () => {
+    const selected = await open({ directory: true, multiple: false });
+    if (!selected) return;
+    const dirPath = typeof selected === "string" ? selected : selected[0];
+    if (!dirPath || dirs.includes(dirPath)) return;
+    updateConfig({ behavior: { template_dirs: [...dirs, dirPath] } });
+  };
+
+  const removeDir = (idx: number) => {
+    const next = dirs.filter((_, i) => i !== idx);
+    updateConfig({ behavior: { template_dirs: next } });
+  };
+
+  return (
+    <div className="settings-section">
+      <h2 className="settings-section-title">Templates</h2>
+      <p className="settings-section-description">
+        Register directories containing .md files to use as templates via the /template slash command.
+      </p>
+      <div className="template-dirs-list">
+        {dirs.length === 0 && (
+          <div className="template-dirs-empty">No template directories registered</div>
+        )}
+        {dirs.map((dir, i) => (
+          <div key={dir} className="template-dir-item">
+            <span className="template-dir-path">{dir}</span>
+            <button
+              className="template-dir-remove"
+              title="Remove"
+              onClick={() => removeDir(i)}
+            >
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button className="settings-btn" onClick={addDir}>
+        <Icon name="folder-plus" size={14} />
+        Add directory
+      </button>
+    </div>
   );
 }
 

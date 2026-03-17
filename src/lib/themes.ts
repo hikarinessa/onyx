@@ -30,7 +30,77 @@ const creamTheme: Theme = {
   name: "Cream",
 };
 
-const builtInThemes: Theme[] = [darkTheme, lightTheme, warmTheme, warm2Theme, creamTheme];
+const catppuccinTheme: Theme = {
+  id: "catppuccin",
+  name: "Catppuccin",
+};
+
+const nordTheme: Theme = {
+  id: "nord",
+  name: "Nord",
+};
+
+const rosePineTheme: Theme = {
+  id: "rose-pine",
+  name: "Rosé Pine",
+};
+
+const draculaTheme: Theme = {
+  id: "dracula",
+  name: "Dracula",
+};
+
+const gruvboxTheme: Theme = {
+  id: "gruvbox",
+  name: "Gruvbox",
+};
+
+const sakuraTheme: Theme = {
+  id: "sakura",
+  name: "Sakura",
+};
+
+const midnightTheme: Theme = {
+  id: "midnight",
+  name: "Midnight",
+};
+
+const campfireTheme: Theme = {
+  id: "campfire",
+  name: "Campfire",
+};
+
+const auroraTheme: Theme = {
+  id: "aurora",
+  name: "Aurora",
+};
+
+const sandstormTheme: Theme = {
+  id: "sandstorm",
+  name: "Sandstorm",
+};
+
+const noirTheme: Theme = {
+  id: "noir",
+  name: "Noir",
+};
+
+const velvetTheme: Theme = {
+  id: "velvet",
+  name: "Velvet",
+};
+
+const reefTheme: Theme = {
+  id: "reef",
+  name: "Reef",
+};
+
+const builtInThemes: Theme[] = [
+  darkTheme, lightTheme, creamTheme, warmTheme, warm2Theme,
+  catppuccinTheme, nordTheme, rosePineTheme, draculaTheme, gruvboxTheme,
+  sakuraTheme, midnightTheme, campfireTheme, auroraTheme, sandstormTheme,
+  noirTheme, velvetTheme, reefTheme,
+];
 let activeThemeId = "dark";
 
 export function getAvailableThemes(): Theme[] {

@@ -86,7 +86,7 @@ export function getAllPaneViews(): Map<string, EditorView> {
 // Shared styles and highlight
 // ---------------------------------------------------------------------------
 
-const onyxHighlightStyle = HighlightStyle.define([
+export const onyxHighlightStyle = HighlightStyle.define([
   { tag: tags.heading1, fontSize: "1.6em", color: "var(--text-primary)", fontWeight: "600" },
   { tag: tags.heading2, fontSize: "1.3em", color: "var(--text-primary)", fontWeight: "600" },
   { tag: tags.heading3, fontSize: "1.1em", color: "var(--text-primary)", fontWeight: "600" },
@@ -106,7 +106,7 @@ const onyxHighlightStyle = HighlightStyle.define([
   { tag: tags.processingInstruction, color: "var(--syntax-markup)" },
 ]);
 
-const onyxTheme = EditorView.theme({
+export const onyxTheme = EditorView.theme({
   "&": { backgroundColor: "var(--bg-base)" },
   ".cm-content": { caretColor: "var(--accent)" },
   ".cm-cursor": { borderLeftColor: "var(--accent)" },
