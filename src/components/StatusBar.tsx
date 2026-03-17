@@ -51,7 +51,7 @@ export function StatusBar() {
             onClick={handlePathClick}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePathClick(); } }}
           >
-            {activeTabPath}
+            {activeTabPath.replace(/\//g, " / ")}
           </span>
         )}
       </div>
