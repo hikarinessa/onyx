@@ -299,9 +299,12 @@ function PropertiesSection({
   const [propTypeMenu, setPropTypeMenu] = useState<{ key: string; x: number; y: number } | null>(null);
   const [typeAssignMenu, setTypeAssignMenu] = useState<{ x: number; y: number } | null>(null);
 
-  // Load object types once on mount (they're global, not per-file)
+  // Load object types on mount + refresh when edited in Settings
   useEffect(() => {
-    invoke<ObjectType[]>("get_object_types").then(setObjectTypes).catch(() => {});
+    const load = () => invoke<ObjectType[]>("get_object_types").then(setObjectTypes).catch(() => {});
+    load();
+    window.addEventListener("object-types-changed", load);
+    return () => window.removeEventListener("object-types-changed", load);
   }, []);
 
   // Load frontmatter when path or saveVersion changes

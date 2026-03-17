@@ -1113,7 +1113,10 @@ function ObjectsSection() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       invoke("save_object_types", { json: JSON.stringify(updated) })
-        .then(() => setDirty(false))
+        .then(() => {
+          setDirty(false);
+          window.dispatchEvent(new Event("object-types-changed"));
+        })
         .catch(console.error);
     }, 500);
   }, []);

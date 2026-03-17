@@ -358,6 +358,7 @@ export function Sidebar() {
         dragState.active = true;
         dragState.sourceEl.style.opacity = "0.4";
         document.body.style.cursor = "grabbing";
+        document.body.style.userSelect = "none";
       }
 
       // Hit-test: find the folder element under the pointer
@@ -398,6 +399,7 @@ export function Sidebar() {
       // Reset visual state
       dragState.sourceEl.style.opacity = "";
       document.body.style.cursor = "";
+      document.body.style.userSelect = "";
       if (currentDropTarget) {
         document.querySelector(`[data-tree-path="${CSS.escape(currentDropTarget)}"]`)?.classList.remove("drop-target");
       }

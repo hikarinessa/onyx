@@ -87,12 +87,12 @@ export function getAllPaneViews(): Map<string, EditorView> {
 // ---------------------------------------------------------------------------
 
 export const onyxHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading1, fontSize: "1.6em", color: "var(--text-primary)", fontWeight: "600" },
-  { tag: tags.heading2, fontSize: "1.3em", color: "var(--text-primary)", fontWeight: "600" },
-  { tag: tags.heading3, fontSize: "1.1em", color: "var(--text-primary)", fontWeight: "600" },
-  { tag: tags.heading4, color: "var(--text-primary)", fontWeight: "600" },
-  { tag: tags.heading5, color: "var(--text-primary)", fontWeight: "600" },
-  { tag: tags.heading6, color: "var(--text-primary)", fontWeight: "600" },
+  { tag: tags.heading1, fontSize: "var(--heading-1-size, 1.6em)", color: "var(--heading-1-color, var(--text-primary))", fontWeight: "600" },
+  { tag: tags.heading2, fontSize: "var(--heading-2-size, 1.3em)", color: "var(--heading-2-color, var(--text-primary))", fontWeight: "600" },
+  { tag: tags.heading3, fontSize: "var(--heading-3-size, 1.1em)", color: "var(--heading-3-color, var(--text-primary))", fontWeight: "600" },
+  { tag: tags.heading4, color: "var(--heading-4-color, var(--text-primary))", fontWeight: "600" },
+  { tag: tags.heading5, color: "var(--heading-5-color, var(--text-primary))", fontWeight: "600" },
+  { tag: tags.heading6, color: "var(--heading-6-color, var(--text-primary))", fontWeight: "600" },
   { tag: tags.strong, fontWeight: "700" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.monospace, fontFamily: "var(--font-mono)", background: "var(--bg-elevated)" },
