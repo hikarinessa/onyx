@@ -241,6 +241,7 @@ const CHECKBOX_RE = /^(\s*[-*+]\s)\[([ x])\]\s/;
 const BULLET_RE = /^(\s*)([-*+])\s/;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 const INLINE_CODE_RE = /`([^`]+)`/g;
+const TAG_RE = /(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
 
 // ── Hoisted decoration objects (immutable, reused across calls) ──
 
@@ -253,6 +254,8 @@ const DECO_HIGHLIGHT = Decoration.mark({ class: "cm-preview-highlight" });
 const DECO_WIKILINK = Decoration.mark({ class: "cm-preview-wikilink" });
 const DECO_CHECKED = Decoration.mark({ class: "cm-preview-checked" });
 const DECO_CODE_NOOP = Decoration.mark({ class: "cm-preview-code" });
+const DECO_TAG = Decoration.mark({ class: "cm-preview-tag" });
+const DECO_TAG_HASH = Decoration.replace({});
 
 // ── Pre-scan cache ──
 
@@ -530,6 +533,18 @@ function addInlineDecorations(
     ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
   }
 
+  // Tags — hide # prefix, wrap tag text in chip
+  TAG_RE.lastIndex = 0;
+  while ((m = TAG_RE.exec(text)) !== null) {
+    const hashFrom = line.from + m.index;
+    const tagFrom = hashFrom + 1;
+    const tagTo = hashFrom + m[0].length;
+    if (isClaimed(hashFrom, tagTo)) continue;
+    ranges.push({ from: hashFrom, to: tagFrom, deco: DECO_TAG_HASH });
+    ranges.push({ from: tagFrom, to: tagTo, deco: DECO_TAG });
+    claimed.push({ from: hashFrom, to: tagTo });
+  }
+
   // Sort by position and add to builder
   ranges.sort((a, b) => a.from - b.from || a.to - b.to);
   for (const r of ranges) {
@@ -733,9 +748,9 @@ const previewTheme = EditorView.theme({
   ".cm-preview-tag": {
     background: "var(--tag-bg)",
     color: "var(--tag-text)",
-    borderRadius: "3px",
-    padding: "1px 4px",
-    fontSize: "0.9em",
+    borderRadius: "9px",
+    padding: "1px 8px",
+    fontSize: "0.88em",
   },
 });
 
