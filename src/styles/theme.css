@@ -236,7 +236,12 @@
     --inline-code-bg: oklch(0.542 0.0758 195.2 / 0.08);
     --code-block-bg: oklch(0.882 0.0155 61.2);
 
-    --heading-2-color: oklch(0.542 0.0758 195.2);
+    --heading-1-color: oklch(0.542 0.1750 29.7);
+    --heading-2-color: oklch(0.597 0.1485 47.4);
+    --heading-3-color: oklch(0.676 0.1363 89.8);
+    --heading-4-color: oklch(0.579 0.1363 132.2);
+    --heading-5-color: oklch(0.582 0.1088 223.5);
+    --heading-6-color: oklch(0.550 0.1511 295.3);
 
     --syntax-markup: oklch(0.653 0.0093 197.2);
     --syntax-hr: oklch(0.776 0.0170 64.5);
