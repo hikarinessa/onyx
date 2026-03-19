@@ -6,6 +6,7 @@ import {
 } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
+import { previewModeField, togglePreviewEffect } from "./livePreview";
 
 /**
  * Detects #tags in the editor and applies a styled .cm-tag-highlight class.
@@ -32,6 +33,10 @@ function frontmatterEndLine(doc: EditorView["state"]["doc"]): number {
 /** Build decorations for #tags in visible ranges, skipping fenced regions */
 function buildTagDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
+
+  // Live preview handles tag styling with chip decorations — skip to avoid overlap
+  if (view.state.field(previewModeField, false)) return builder.finish();
+
   const doc = view.state.doc;
   const mark = Decoration.mark({ class: "cm-tag-highlight" });
 
@@ -86,8 +91,11 @@ const tagDecorations = ViewPlugin.fromClass(
       this.decorations = buildTagDecorations(view);
     }
 
-    update(update: { docChanged: boolean; viewportChanged: boolean; view: EditorView }) {
-      if (update.docChanged || update.viewportChanged) {
+    update(update: { docChanged: boolean; viewportChanged: boolean; view: EditorView; transactions: readonly { effects: readonly any[] }[] }) {
+      const previewToggled = update.transactions.some(tr =>
+        tr.effects.some(e => e.is && e.is(togglePreviewEffect))
+      );
+      if (update.docChanged || update.viewportChanged || previewToggled) {
         this.decorations = buildTagDecorations(update.view);
       }
     }
