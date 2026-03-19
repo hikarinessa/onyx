@@ -658,8 +658,9 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
 
         // Continuation line inside a callout
         if (activeCallout) {
-          // If collapsed, hide body lines entirely
+          // If collapsed, hide body lines entirely via line decoration
           if (activeCallout.collapsed) {
+            builder.add(line.from, line.from, Decoration.line({ class: "cm-callout-hidden" }));
             builder.add(line.from, line.to, DECO_REPLACE);
             continue;
           }
@@ -907,11 +908,13 @@ const livePreviewPlugin = ViewPlugin.fromClass(
       if (update.docChanged || update.viewportChanged) {
         this.scan = preScanDocument(update.view);
       }
+      const calloutFoldChanged = update.startState.field(calloutFoldField) !== update.state.field(calloutFoldField);
       if (
         update.docChanged ||
         update.viewportChanged ||
         update.selectionSet ||
-        update.startState.field(previewModeField) !== active
+        update.startState.field(previewModeField) !== active ||
+        calloutFoldChanged
       ) {
         const td = detectTableRanges(update.view, this.scan.fmEnd);
         this.tableSkipLines = td.skipLines;
