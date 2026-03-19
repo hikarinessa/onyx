@@ -111,6 +111,17 @@ const ICON_PATHS: Record<string, string> = {
   "quote": "M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z|M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z",
   "message-circle": "M7.9 20A9 9 0 1 0 4 16.1L2 22Z",
   "chevron-right": "M9 18l6-6-6-6",
+  "star": "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z",
+  "map-pin": "M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0|;;circle:12,10,3",
+  "bookmark": "M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z",
+  "banknote": ";;rect:2,6,20,12,2,2|;;circle:12,12,2|M6 12h.01M18 12h.01",
+  "thumbs-up": "M15 5.88L14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z|M7 10v12",
+  "thumbs-down": "M9 18.12L10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z|M17 14V2",
+  "key": "M15.5 7.5l2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4|M21 2l-9.6 9.6|;;circle:7.5,15.5,5.5",
+  "trophy": "M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978|M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978|M18 9h1.5a1 1 0 0 0 0-5H18|M4 22h16|M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z|M6 9H4.5a1 1 0 0 1 0-5H6",
+  "arrow-up": "M5 12l7-7 7 7|M12 19V5",
+  "arrow-down": "M12 5v14|M19 12l-7 7-7-7",
+  "pin": "M12 17v5|M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z",
 };
 
 function calloutIconSvg(name: string, size: number): string {
@@ -177,38 +188,73 @@ class CalloutHeaderWidget extends WidgetType {
   }
 }
 
+// Alt checkbox marker → display config
+// svg: Lucide icon name (rendered via calloutIconSvg), text: plain character
+const CHECKBOX_VARIANTS: Record<string, { text?: string; svg?: string; cls: string; label: string }> = {
+  " ": { text: " ", cls: "cb-todo", label: "to-do" },
+  "x": { text: "✓", cls: "cb-done", label: "done" },
+  "/": { text: "/", cls: "cb-partial", label: "partial" },
+  "-": { text: "—", cls: "cb-canceled", label: "canceled" },
+  ">": { text: "›", cls: "cb-delegated", label: "delegated" },
+  "<": { text: "‹", cls: "cb-scheduled", label: "scheduled" },
+  "!": { text: "!", cls: "cb-important", label: "important" },
+  "?": { svg: "help-circle", cls: "cb-question", label: "question" },
+  "*": { svg: "star", cls: "cb-star", label: "star" },
+  '"': { svg: "quote", cls: "cb-quote", label: "quote" },
+  "l": { svg: "map-pin", cls: "cb-location", label: "location" },
+  "b": { svg: "bookmark", cls: "cb-bookmark", label: "bookmark" },
+  "i": { svg: "info", cls: "cb-info", label: "information" },
+  "S": { svg: "banknote", cls: "cb-savings", label: "savings" },
+  "I": { svg: "lightbulb", cls: "cb-idea", label: "idea" },
+  "p": { svg: "thumbs-up", cls: "cb-pros", label: "pros" },
+  "c": { svg: "thumbs-down", cls: "cb-cons", label: "cons" },
+  "f": { svg: "flame", cls: "cb-fire", label: "fire" },
+  "k": { svg: "key", cls: "cb-key", label: "key" },
+  "w": { svg: "trophy", cls: "cb-win", label: "win" },
+  "u": { svg: "arrow-up", cls: "cb-up", label: "up" },
+  "d": { svg: "arrow-down", cls: "cb-down", label: "down" },
+  "n": { svg: "pin", cls: "cb-pin", label: "pin" },
+};
+
 class CheckboxWidget extends WidgetType {
-  checked: boolean;
+  marker: string;
   bracketPos: number;
 
-  /** @param checked current check state @param bracketPos absolute doc position of `[` */
-  constructor(checked: boolean, bracketPos: number) {
+  constructor(marker: string, bracketPos: number) {
     super();
-    this.checked = checked;
+    this.marker = marker;
     this.bracketPos = bracketPos;
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.checked = this.checked;
-    input.className = "cm-preview-checkbox";
-    // Build aria-label from the text after the checkbox on this line
-    const line = view.state.doc.lineAt(this.bracketPos);
-    const labelText = line.text.slice(this.bracketPos - line.from + 4).trim();
-    if (labelText) input.setAttribute("aria-label", labelText);
-    input.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      const replacement = this.checked ? "[ ]" : "[x]";
-      view.dispatch({
-        changes: { from: this.bracketPos, to: this.bracketPos + 3, insert: replacement },
+    const variant = CHECKBOX_VARIANTS[this.marker] ?? CHECKBOX_VARIANTS[" "];
+
+    const span = document.createElement("span");
+    span.className = `cm-preview-alt-cb ${variant.cls}`;
+    if (variant.svg) {
+      span.innerHTML = calloutIconSvg(variant.svg, 11);
+    } else {
+      span.textContent = variant.text ?? "";
+    }
+    span.title = variant.label;
+
+    // Standard checkboxes toggle on click
+    if (this.marker === " " || this.marker === "x") {
+      span.style.cursor = "pointer";
+      span.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const replacement = this.marker === "x" ? "[ ]" : "[x]";
+        view.dispatch({
+          changes: { from: this.bracketPos, to: this.bracketPos + 3, insert: replacement },
+        });
       });
-    });
-    return input;
+    }
+
+    return span;
   }
 
   eq(other: CheckboxWidget): boolean {
-    return this.checked === other.checked && this.bracketPos === other.bracketPos;
+    return this.marker === other.marker && this.bracketPos === other.bracketPos;
   }
 
   ignoreEvent(): boolean {
@@ -366,7 +412,7 @@ const ITALIC_STAR_RE = /(?<!\*)\*([^*]+)\*(?!\*)/g;
 const ITALIC_UNDER_RE = /(?<![a-zA-Z0-9_])_([^_]+)_(?![a-zA-Z0-9_])/g;
 const STRIKETHROUGH_RE = /~~(.+?)~~/g;
 const HIGHLIGHT_RE = /==(.+?)==/g;
-const CHECKBOX_RE = /^(\s*[-*+]\s)\[([ x])\]\s/;
+const CHECKBOX_RE = /^(\s*[-*+]\s)\[([ x/\-><!?*"libSIpcfkwudn])\]\s/;
 const BULLET_RE = /^(\s*)([-*+])\s/;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 const INLINE_CODE_RE = /`([^`]+)`/g;
@@ -383,9 +429,19 @@ const DECO_STRIKETHROUGH = Decoration.mark({ class: "cm-preview-strikethrough" }
 const DECO_HIGHLIGHT = Decoration.mark({ class: "cm-preview-highlight" });
 const DECO_WIKILINK = Decoration.mark({ class: "cm-preview-wikilink" });
 const DECO_CHECKED = Decoration.mark({ class: "cm-preview-checked" });
+const DECO_DIMMED = Decoration.mark({ class: "cm-preview-dimmed" });
 const DECO_CODE_NOOP = Decoration.mark({ class: "cm-preview-code" });
-const DECO_TAG = Decoration.mark({ class: "cm-preview-tag" });
-const DECO_TAG_HASH = Decoration.replace({});
+class TagChipWidget extends WidgetType {
+  text: string;
+  constructor(text: string) { super(); this.text = text; }
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "cm-preview-tag";
+    span.textContent = this.text;
+    return span;
+  }
+  eq(other: TagChipWidget) { return this.text === other.text; }
+}
 
 // ── Pre-scan cache ──
 
@@ -601,7 +657,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
       // ── Checkboxes ──
       const cbMatch = text.match(CHECKBOX_RE);
       if (cbMatch) {
-        const checked = cbMatch[2] === "x";
+        const marker = cbMatch[2];
         const bracketStart = line.from + cbMatch[1].length;
         const indent = cbMatch[1].match(/^\s*/)?.[0].length ?? 0;
         // Replace "- [ ] " (marker + checkbox + space) with just the checkbox widget
@@ -609,19 +665,18 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
           line.from + indent,
           bracketStart + 4, // through [x] + trailing space
           Decoration.replace({
-            widget: new CheckboxWidget(checked, bracketStart),
+            widget: new CheckboxWidget(marker, bracketStart),
           })
         );
-        if (checked) {
+        // Canceled: strikethrough + dim. Done: dim only.
+        if (marker === "-" || marker === "x") {
           builder.add(
             bracketStart + 4,
             line.to,
-            DECO_CHECKED
+            marker === "-" ? DECO_CHECKED : DECO_DIMMED
           );
-        }
-        // Process inline decorations on text after the checkbox marker
-        // (skip when checked — DECO_CHECKED already covers the full range)
-        if (!checked) {
+        } else {
+          // Process inline decorations on text after the checkbox marker
           const afterCb = text.slice(cbMatch[0].length);
           if (afterCb.length > 0) {
             const cbContentLine = { from: line.from + cbMatch[0].length, to: line.to };
@@ -715,15 +770,17 @@ function addInlineDecorations(
     ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
   }
 
-  // Tags — hide # prefix, wrap tag text in chip
+  // Tags — replace entire #tag with a single widget chip
   TAG_RE.lastIndex = 0;
   while ((m = TAG_RE.exec(text)) !== null) {
     const hashFrom = line.from + m.index;
-    const tagFrom = hashFrom + 1;
     const tagTo = hashFrom + m[0].length;
     if (isClaimed(hashFrom, tagTo)) continue;
-    ranges.push({ from: hashFrom, to: tagFrom, deco: DECO_TAG_HASH });
-    ranges.push({ from: tagFrom, to: tagTo, deco: DECO_TAG });
+    ranges.push({
+      from: hashFrom,
+      to: tagTo,
+      deco: Decoration.replace({ widget: new TagChipWidget(m[1]) }),
+    });
     claimed.push({ from: hashFrom, to: tagTo });
   }
 
@@ -919,7 +976,10 @@ const previewTheme = EditorView.theme({
   },
   ".cm-preview-checked": {
     textDecoration: "line-through",
-    opacity: "0.6",
+    opacity: "0.5",
+  },
+  ".cm-preview-dimmed": {
+    opacity: "0.5",
   },
   ".cm-preview-wikilink": {
     color: "var(--link-color)",
