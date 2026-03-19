@@ -213,9 +213,9 @@ const hoverTracker = ViewPlugin.fromClass(
           const editorRect = this.view.dom.getBoundingClientRect();
           const contentRect = this.view.contentDOM.getBoundingClientRect();
           const top = coords.top - editorRect.top;
-          const left = contentRect.left - editorRect.left - 24;
+          const left = contentRect.right - editorRect.left + 8;
           this.btn.style.top = `${top}px`;
-          this.btn.style.left = `${Math.max(4, left)}px`;
+          this.btn.style.left = `${left}px`;
           this.btn.style.display = "flex";
         }
       } else {

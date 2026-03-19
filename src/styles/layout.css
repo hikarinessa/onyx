@@ -2958,7 +2958,7 @@
     outline: none;
   }
 
-  /* Preview mode: hide gutters and line numbers */
+  /* Preview mode: hide gutters (fold handled inline) */
   .editor-container.preview-mode .cm-gutters {
     display: none;
   }
@@ -3152,6 +3152,44 @@
     opacity: 1;
     color: var(--text-primary);
     background: var(--bg-hover);
+  }
+
+  /* ── Heading fold chevron ── */
+
+  .cm-heading-fold {
+    position: absolute;
+    left: -18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    opacity: 0;
+    top: 50%;
+    transition: opacity 0.15s, transform 0.15s;
+    transform: translateY(-50%) rotate(90deg);
+  }
+
+  .cm-heading-fold.folded {
+    transform: translateY(-50%) rotate(0deg);
+    opacity: 0.6;
+  }
+
+  .cm-heading-fold svg {
+    display: block;
+  }
+
+  .cm-preview-heading {
+    position: relative;
+  }
+
+  .cm-preview-heading:hover .cm-heading-fold {
+    opacity: 0.6;
+  }
+
+  .cm-heading-fold:hover {
+    opacity: 1 !important;
+    color: var(--text-primary);
   }
 
   .cm-preview-blockquote {

@@ -13,7 +13,7 @@ import {
   type EditorState,
   type Extension,
 } from "@codemirror/state";
-import { syntaxTree } from "@codemirror/language";
+import { syntaxTree, foldEffect, unfoldEffect, foldedRanges } from "@codemirror/language";
 import { findTablesInRange } from "./tableAdapter";
 import {
   readTable,
@@ -94,6 +94,44 @@ function getCalloutDef(type: string): CalloutDef {
 }
 
 import { iconSvg } from "./inlineSvgIcons";
+import { headingFoldRange } from "./headingFold";
+
+class HeadingFoldWidget extends WidgetType {
+  lineStart: number;
+  folded: boolean;
+
+  constructor(lineStart: number, folded: boolean) {
+    super();
+    this.lineStart = lineStart;
+    this.folded = folded;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const span = document.createElement("span");
+    span.className = `cm-heading-fold ${this.folded ? "folded" : ""}`;
+    span.innerHTML = iconSvg("chevron-right", 14);
+    span.title = this.folded ? "Unfold section" : "Fold section";
+    span.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const range = headingFoldRange(view.state, this.lineStart, view.state.doc.lineAt(this.lineStart).to);
+      if (!range) return;
+      if (this.folded) {
+        view.dispatch({ effects: unfoldEffect.of({ from: range.from, to: range.to }) });
+      } else {
+        view.dispatch({ effects: foldEffect.of({ from: range.from, to: range.to }) });
+      }
+    });
+    return span;
+  }
+
+  eq(other: HeadingFoldWidget): boolean {
+    return this.lineStart === other.lineStart && this.folded === other.folded;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
 
 class CalloutHeaderWidget extends WidgetType {
   icon: string;
@@ -145,7 +183,7 @@ class CalloutHeaderWidget extends WidgetType {
 
 // Alt checkbox marker → display config
 // Basic 7: SVG mini-icons inside bordered box (task lifecycle)
-// Extras 16: bare Lucide icons (semantic markers)
+// Extras 16: custom editorial marginalia (filled/stroke hybrid glyphs)
 const BASIC_MARKERS = " x/-><!";
 const CHECKBOX_VARIANTS: Record<string, { svg: string; cls: string; label: string }> = {
   // ── Basic 7: task states ──
@@ -156,23 +194,23 @@ const CHECKBOX_VARIANTS: Record<string, { svg: string; cls: string; label: strin
   ">": { svg: "cb-right", cls: "cb-delegated", label: "delegated" },
   "<": { svg: "cb-left",  cls: "cb-scheduled", label: "scheduled" },
   "!": { svg: "cb-bang",  cls: "cb-important", label: "important" },
-  // ── Extras 16: semantic markers ──
-  "?": { svg: "help-circle",  cls: "cb-question",  label: "question" },
-  "*": { svg: "star",         cls: "cb-star",      label: "star" },
-  '"': { svg: "quote",        cls: "cb-quote",     label: "quote" },
-  "l": { svg: "map-pin",      cls: "cb-location",  label: "location" },
-  "b": { svg: "bookmark",     cls: "cb-bookmark",  label: "bookmark" },
-  "i": { svg: "info",         cls: "cb-info",      label: "information" },
-  "S": { svg: "banknote",     cls: "cb-savings",   label: "savings" },
-  "I": { svg: "lightbulb",    cls: "cb-idea",      label: "idea" },
-  "p": { svg: "thumbs-up",    cls: "cb-pros",      label: "pros" },
-  "c": { svg: "thumbs-down",  cls: "cb-cons",      label: "cons" },
-  "f": { svg: "flame",        cls: "cb-fire",      label: "fire" },
-  "k": { svg: "key",          cls: "cb-key",       label: "key" },
-  "w": { svg: "trophy",       cls: "cb-win",       label: "win" },
-  "u": { svg: "arrow-up",     cls: "cb-up",        label: "up" },
-  "d": { svg: "arrow-down",   cls: "cb-down",      label: "down" },
-  "n": { svg: "pin",          cls: "cb-pin",       label: "pin" },
+  // ── Extras 16: editorial marginalia ──
+  "?": { svg: "x-question",   cls: "cb-question",  label: "question" },
+  "*": { svg: "x-star",       cls: "cb-star",      label: "star" },
+  '"': { svg: "x-quote",      cls: "cb-quote",     label: "quote" },
+  "l": { svg: "x-location",   cls: "cb-location",  label: "location" },
+  "b": { svg: "x-bookmark",   cls: "cb-bookmark",  label: "bookmark" },
+  "i": { svg: "x-info",       cls: "cb-info",      label: "information" },
+  "S": { svg: "x-savings",    cls: "cb-savings",   label: "savings" },
+  "I": { svg: "x-idea",       cls: "cb-idea",      label: "idea" },
+  "p": { svg: "x-pros",       cls: "cb-pros",      label: "pros" },
+  "c": { svg: "x-cons",       cls: "cb-cons",      label: "cons" },
+  "f": { svg: "x-fire",       cls: "cb-fire",      label: "fire" },
+  "k": { svg: "x-key",        cls: "cb-key",       label: "key" },
+  "w": { svg: "x-win",        cls: "cb-win",       label: "win" },
+  "u": { svg: "x-up",         cls: "cb-up",        label: "up" },
+  "d": { svg: "x-down",       cls: "cb-down",      label: "down" },
+  "n": { svg: "x-pin",        cls: "cb-pin",       label: "pin" },
 };
 
 class CheckboxWidget extends WidgetType {
@@ -608,9 +646,26 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
           line.from,
           Decoration.line({ class: `cm-preview-heading cm-preview-h${level}` })
         );
-        // Hide # markers
+        // Hide # markers + add fold chevron widget before heading text
         const markerLen = headingMatch[0].length;
         builder.add(line.from, line.from + markerLen, DECO_REPLACE);
+        const foldRange = headingFoldRange(view.state, line.from, line.to);
+        if (foldRange) {
+          let isFolded = false;
+          const iter = foldedRanges(view.state).iter();
+          while (iter.value) {
+            if (iter.from === foldRange.from && iter.to === foldRange.to) {
+              isFolded = true;
+              break;
+            }
+            iter.next();
+          }
+          builder.add(
+            line.from + markerLen,
+            line.from + markerLen,
+            Decoration.widget({ widget: new HeadingFoldWidget(line.from, isFolded), side: -1 })
+          );
+        }
         // Process inline formatting on the text after the markers
         const headingContent = text.slice(markerLen);
         const contentLine = { from: line.from + markerLen, to: line.to };

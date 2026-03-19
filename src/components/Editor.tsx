@@ -18,6 +18,7 @@ import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, setFlushSaveHook, setSnapshotEditorHook, selectActivePane } from "../stores/app";
 import { frontmatterExtension, clearAutoFoldForTab, toggleFrontmatterFoldCommand } from "../extensions/frontmatter";
+import { headingFoldExtension } from "../extensions/headingFold";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
 import { formattingKeymap } from "../extensions/formatting";
@@ -275,6 +276,7 @@ function buildExtensions(): Extension[] {
     EditorView.lineWrapping,
     updateListener,
     frontmatterExtension(),
+    headingFoldExtension(),
     wikilinkExtension(),
     tagExtension(),
     urlPasteExtension,
