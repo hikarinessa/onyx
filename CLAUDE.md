@@ -64,11 +64,13 @@ src/                          # Frontend (React + TypeScript)
 │   ├── urlPaste.ts           #   30 lines — CM6: URL paste → markdown link
 │   ├── autocomplete.ts       #   99 lines — CM6: wikilink + tag + slash command autocomplete
 │   ├── slashCommands.ts      #  175 lines — CM6: slash commands (/table, /code, /callout, /today, /template)
-│   ├── livePreview.ts        #  980 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, callouts, tag chips)
+│   ├── livePreview.ts        # 1090 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, callouts, tag chips, fold)
+│   ├── headingFold.ts        #   70 lines — CM6: foldService for heading-based section folding
+│   ├── inlineSvgIcons.ts     #  115 lines — Compact SVG icon renderer for CM6 widgets (callouts, alt checkboxes)
 │   ├── symbolWrap.ts         #   61 lines — CM6: wrap selection with brackets/quotes/markdown on type
 │   ├── linting.ts            #  402 lines — CM6: markdown lint rules (10 autofix + 4 warning) + autofix on save
 │   ├── spellcheck.ts         #  188 lines — CM6: macOS native spellcheck integration
-│   ├── blocks.ts             #  398 lines — CM6: block detection, hover copy button, move/delete/extract
+│   ├── blocks.ts             #  398 lines — CM6: block detection, hover copy button (right margin), move/delete/extract
 │   ├── tableAdapter.ts       #  188 lines — CM6: md-advanced-tables adapter (0-indexed↔1-indexed)
 │   └── tableEditor.ts        #  175 lines — CM6: table keymap (Tab/Enter) + TSV paste + command palette
 ├── lib/
@@ -87,7 +89,7 @@ src/                          # Frontend (React + TypeScript)
 └── styles/
     ├── reset.css             #   67 lines — CSS reset (@layer reset, prefers-reduced-motion)
     ├── theme.css             #  760 lines — CSS layer order + custom properties (18 themes via data-theme)
-    └── layout.css            # 2830 lines — Layout/component styles (@layer layout, components) + unlayered editor overrides
+    └── layout.css            # 2980 lines — Layout/component styles (@layer layout, components) + unlayered editor overrides
 
 src-tauri/                    # Backend (Rust)
 ├── Cargo.toml                # Dependencies
@@ -108,7 +110,7 @@ src-tauri/                    # Backend (Rust)
         └── mac_rounded_corners.rs # 217 lines — macOS window corner radius fix
 ```
 
-**Total:** ~19,800 lines (12,000 TS/TSX + 4,200 Rust + 3,600 CSS)
+**Total:** ~20,400 lines (12,400 TS/TSX + 4,200 Rust + 3,800 CSS)
 
 ## Architecture Essentials
 
@@ -161,3 +163,4 @@ Every issue must have exactly one label from each category: **Priority**, **Type
 - **CM6 cursor positioning: use padding, not margins.** `margin-top` on `.cm-line` breaks cursor calculations. Use `padding-top` instead. After external CSS changes to font/sizing, call `requestMeasure()` via the `setRemeasureHook` pattern in `configBridge.ts`.
 - **CM6 line decoration CSS needs `!important`.** `Decoration.line({ class })` adds the class to `.cm-line`, but CM6 sets `padding: 0 2px` on `.cm-line` via runtime-injected styles. These runtime styles beat static CSS regardless of specificity or layer. Use `!important` on `padding-left`, `border-left`, etc. for line decoration classes. Margins on `.cm-line` should be avoided entirely (per CM6 author).
 - **CM6 syntax highlight spans override line-level colour.** `Decoration.line({ class })` sets colour on `.cm-line`, but CM6's markdown grammar wraps text in `<span class="ͼX">` with its own `color`. Child spans must use `color: inherit !important` to respect the line-level colour.
+- **CM6 ViewPlugin cannot create multi-line replace decorations.** `Decoration.replace()` from a ViewPlugin must not cross line boundaries. Multi-line replaces (block-level) must come from a `StateField` with `provide: EditorView.decorations.from(f)`. Violating this causes infinite viewport growth. See `tableBlockField` in `livePreview.ts` for the correct pattern.
