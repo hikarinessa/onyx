@@ -3276,3 +3276,75 @@
     margin: 0 5px 0 2px;
   }
 
+  /* ── Alt checkboxes ── */
+
+  .cm-preview-alt-cb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    vertical-align: middle;
+    margin-right: 4px;
+    cursor: default;
+    font-family: var(--font-mono);
+    border: 1px solid var(--text-tertiary);
+    color: var(--text-tertiary);
+    background: transparent;
+  }
+
+  .cm-preview-alt-cb svg {
+    display: block;
+  }
+
+  /* Basic 7: keep bordered box */
+  .cm-preview-alt-cb.cb-todo      { border-color: var(--border-strong); color: transparent; }
+  .cm-preview-alt-cb.cb-done      { background: oklch(0.55 0.12 145 / 0.15); color: oklch(0.55 0.12 145); border-color: oklch(0.55 0.12 145 / 0.4); }
+  .cm-preview-alt-cb.cb-partial   { background: oklch(0.55 0.10 250 / 0.15); color: oklch(0.55 0.10 250); border-color: oklch(0.55 0.10 250 / 0.4); }
+  .cm-preview-alt-cb.cb-canceled  { background: oklch(0.55 0.15 15 / 0.15); color: oklch(0.55 0.15 15); border-color: oklch(0.55 0.15 15 / 0.4); }
+  .cm-preview-alt-cb.cb-delegated { background: oklch(0.55 0.12 290 / 0.15); color: oklch(0.55 0.12 290); border-color: oklch(0.55 0.12 290 / 0.4); }
+  .cm-preview-alt-cb.cb-scheduled { background: oklch(0.60 0.10 230 / 0.15); color: oklch(0.60 0.10 230); border-color: oklch(0.60 0.10 230 / 0.4); }
+  .cm-preview-alt-cb.cb-important { background: oklch(0.60 0.18 40 / 0.15); color: oklch(0.60 0.18 40); border-color: oklch(0.60 0.18 40 / 0.4); }
+
+  /* Icon 16: no border, just colored icon */
+  .cm-preview-alt-cb.cb-question,
+  .cm-preview-alt-cb.cb-star,
+  .cm-preview-alt-cb.cb-quote,
+  .cm-preview-alt-cb.cb-location,
+  .cm-preview-alt-cb.cb-bookmark,
+  .cm-preview-alt-cb.cb-info,
+  .cm-preview-alt-cb.cb-savings,
+  .cm-preview-alt-cb.cb-idea,
+  .cm-preview-alt-cb.cb-pros,
+  .cm-preview-alt-cb.cb-cons,
+  .cm-preview-alt-cb.cb-fire,
+  .cm-preview-alt-cb.cb-key,
+  .cm-preview-alt-cb.cb-win,
+  .cm-preview-alt-cb.cb-up,
+  .cm-preview-alt-cb.cb-down,
+  .cm-preview-alt-cb.cb-pin {
+    border: none;
+    background: none;
+  }
+
+  .cm-preview-alt-cb.cb-question  { color: oklch(0.60 0.15 25); }
+  .cm-preview-alt-cb.cb-star      { color: oklch(0.70 0.14 85); }
+  .cm-preview-alt-cb.cb-quote     { color: var(--text-secondary); }
+  .cm-preview-alt-cb.cb-location  { color: oklch(0.55 0.15 25); }
+  .cm-preview-alt-cb.cb-bookmark  { color: oklch(0.55 0.15 15); }
+  .cm-preview-alt-cb.cb-info      { color: oklch(0.60 0.10 230); }
+  .cm-preview-alt-cb.cb-savings   { color: oklch(0.60 0.12 145); }
+  .cm-preview-alt-cb.cb-idea      { color: oklch(0.70 0.14 85); }
+  .cm-preview-alt-cb.cb-pros      { color: oklch(0.60 0.12 145); }
+  .cm-preview-alt-cb.cb-cons      { color: oklch(0.55 0.15 15); }
+  .cm-preview-alt-cb.cb-fire      { color: oklch(0.60 0.18 40); }
+  .cm-preview-alt-cb.cb-key       { color: oklch(0.70 0.14 85); }
+  .cm-preview-alt-cb.cb-win       { color: oklch(0.70 0.14 85); }
+  .cm-preview-alt-cb.cb-up        { color: oklch(0.60 0.12 145); }
+  .cm-preview-alt-cb.cb-down      { color: oklch(0.55 0.15 15); }
+  .cm-preview-alt-cb.cb-pin       { color: oklch(0.55 0.12 290); }
+
