@@ -3285,6 +3285,10 @@
     padding-bottom: 8px !important;
   }
 
+  .cm-callout-hidden {
+    display: none !important;
+  }
+
 
   /* ── Callout color variants ── */
 

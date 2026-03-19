@@ -660,28 +660,15 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
               widget: new CalloutHeaderWidget(def.icon, title, foldable, isCollapsed, def.colorClass, line.from),
             })
           );
-          // When collapsed, find the end of the callout body and replace it all
-          if (activeCallout.collapsed) {
-            let bodyEnd = line.to;
-            for (let j = i + 1; j <= endLine; j++) {
-              const nextLine = doc.line(j);
-              if (nextLine.text.match(BLOCKQUOTE_RE)) {
-                bodyEnd = nextLine.to;
-              } else {
-                break;
-              }
-            }
-            if (bodyEnd > line.to) {
-              builder.add(line.to, bodyEnd, DECO_REPLACE);
-            }
-          }
           continue;
         }
 
         // Continuation line inside a callout
         if (activeCallout) {
-          // If collapsed, body was already replaced at the header — skip
+          // If collapsed, hide body lines
           if (activeCallout.collapsed) {
+            builder.add(line.from, line.from, Decoration.line({ class: "cm-callout-hidden" }));
+            builder.add(line.from, line.to, DECO_REPLACE);
             continue;
           }
           builder.add(

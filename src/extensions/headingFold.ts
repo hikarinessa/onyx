@@ -42,15 +42,18 @@ export function headingFoldRange(state: EditorState, lineStart: number, _lineEnd
 
   // Find the next heading of equal or higher level
   let foldEnd = doc.length;
+  let found = false;
 
   tree.iterate({
-    from: headingEnd,
+    from: headingEnd + 1,
     enter(node) {
+      if (found) return false;
       const level = HEADING_NODES[node.name];
       if (level && level <= headingLevel) {
         // Fold ends at the line before this heading starts
         const prevLineEnd = doc.lineAt(node.from).from;
         foldEnd = prevLineEnd > 0 ? prevLineEnd - 1 : prevLineEnd;
+        found = true;
         return false;
       }
     },

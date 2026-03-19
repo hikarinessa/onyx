@@ -12,6 +12,7 @@ import {
   foldGutter,
   foldKeymap,
   unfoldEffect,
+  foldedRanges,
   indentUnit,
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
@@ -264,6 +265,16 @@ function buildExtensions(): Extension[] {
         btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"/><path d="M12 8V2"/><path d="M4 12H2"/><path d="M10 12H8"/><path d="M16 12h-2"/><path d="M22 12h-2"/><path d="m15 19-3 3-3-3"/><path d="m15 5-3-3-3 3"/></svg>`;
         btn.onclick = () => {
           const pos = view.posAtDOM(btn);
+          // Find the folded range that contains this position
+          const iter = foldedRanges(view.state).iter();
+          while (iter.value) {
+            if (iter.from <= pos && iter.to >= pos) {
+              view.dispatch({ effects: unfoldEffect.of({ from: iter.from, to: iter.to }) });
+              return;
+            }
+            iter.next();
+          }
+          // Fallback: try unfold at pos (CM6 matches overlapping folds)
           view.dispatch({ effects: unfoldEffect.of({ from: pos, to: pos }) });
         };
         return btn;
