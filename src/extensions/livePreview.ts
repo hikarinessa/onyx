@@ -48,12 +48,12 @@ export const previewModeField = StateField.define<boolean>({
 
 // ── Callout fold state ──
 
-/** Toggle a callout's collapsed state. Value is the line number of the callout header. */
+/** Toggle a callout's collapsed state. Value is the doc position of the callout header line start. */
 const toggleCalloutFold = StateEffect.define<number>();
 
 /**
- * Tracks which callout header lines are collapsed.
- * Uses line numbers (not positions) so it survives minor edits.
+ * Tracks which callout headers are collapsed, by document position (line start).
+ * Positions are remapped via mapPos on edits so they survive insertions/deletions.
  * `-` suffix callouts start collapsed; `+` and unmarked start expanded.
  */
 const calloutFoldField = StateField.define<Set<number>>({
@@ -70,14 +70,13 @@ const calloutFoldField = StateField.define<Set<number>>({
         }
       }
     }
-    // Remap line numbers on doc changes
+    // Remap positions on doc changes
     if (tr.docChanged && updated.size > 0) {
       const remapped = new Set<number>();
-      for (const lineNum of updated) {
-        if (lineNum <= tr.startState.doc.lines) {
-          const pos = tr.startState.doc.line(lineNum).from;
-          const newPos = tr.changes.mapPos(pos, 1);
-          remapped.add(tr.newDoc.lineAt(newPos).number);
+      for (const pos of updated) {
+        const newPos = tr.changes.mapPos(pos, 1);
+        if (newPos < tr.newDoc.length) {
+          remapped.add(newPos);
         }
       }
       return remapped;
@@ -179,16 +178,16 @@ class CalloutHeaderWidget extends WidgetType {
   foldable: boolean;
   collapsed: boolean;
   colorClass: string;
-  headerLine: number;
+  headerPos: number;
 
-  constructor(icon: string, title: string, foldable: boolean, collapsed: boolean, colorClass: string, headerLine: number) {
+  constructor(icon: string, title: string, foldable: boolean, collapsed: boolean, colorClass: string, headerPos: number) {
     super();
     this.icon = icon;
     this.title = title;
     this.foldable = foldable;
     this.collapsed = collapsed;
     this.colorClass = colorClass;
-    this.headerLine = headerLine;
+    this.headerPos = headerPos;
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -212,7 +211,7 @@ class CalloutHeaderWidget extends WidgetType {
       chevron.style.cursor = "pointer";
       chevron.addEventListener("mousedown", (e) => {
         e.preventDefault();
-        view.dispatch({ effects: toggleCalloutFold.of(this.headerLine) });
+        view.dispatch({ effects: toggleCalloutFold.of(this.headerPos) });
       });
       wrapper.appendChild(chevron);
     }
@@ -227,7 +226,7 @@ class CalloutHeaderWidget extends WidgetType {
   eq(other: CalloutHeaderWidget): boolean {
     return this.icon === other.icon && this.title === other.title &&
       this.foldable === other.foldable && this.collapsed === other.collapsed &&
-      this.colorClass === other.colorClass && this.headerLine === other.headerLine;
+      this.colorClass === other.colorClass && this.headerPos === other.headerPos;
   }
 
   ignoreEvent(): boolean {
@@ -593,6 +592,14 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
     let inCodeBlock = codeBlockStates.get(startLine) ?? false;
     // Track active callout across consecutive blockquote lines
     let activeCallout: { def: CalloutDef; foldable: boolean; collapsed: boolean } | null = null;
+    // Cache heading fold ranges per visible range (avoid double tree walk per heading)
+    const headingFoldCache = new Map<number, { from: number; to: number } | null>();
+    function getCachedFoldRange(lineFrom: number, lineTo: number) {
+      if (headingFoldCache.has(lineFrom)) return headingFoldCache.get(lineFrom)!;
+      const range = headingFoldRange(view.state, lineFrom, lineTo);
+      headingFoldCache.set(lineFrom, range);
+      return range;
+    }
 
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
@@ -637,7 +644,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
           const collapsedSet = view.state.field(calloutFoldField);
           // `-` defaults to collapsed (unless user toggled), `+` defaults to expanded
           const defaultCollapsed = foldMarker === "-";
-          const isCollapsed = collapsedSet.has(i) ? !defaultCollapsed : defaultCollapsed;
+          const isCollapsed = collapsedSet.has(line.from) ? !defaultCollapsed : defaultCollapsed;
           activeCallout = { def, foldable, collapsed: foldable && isCollapsed };
 
           // Line decoration for callout styling
@@ -650,18 +657,31 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
             line.from,
             line.to,
             Decoration.replace({
-              widget: new CalloutHeaderWidget(def.icon, title, foldable, isCollapsed, def.colorClass, i),
+              widget: new CalloutHeaderWidget(def.icon, title, foldable, isCollapsed, def.colorClass, line.from),
             })
           );
+          // When collapsed, find the end of the callout body and replace it all
+          if (activeCallout.collapsed) {
+            let bodyEnd = line.to;
+            for (let j = i + 1; j <= endLine; j++) {
+              const nextLine = doc.line(j);
+              if (nextLine.text.match(BLOCKQUOTE_RE)) {
+                bodyEnd = nextLine.to;
+              } else {
+                break;
+              }
+            }
+            if (bodyEnd > line.to) {
+              builder.add(line.to, bodyEnd, DECO_REPLACE);
+            }
+          }
           continue;
         }
 
         // Continuation line inside a callout
         if (activeCallout) {
-          // If collapsed, hide body lines entirely via line decoration
+          // If collapsed, body was already replaced at the header — skip
           if (activeCallout.collapsed) {
-            builder.add(line.from, line.from, Decoration.line({ class: "cm-callout-hidden" }));
-            builder.add(line.from, line.to, DECO_REPLACE);
             continue;
           }
           builder.add(
@@ -714,7 +734,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         // Hide # markers + add fold chevron widget before heading text
         const markerLen = headingMatch[0].length;
         builder.add(line.from, line.from + markerLen, DECO_REPLACE);
-        const foldRange = headingFoldRange(view.state, line.from, line.to);
+        const foldRange = getCachedFoldRange(line.from, line.to);
         if (foldRange) {
           let isFolded = false;
           const iter = foldedRanges(view.state).iter();

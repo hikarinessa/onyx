@@ -1,13 +1,32 @@
 /**
  * Inline SVG icon renderer for CM6 widgets (callouts, alt checkboxes).
  *
- * Stores compact path data and builds SVG strings on demand.
- * Pipe-delimited segments:
- *   plain path   →  <path d="…"/>                    (stroke, no fill)
- *   f:path       →  <path d="…" fill stroke=none/>   (filled shape)
- *   ;;circle:    →  <circle/> (stroke only)
- *   ;;fcircle:   →  <circle/> (filled, no stroke)
- *   ;;rect:      →  <rect/>   (stroke only)
+ * Icons are stored as compact strings and rendered to SVG on demand via iconSvg().
+ * All icons use a 24×24 viewBox (Lucide standard). Path data is sourced from
+ * Lucide, Tabler, or Remix icon sets and manually compacted.
+ *
+ * ## Encoding format
+ *
+ * Each icon is a pipe-delimited (`|`) list of segments. Each segment produces
+ * one SVG element:
+ *
+ *   Segment prefix    SVG output                              Example
+ *   ──────────────    ──────────────────────────────────────   ────────────────────
+ *   (plain)           <path d="…"/>          (stroke, no fill) "M12 5v14"
+ *   f:                <path d="…" fill/>     (filled, no stroke) "f:M12 2l2 7..."
+ *   ;;circle:cx,cy,r  <circle/>              (stroke)          ";;circle:12,12,10"
+ *   ;;fcircle:cx,cy,r <circle fill/>         (filled)          ";;fcircle:12,5,2"
+ *   ;;rect:x,y,w,h,rx,ry <rect/>            (stroke)          ";;rect:2,6,20,12,2,2"
+ *
+ * ## Adding an icon
+ *
+ * 1. Find the icon in Lucide/Tabler/Remix (24×24 viewBox).
+ * 2. Extract the <path>, <circle>, <rect> elements from the SVG source.
+ * 3. Encode each element as a segment using the prefixes above.
+ * 4. Join segments with `|` and add to ICON_PATHS below.
+ *
+ * Example: Lucide "info" has <circle cx=12 cy=12 r=10/> + two <path>s:
+ *   ";;circle:12,12,10|M12 16v-4|M12 8h.01"
  */
 
 const ICON_PATHS: Record<string, string> = {
