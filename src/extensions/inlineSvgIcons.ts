@@ -19,46 +19,46 @@ const ICON_PATHS: Record<string, string> = {
   "cb-left":  "M14 7l-5 5 5 5",
   "cb-bang":  "M12 5v9|;;circle:12,18,1",
 
-  // ── Extras: editorial marginalia (custom glyphs, 13px bare) ──
+  // ── Extras: 16 semantic markers (13px bare icons) ──
 
-  // ? — floating question mark: hook + filled dot
-  "x-question": "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3|;;fcircle:12,17.5,1.2",
+  // ? — clean hook question mark (stroke) + filled dot
+  "x-question": "M9 8.5a4 4 0 0 1 7 1.5c0 2.5-3 3.5-3.5 6|;;fcircle:12.5,19,1.5",
 
-  // * — four-point sparkle (filled)
-  "x-star": "f:M12 3l1.5 6.5L20 12l-6.5 1.5L12 21l-1.5-6.5L4 12l6.5-1.5z",
+  // * — four-point star (filled, bold)
+  "x-star": "f:M12 2l2 7 7 2-7 2-2 7-2-7-7-2 7-2z",
 
-  // " — double comma-quotes: filled dots + slanted tails
-  "x-quote": ";;fcircle:8,7,2.5|M8 9.5l-1.5 5|;;fcircle:16,7,2.5|M16 9.5l-1.5 5",
+  // " — tabler filled double-quotes
+  "x-quote": "f:M9 5a2 2 0 0 1 2 2v6c0 3.13-1.65 5.193-4.757 5.97a1 1 0 1 1-.486-1.94c2.227-.557 3.243-1.827 3.243-4.03v-1h-3a2 2 0 0 1-1.995-1.85l-.005-.15v-3a2 2 0 0 1 2-2z|f:M18 5a2 2 0 0 1 2 2v6c0 3.13-1.65 5.193-4.757 5.97a1 1 0 1 1-.486-1.94c2.227-.557 3.243-1.827 3.243-4.03v-1h-3a2 2 0 0 1-1.995-1.85l-.005-.15v-3a2 2 0 0 1 2-2z",
 
-  // l — filled teardrop pin
-  "x-location": "f:M12 20c-3-4-6-7-6-10a6 6 0 0 1 12 0c0 3-3 6-6 10z",
+  // l — solid teardrop pin
+  "x-location": "f:M12 21c-4-5-7-8.5-7-12a7 7 0 0 1 14 0c0 3.5-3 7-7 12z",
 
-  // b — filled ribbon with V-notch
-  "x-bookmark": "f:M6 3h12v18l-6-4-6 4z",
+  // b — filled ribbon, wider
+  "x-bookmark": "f:M5 2h14v19l-7-4.5-7 4.5z",
 
-  // i — floating info glyph: filled dot + stroked stem
-  "x-info": ";;fcircle:12,7,1.5|M12 11v7",
+  // i — solid info glyph: filled dot + block stem
+  "x-info": ";;fcircle:12,5.5,2.2|f:M10 10h4v10h-4z",
 
-  // S — filled gem/diamond
-  "x-savings": "f:M12 3l9 9-9 9-9-9z",
+  // S — euro symbol (stroke)
+  "x-savings": "M18 8c-1.5-2.5-4-4-7-4-4.4 0-8 3.6-8 8s3.6 8 8 8c3 0 5.5-1.5 7-4|M3 10h10|M4 14h8",
 
-  // I — radiant dot: filled center + four rays
-  "x-idea": ";;fcircle:12,12,3|M12 3v4|M12 17v4|M3 12h4|M17 12h4",
+  // I — ink radiant: filled centre + 8 rays
+  "x-idea": ";;fcircle:12,12,3|M12 3v4|M12 17v4|M3 12h4|M17 12h4|M6.5 6.5l3 3|M14.5 14.5l3 3|M6.5 17.5l3-3|M14.5 9.5l3-3",
 
-  // p — filled plus cross
-  "x-pros": "f:M10.5 4h3v6.5H20v3h-6.5V20h-3v-6.5H4v-3h6.5z",
+  // p — tabler filled thumb-up
+  "x-pros": "f:M13 3a3 3 0 0 1 2.995 2.824l.005.176v4h2a3 3 0 0 1 2.98 2.65l.015.174l.005.176l-.02.196l-1.006 5.032c-.381 1.626-1.502 2.796-2.81 2.78l-.164-.008h-8a1 1 0 0 1-.993-.883l-.007-.117l.001-9.536a1 1 0 0 1 .5-.865a2.998 2.998 0 0 0 1.492-2.397l.007-.202v-1a3 3 0 0 1 3-3z|f:M5 10a1 1 0 0 1 .993.883l.007.117v9a1 1 0 0 1-.883.993l-.117.007h-1a2 2 0 0 1-1.995-1.85l-.005-.15v-7a2 2 0 0 1 1.85-1.995l.15-.005h1z",
 
-  // c — filled minus bar
-  "x-cons": "f:M4 10.5h16v3H4z",
+  // c — tabler filled thumb-down
+  "x-cons": "f:M13 21.008a3 3 0 0 0 2.995-2.823l.005-.177v-4h2a3 3 0 0 0 2.98-2.65l.015-.173l.005-.177l-.02-.196l-1.006-5.032c-.381-1.625-1.502-2.796-2.81-2.78l-.164.008h-8a1 1 0 0 0-.993.884l-.007.116l.001 9.536a1 1 0 0 0 .5.866a2.998 2.998 0 0 1 1.492 2.396l.007.202v1a3 3 0 0 0 3 3z|f:M5 14.008a1 1 0 0 0 .993-.883l.007-.117v-9a1 1 0 0 0-.883-.993l-.117-.007h-1a2 2 0 0 0-1.995 1.852l-.005.15v7a2 2 0 0 0 1.85 1.994l.15.005h1z",
 
-  // f — filled flame silhouette
-  "x-fire": "f:M12 2c2 5 6 7 6 12a6 6 0 0 1-12 0c0-5 4-7 6-12z",
+  // f — tabler filled flame
+  "x-fire": "f:M10 2c0-.88 1.056-1.331 1.692-.722c1.958 1.876 3.096 5.995 1.75 9.12l-.08.174l.012.003c.625.133 1.203-.43 2.303-2.173l.14-.224a1 1 0 0 1 1.582-.153c1.334 1.435 2.601 4.377 2.601 6.27c0 4.265-3.591 7.705-8 7.705s-8-3.44-8-7.706c0-2.252 1.022-4.716 2.632-6.301l.605-.589c.241-.236.434-.43.618-.624c1.43-1.512 2.145-2.924 2.145-4.78",
 
-  // k — filled bow + stroked shaft & teeth
-  "x-key": ";;fcircle:7.5,7.5,4|M11 11l9 9|M16 20h4|M20 16v4",
+  // k — remix filled key
+  "x-key": "f:M17 14H12.6586C11.8349 16.3304 9.61244 18 7 18C3.68629 18 1 15.3137 1 12C1 8.68629 3.68629 6 7 6C9.61244 6 11.8349 7.66962 12.6586 10H23V14H21V18H17V14ZM7 14C8.10457 14 9 13.1046 9 12C9 10.8954 8.10457 10 7 10C5.89543 10 5 10.8954 5 12C5 13.1046 5.89543 14 7 14Z",
 
-  // w — filled cup + stroked stem & base
-  "x-win": "f:M7 4h10v5a5 5 0 0 1-10 0z|M12 14v3|M8 19h8",
+  // w — medal solid (circle + ribbon tails)
+  "x-win": "f:M12 1c4.418 0 8 3.582 8 8 0 2.526-1.171 4.776-3 6.245V22l-5-3-5 3v-6.755C5.171 13.776 4 11.526 4 9c0-4.418 3.582-8 8-8z",
 
   // u — filled upward triangle
   "x-up": "f:M12 4l8 16H4z",
@@ -66,8 +66,8 @@ const ICON_PATHS: Record<string, string> = {
   // d — filled downward triangle
   "x-down": "f:M4 4h16L12 20z",
 
-  // n — filled head + stroked rim & shaft
-  "x-pin": ";;fcircle:12,8,5|M8 13h8|M12 13v8",
+  // n — remix pushpin (filled)
+  "x-pin": "f:M18 3V5H17V11L19 14V16H13V23H11V16H5V14L7 11V5H6V3H18Z",
 
   // ── Callout & general icons ──
   "pencil": "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z|M15 5l4 4",

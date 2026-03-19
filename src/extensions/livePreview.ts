@@ -46,6 +46,46 @@ export const previewModeField = StateField.define<boolean>({
   },
 });
 
+// ── Callout fold state ──
+
+/** Toggle a callout's collapsed state. Value is the line number of the callout header. */
+const toggleCalloutFold = StateEffect.define<number>();
+
+/**
+ * Tracks which callout header lines are collapsed.
+ * Uses line numbers (not positions) so it survives minor edits.
+ * `-` suffix callouts start collapsed; `+` and unmarked start expanded.
+ */
+const calloutFoldField = StateField.define<Set<number>>({
+  create: () => new Set(),
+  update(collapsed, tr) {
+    let updated = collapsed;
+    for (const e of tr.effects) {
+      if (e.is(toggleCalloutFold)) {
+        updated = new Set(updated);
+        if (updated.has(e.value)) {
+          updated.delete(e.value);
+        } else {
+          updated.add(e.value);
+        }
+      }
+    }
+    // Remap line numbers on doc changes
+    if (tr.docChanged && updated.size > 0) {
+      const remapped = new Set<number>();
+      for (const lineNum of updated) {
+        if (lineNum <= tr.startState.doc.lines) {
+          const pos = tr.startState.doc.line(lineNum).from;
+          const newPos = tr.changes.mapPos(pos, 1);
+          remapped.add(tr.newDoc.lineAt(newPos).number);
+        }
+      }
+      return remapped;
+    }
+    return updated;
+  },
+});
+
 // ── Widgets ──
 
 // ── Callout / Admonition types ──
@@ -137,17 +177,21 @@ class CalloutHeaderWidget extends WidgetType {
   icon: string;
   title: string;
   foldable: boolean;
+  collapsed: boolean;
   colorClass: string;
+  headerLine: number;
 
-  constructor(icon: string, title: string, foldable: boolean, colorClass: string) {
+  constructor(icon: string, title: string, foldable: boolean, collapsed: boolean, colorClass: string, headerLine: number) {
     super();
     this.icon = icon;
     this.title = title;
     this.foldable = foldable;
+    this.collapsed = collapsed;
     this.colorClass = colorClass;
+    this.headerLine = headerLine;
   }
 
-  toDOM(): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement("span");
     wrapper.className = `cm-callout-header ${this.colorClass}`;
 
@@ -163,8 +207,13 @@ class CalloutHeaderWidget extends WidgetType {
 
     if (this.foldable) {
       const chevron = document.createElement("span");
-      chevron.className = "cm-callout-fold";
+      chevron.className = `cm-callout-fold ${this.collapsed ? "collapsed" : ""}`;
       chevron.innerHTML = iconSvg("chevron-right", 14);
+      chevron.style.cursor = "pointer";
+      chevron.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        view.dispatch({ effects: toggleCalloutFold.of(this.headerLine) });
+      });
       wrapper.appendChild(chevron);
     }
 
@@ -172,12 +221,17 @@ class CalloutHeaderWidget extends WidgetType {
   }
 
   get estimatedHeight(): number {
-    return 36; // icon + title + padding
+    return 36;
   }
 
   eq(other: CalloutHeaderWidget): boolean {
     return this.icon === other.icon && this.title === other.title &&
-      this.foldable === other.foldable && this.colorClass === other.colorClass;
+      this.foldable === other.foldable && this.collapsed === other.collapsed &&
+      this.colorClass === other.colorClass && this.headerLine === other.headerLine;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
   }
 }
 
@@ -232,7 +286,7 @@ class CheckboxWidget extends WidgetType {
     if (variant.svg) {
       // Basic: 10px icon, bolder stroke inside 14px box
       // Extras: 13px bare icon, standard stroke
-      span.innerHTML = iconSvg(variant.svg, isBasic ? 10 : 13, isBasic ? 2.5 : 2);
+      span.innerHTML = iconSvg(variant.svg, isBasic ? 10 : 13, 2.5);
     }
     span.title = variant.label;
 
@@ -538,7 +592,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
 
     let inCodeBlock = codeBlockStates.get(startLine) ?? false;
     // Track active callout across consecutive blockquote lines
-    let activeCallout: { def: CalloutDef; foldable: boolean } | null = null;
+    let activeCallout: { def: CalloutDef; foldable: boolean; collapsed: boolean } | null = null;
 
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
@@ -575,23 +629,28 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         const calloutMatch = text.match(CALLOUT_RE);
         if (calloutMatch) {
           const def = getCalloutDef(calloutMatch[2]);
-          const foldable = calloutMatch[3] === "-" || calloutMatch[3] === "+";
+          const foldMarker = calloutMatch[3]; // "-", "+", or undefined
+          const foldable = foldMarker === "-" || foldMarker === "+";
           const rawTitle = calloutMatch[4]?.replace(/%% %%/, "").trim();
           const title = rawTitle || def.defaultTitle;
-          activeCallout = { def, foldable };
+
+          const collapsedSet = view.state.field(calloutFoldField);
+          // `-` defaults to collapsed (unless user toggled), `+` defaults to expanded
+          const defaultCollapsed = foldMarker === "-";
+          const isCollapsed = collapsedSet.has(i) ? !defaultCollapsed : defaultCollapsed;
+          activeCallout = { def, foldable, collapsed: foldable && isCollapsed };
 
           // Line decoration for callout styling
-          builder.add(
-            line.from,
-            line.from,
-            Decoration.line({ class: `cm-callout cm-callout-header-line cm-${def.colorClass}` })
-          );
+          const headerClass = activeCallout.collapsed
+            ? `cm-callout cm-callout-header-line cm-callout-solo cm-${def.colorClass}`
+            : `cm-callout cm-callout-header-line cm-${def.colorClass}`;
+          builder.add(line.from, line.from, Decoration.line({ class: headerClass }));
           // Replace entire line content with callout header widget
           builder.add(
             line.from,
             line.to,
             Decoration.replace({
-              widget: new CalloutHeaderWidget(def.icon, title, foldable, def.colorClass),
+              widget: new CalloutHeaderWidget(def.icon, title, foldable, isCollapsed, def.colorClass, i),
             })
           );
           continue;
@@ -599,6 +658,11 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
 
         // Continuation line inside a callout
         if (activeCallout) {
+          // If collapsed, hide body lines entirely
+          if (activeCallout.collapsed) {
+            builder.add(line.from, line.to, DECO_REPLACE);
+            continue;
+          }
           builder.add(
             line.from,
             line.from,
@@ -1018,5 +1082,5 @@ const previewTheme = EditorView.theme({
 // ── Export ──
 
 export function livePreviewExtension(): Extension[] {
-  return [previewModeField, livePreviewPlugin, tableBlockField, previewTheme];
+  return [previewModeField, calloutFoldField, livePreviewPlugin, tableBlockField, previewTheme];
 }
