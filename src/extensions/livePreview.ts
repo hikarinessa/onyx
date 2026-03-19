@@ -133,6 +133,10 @@ class CalloutHeaderWidget extends WidgetType {
     return wrapper;
   }
 
+  get estimatedHeight(): number {
+    return 36; // icon + title + padding
+  }
+
   eq(other: CalloutHeaderWidget): boolean {
     return this.icon === other.icon && this.title === other.title &&
       this.foldable === other.foldable && this.colorClass === other.colorClass;
@@ -140,31 +144,35 @@ class CalloutHeaderWidget extends WidgetType {
 }
 
 // Alt checkbox marker → display config
-// svg: Lucide icon name (rendered via iconSvg), text: plain character
-const CHECKBOX_VARIANTS: Record<string, { text?: string; svg?: string; cls: string; label: string }> = {
-  " ": { text: " ", cls: "cb-todo", label: "to-do" },
-  "x": { text: "✓", cls: "cb-done", label: "done" },
-  "/": { text: "/", cls: "cb-partial", label: "partial" },
-  "-": { text: "—", cls: "cb-canceled", label: "canceled" },
-  ">": { text: "›", cls: "cb-delegated", label: "delegated" },
-  "<": { text: "‹", cls: "cb-scheduled", label: "scheduled" },
-  "!": { text: "!", cls: "cb-important", label: "important" },
-  "?": { svg: "help-circle", cls: "cb-question", label: "question" },
-  "*": { svg: "star", cls: "cb-star", label: "star" },
-  '"': { svg: "quote", cls: "cb-quote", label: "quote" },
-  "l": { svg: "map-pin", cls: "cb-location", label: "location" },
-  "b": { svg: "bookmark", cls: "cb-bookmark", label: "bookmark" },
-  "i": { svg: "info", cls: "cb-info", label: "information" },
-  "S": { svg: "banknote", cls: "cb-savings", label: "savings" },
-  "I": { svg: "lightbulb", cls: "cb-idea", label: "idea" },
-  "p": { svg: "thumbs-up", cls: "cb-pros", label: "pros" },
-  "c": { svg: "thumbs-down", cls: "cb-cons", label: "cons" },
-  "f": { svg: "flame", cls: "cb-fire", label: "fire" },
-  "k": { svg: "key", cls: "cb-key", label: "key" },
-  "w": { svg: "trophy", cls: "cb-win", label: "win" },
-  "u": { svg: "arrow-up", cls: "cb-up", label: "up" },
-  "d": { svg: "arrow-down", cls: "cb-down", label: "down" },
-  "n": { svg: "pin", cls: "cb-pin", label: "pin" },
+// Basic 7: SVG mini-icons inside bordered box (task lifecycle)
+// Extras 16: bare Lucide icons (semantic markers)
+const BASIC_MARKERS = " x/-><!";
+const CHECKBOX_VARIANTS: Record<string, { svg: string; cls: string; label: string }> = {
+  // ── Basic 7: task states ──
+  " ": { svg: "",         cls: "cb-todo",      label: "to-do" },
+  "x": { svg: "cb-check", cls: "cb-done",      label: "done" },
+  "/": { svg: "cb-slash", cls: "cb-partial",   label: "partial" },
+  "-": { svg: "cb-minus", cls: "cb-canceled",  label: "canceled" },
+  ">": { svg: "cb-right", cls: "cb-delegated", label: "delegated" },
+  "<": { svg: "cb-left",  cls: "cb-scheduled", label: "scheduled" },
+  "!": { svg: "cb-bang",  cls: "cb-important", label: "important" },
+  // ── Extras 16: semantic markers ──
+  "?": { svg: "help-circle",  cls: "cb-question",  label: "question" },
+  "*": { svg: "star",         cls: "cb-star",      label: "star" },
+  '"': { svg: "quote",        cls: "cb-quote",     label: "quote" },
+  "l": { svg: "map-pin",      cls: "cb-location",  label: "location" },
+  "b": { svg: "bookmark",     cls: "cb-bookmark",  label: "bookmark" },
+  "i": { svg: "info",         cls: "cb-info",      label: "information" },
+  "S": { svg: "banknote",     cls: "cb-savings",   label: "savings" },
+  "I": { svg: "lightbulb",    cls: "cb-idea",      label: "idea" },
+  "p": { svg: "thumbs-up",    cls: "cb-pros",      label: "pros" },
+  "c": { svg: "thumbs-down",  cls: "cb-cons",      label: "cons" },
+  "f": { svg: "flame",        cls: "cb-fire",      label: "fire" },
+  "k": { svg: "key",          cls: "cb-key",       label: "key" },
+  "w": { svg: "trophy",       cls: "cb-win",       label: "win" },
+  "u": { svg: "arrow-up",     cls: "cb-up",        label: "up" },
+  "d": { svg: "arrow-down",   cls: "cb-down",      label: "down" },
+  "n": { svg: "pin",          cls: "cb-pin",       label: "pin" },
 };
 
 class CheckboxWidget extends WidgetType {
@@ -179,13 +187,14 @@ class CheckboxWidget extends WidgetType {
 
   toDOM(view: EditorView): HTMLElement {
     const variant = CHECKBOX_VARIANTS[this.marker] ?? CHECKBOX_VARIANTS[" "];
+    const isBasic = BASIC_MARKERS.includes(this.marker);
 
     const span = document.createElement("span");
     span.className = `cm-preview-alt-cb ${variant.cls}`;
     if (variant.svg) {
-      span.innerHTML = iconSvg(variant.svg, 11);
-    } else {
-      span.textContent = variant.text ?? "";
+      // Basic: 10px icon, bolder stroke inside 14px box
+      // Extras: 13px bare icon, standard stroke
+      span.innerHTML = iconSvg(variant.svg, isBasic ? 10 : 13, isBasic ? 2.5 : 2);
     }
     span.title = variant.label;
 
@@ -218,6 +227,10 @@ class HRWidget extends WidgetType {
     const hr = document.createElement("hr");
     hr.className = "cm-preview-hr";
     return hr;
+  }
+
+  get estimatedHeight(): number {
+    return 8; // 1px border + 0.15em margin top/bottom
   }
 
   eq(): boolean {

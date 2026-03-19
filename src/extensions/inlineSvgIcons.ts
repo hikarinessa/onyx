@@ -6,6 +6,15 @@
  */
 
 const ICON_PATHS: Record<string, string> = {
+  // ── Checkbox mini-icons (optimised for 10px in a 14px box) ──
+  "cb-check": "M7 13l3 3 7-8",
+  "cb-slash": "M9 17L15 7",
+  "cb-minus": "M7 12h10",
+  "cb-right": "M10 7l5 5-5 5",
+  "cb-left":  "M14 7l-5 5 5 5",
+  "cb-bang":  "M12 5v9|;;circle:12,18,1",
+
+  // ── Callout & general icons ──
   "pencil": "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z|M15 5l4 4",
   "clipboard-list": "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2|M12 11h4|M12 16h4|M8 11h.01|M8 16h.01;;rect:8,2,8,4,1,1",
   "info": ";;circle:12,12,10|M12 16v-4|M12 8h.01",
@@ -35,7 +44,7 @@ const ICON_PATHS: Record<string, string> = {
   "pin": "M12 17v5|M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z",
 };
 
-export function iconSvg(name: string, size: number): string {
+export function iconSvg(name: string, size: number, strokeWidth = 2): string {
   const raw = ICON_PATHS[name] || ICON_PATHS["message-circle"];
   let inner = "";
   for (const segment of raw.split("|")) {
@@ -51,5 +60,5 @@ export function iconSvg(name: string, size: number): string {
       inner += `<path d="${segment}"/>`;
     }
   }
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 }
