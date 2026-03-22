@@ -473,6 +473,8 @@ const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 const INLINE_CODE_RE = /`([^`]+)`/g;
 const TAG_RE = /(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
 const CALLOUT_RE = /^(\s*>)\s*\[!(\w+)\]([+-])?\s*(.*)/;
+const BARE_URL_RE = /(?<![(\[])https?:\/\/[^\s<>\[\])(]+(?:\([^\s<>]*\))*[^\s<>\[\])("',.:;!?]/g;
+const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
 
 // ── Hoisted decoration objects (immutable, reused across calls) ──
 
@@ -486,6 +488,19 @@ const DECO_WIKILINK = Decoration.mark({ class: "cm-preview-wikilink" });
 const DECO_CHECKED = Decoration.mark({ class: "cm-preview-checked" });
 const DECO_DIMMED = Decoration.mark({ class: "cm-preview-dimmed" });
 const DECO_CODE_NOOP = Decoration.mark({ class: "cm-preview-code" });
+const DECO_URL = Decoration.mark({ class: "cm-preview-url" });
+class MdLinkWidget extends WidgetType {
+  text: string;
+  url: string;
+  constructor(text: string, url: string) { super(); this.text = text; this.url = url; }
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "cm-preview-url";
+    span.textContent = this.text;
+    return span;
+  }
+  eq(other: MdLinkWidget) { return this.text === other.text && this.url === other.url; }
+}
 class TagChipWidget extends WidgetType {
   text: string;
   constructor(text: string) { super(); this.text = text; }
@@ -861,6 +876,30 @@ function addInlineDecorations(
     ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
   }
 
+  // Markdown links [text](url) — replace with styled display text
+  MD_LINK_RE.lastIndex = 0;
+  while ((m = MD_LINK_RE.exec(text)) !== null) {
+    const from = line.from + m.index;
+    const to = from + m[0].length;
+    if (isClaimed(from, to)) continue;
+    ranges.push({
+      from,
+      to,
+      deco: Decoration.replace({ widget: new MdLinkWidget(m[1], m[2]) }),
+    });
+    claimed.push({ from, to });
+  }
+
+  // Bare URLs — mark as styled
+  BARE_URL_RE.lastIndex = 0;
+  while ((m = BARE_URL_RE.exec(text)) !== null) {
+    const from = line.from + m.index;
+    const to = from + m[0].length;
+    if (isClaimed(from, to)) continue;
+    ranges.push({ from, to, deco: DECO_URL });
+    claimed.push({ from, to });
+  }
+
   // Tags — replace entire #tag with a single widget chip
   TAG_RE.lastIndex = 0;
   while ((m = TAG_RE.exec(text)) !== null) {
@@ -1075,6 +1114,12 @@ const previewTheme = EditorView.theme({
     opacity: "0.5",
   },
   ".cm-preview-wikilink": {
+    color: "var(--link-color)",
+    cursor: "pointer",
+    textDecoration: "var(--link-underline, underline)",
+    textUnderlineOffset: "2px",
+  },
+  ".cm-preview-url": {
     color: "var(--link-color)",
     cursor: "pointer",
     textDecoration: "var(--link-underline, underline)",
