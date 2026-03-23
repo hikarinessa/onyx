@@ -1,6 +1,6 @@
 # Onyx — Dependencies & Reference
 
-Actual dependencies used in the project, with rationale. Updated for v0.10.0.
+Actual dependencies used in the project, with rationale. Updated for v0.10.3.
 
 ---
 
@@ -21,6 +21,7 @@ Actual dependencies used in the project, with rationale. Updated for v0.10.0.
 | macOS UI | `cocoa` + `objc` | 0.26 / 0.2.7 | NSSpellChecker for native spellcheck, App Nap prevention, window corner radius |
 | Serialization | `serde` + `serde_json` | 1 | JSON serialization for IPC, config, frontmatter |
 | Logging | `log` + `tauri-plugin-log` | 0.4 / 2 | Structured logging from Rust to WebView console |
+| URL opener | `tauri-plugin-opener` | 2.5 | Opens http/https URLs in default browser. `opener:default` capability permission |
 | Tauri | `tauri` | 2.10 | App framework, IPC, window management, event system |
 
 ### Not Yet Used (planned)
@@ -52,7 +53,7 @@ Actual dependencies used in the project, with rationale. Updated for v0.10.0.
 | Table editing | `@tgrosinger/md-advanced-tables` | Table formatting + column operations, adapted via tableAdapter.ts |
 | UI framework | `react` + `react-dom` | 19.2 — UI rendering |
 | State | `zustand` | 5.0 — minimal state management. Pane-aware store with memoized selectors |
-| Tauri IPC | `@tauri-apps/api` + `@tauri-apps/plugin-dialog` + `@tauri-apps/plugin-fs` | Tauri 2 frontend bindings |
+| Tauri IPC | `@tauri-apps/api` + `@tauri-apps/plugin-dialog` + `@tauri-apps/plugin-fs` + `@tauri-apps/plugin-opener` | Tauri 2 frontend bindings. Opener used for opening external URLs in default browser |
 | macOS styling | `@cloudworxx/tauri-plugin-mac-rounded-corners` | Window corner radius fix for Tauri on macOS |
 
 ### Built Custom (replaced planned dependencies)

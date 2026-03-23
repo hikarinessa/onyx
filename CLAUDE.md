@@ -57,14 +57,14 @@ src/                          # Frontend (React + TypeScript)
 │   └── LintPanel.tsx         #   91 lines — Lint diagnostics panel (toggle from status bar)
 ├── extensions/
 │   ├── frontmatter.ts        #  178 lines — CM6: frontmatter detection, styling, auto-fold, toggle-fold command
-│   ├── wikilinks.ts          #  158 lines — CM6: wikilink syntax highlighting, click to follow
+│   ├── wikilinks.ts          #  269 lines — CM6: link handling (wikilinks + URLs), click dispatch, decorations
 │   ├── tags.ts               #  109 lines — CM6: #tag syntax highlighting (viewport-aware)
 │   ├── formatting.ts         #  118 lines — CM6: Cmd+B/I/Shift+C toggle wrap (multi-cursor safe)
 │   ├── outliner.ts           #  160 lines — CM6: list item indent/outdent/move/enter
 │   ├── urlPaste.ts           #   30 lines — CM6: URL paste → markdown link
 │   ├── autocomplete.ts       #   99 lines — CM6: wikilink + tag + slash command autocomplete
 │   ├── slashCommands.ts      #  175 lines — CM6: slash commands (/table, /code, /callout, /today, /template)
-│   ├── livePreview.ts        # 1090 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, callouts, tag chips, fold)
+│   ├── livePreview.ts        # 1143 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, URLs, callouts, tag chips, fold)
 │   ├── headingFold.ts        #   70 lines — CM6: foldService for heading-based section folding
 │   ├── inlineSvgIcons.ts     #  115 lines — Compact SVG icon renderer for CM6 widgets (callouts, alt checkboxes)
 │   ├── symbolWrap.ts         #   61 lines — CM6: wrap selection with brackets/quotes/markdown on type
@@ -110,7 +110,7 @@ src-tauri/                    # Backend (Rust)
         └── mac_rounded_corners.rs # 217 lines — macOS window corner radius fix
 ```
 
-**Total:** ~20,400 lines (12,400 TS/TSX + 4,200 Rust + 3,800 CSS)
+**Total:** ~21,700 lines (13,100 TS/TSX + 4,300 Rust + 4,300 CSS)
 
 ## Architecture Essentials
 

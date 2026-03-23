@@ -4,6 +4,18 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.10.3] — 2026-03-23
+
+### Added
+- **Clickable URLs** — bare URLs and markdown links open in the default browser (#54). Source mode: Cmd+click. Preview mode: single click. Markdown links hide syntax and show display text only.
+- `tauri-plugin-opener` dependency for external URL opening
+
+### Changed
+- `wikilinks.ts` now owns all link click dispatch (wikilinks + URLs) via `posAtCoords` + regex against document text
+- livePreview plugin handles URL visual decorations only (no click logic)
+
+---
+
 ## [0.10.0] — 2026-03-15
 
 ### Added
