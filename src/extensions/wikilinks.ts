@@ -162,12 +162,19 @@ const linkClickHandler = EditorView.domEventHandlers({
     // Preview mode only: single click follows wikilinks, opens URLs
     if (!view.state.field(previewModeField)) return false;
     const target = event.target as HTMLElement;
-    if (!target.closest(".cm-wikilink") && !target.closest(".cm-url")) return false;
 
+    // 1. Replace widget (MdLinkWidget): read URL from data attribute
+    const urlEl = target.closest("[data-url]") as HTMLElement | null;
+    if (urlEl?.dataset.url) {
+      event.preventDefault();
+      openExternalUrl(urlEl.dataset.url);
+      return true;
+    }
+
+    // 2. Regular text: posAtCoords + regex against document text
     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
     if (pos == null) return false;
 
-    // Wikilink?
     const linkText = wikilinkAtPos(view.state.doc, pos);
     if (linkText && wikilinkFollowRef.current) {
       event.preventDefault();
@@ -175,7 +182,6 @@ const linkClickHandler = EditorView.domEventHandlers({
       return true;
     }
 
-    // URL?
     const url = urlAtPos(view.state.doc, pos);
     if (url) {
       event.preventDefault();
@@ -189,8 +195,6 @@ const linkClickHandler = EditorView.domEventHandlers({
   click(event, view) {
     // Source mode: Cmd+click only
     if (!event.metaKey) return false;
-    const target = event.target as HTMLElement;
-    if (!target.closest(".cm-wikilink") && !target.closest(".cm-url")) return false;
 
     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
     if (pos == null) return false;

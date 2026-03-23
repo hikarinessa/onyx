@@ -497,9 +497,11 @@ class MdLinkWidget extends WidgetType {
     const span = document.createElement("span");
     span.className = "cm-preview-url";
     span.textContent = this.text;
+    span.dataset.url = this.url;
     return span;
   }
   eq(other: MdLinkWidget) { return this.text === other.text && this.url === other.url; }
+  ignoreEvent() { return false; }
 }
 class TagChipWidget extends WidgetType {
   text: string;
