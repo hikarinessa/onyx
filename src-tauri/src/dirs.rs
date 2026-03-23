@@ -103,6 +103,22 @@ impl DirectoryManager {
         self.save()
     }
 
+    pub fn reorder(&mut self, ordered_ids: &[String]) -> Result<(), String> {
+        if ordered_ids.len() != self.directories.len() {
+            return Err("ID list length does not match directory count".into());
+        }
+        let mut reordered = Vec::with_capacity(self.directories.len());
+        for (i, id) in ordered_ids.iter().enumerate() {
+            let dir = self.directories.iter().find(|d| d.id == *id)
+                .ok_or_else(|| format!("Directory not found: {}", id))?;
+            let mut dir = dir.clone();
+            dir.position = i as u32;
+            reordered.push(dir);
+        }
+        self.directories = reordered;
+        self.save()
+    }
+
     pub fn update_icon(&mut self, id: &str, icon: &str) -> Result<(), String> {
         // Reject anything that isn't a reasonable kebab-case icon name
         if icon.is_empty() || icon.len() > 64

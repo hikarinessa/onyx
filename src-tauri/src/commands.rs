@@ -315,6 +315,15 @@ pub fn update_directory_icon(
 }
 
 #[tauri::command]
+pub fn reorder_directories(
+    ordered_ids: Vec<String>,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let mut dirs = state.directories.lock().map_err(|e| e.to_string())?;
+    dirs.reorder(&ordered_ids)
+}
+
+#[tauri::command]
 pub fn search_files(
     query: String,
     state: State<AppState>,

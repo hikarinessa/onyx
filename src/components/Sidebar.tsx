@@ -18,6 +18,15 @@ let dragState: {
 } | null = null;
 let currentDropTarget: string | null = null;
 
+// Directory reorder drag state
+let dirDragState: {
+  dirId: string;
+  sourceEl: HTMLElement;
+  startY: number;
+  active: boolean;
+} | null = null;
+let dirDropIndex: number | null = null;
+
 function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder, onReveal, onUnregister }: {
   x: number; y: number;
   onClose: () => void;
@@ -425,6 +434,84 @@ export function Sidebar() {
     };
   }, []);
 
+  // Directory reorder via pointer drag
+  useEffect(() => {
+    const DRAG_THRESHOLD = 5;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!dirDragState) return;
+
+      if (!dirDragState.active) {
+        if (Math.abs(e.clientY - dirDragState.startY) < DRAG_THRESHOLD) return;
+        dirDragState.active = true;
+        dirDragState.sourceEl.classList.add("dragging");
+        document.body.classList.add("dragging");
+      }
+
+      // Hit-test: find directory header under pointer
+      const els = document.elementsFromPoint(e.clientX, e.clientY);
+      const headerEl = els.find(
+        (el) => el instanceof HTMLElement && el.dataset.dirId && el.dataset.dirId !== dirDragState!.dirId
+      ) as HTMLElement | undefined;
+
+      const newIdx = headerEl ? Number(headerEl.dataset.dirIdx) : null;
+
+      if (newIdx !== dirDropIndex) {
+        // Remove old indicator
+        document.querySelectorAll(".sidebar-header.dir-drop-above, .sidebar-header.dir-drop-below").forEach(
+          (el) => { el.classList.remove("dir-drop-above", "dir-drop-below"); }
+        );
+        // Add new indicator
+        if (headerEl && newIdx !== null) {
+          const sourceIdx = directories.findIndex((d) => d.id === dirDragState!.dirId);
+          headerEl.classList.add(newIdx < sourceIdx ? "dir-drop-above" : "dir-drop-below");
+        }
+        dirDropIndex = newIdx;
+      }
+    };
+
+    const handlePointerUp = () => {
+      if (!dirDragState) return;
+      const wasActive = dirDragState.active;
+      const sourceId = dirDragState.dirId;
+
+      // Reset visual state
+      dirDragState.sourceEl.classList.remove("dragging");
+      document.body.classList.remove("dragging");
+      document.querySelectorAll(".sidebar-header.dir-drop-above, .sidebar-header.dir-drop-below").forEach(
+        (el) => { el.classList.remove("dir-drop-above", "dir-drop-below"); }
+      );
+
+      if (wasActive && dirDropIndex !== null) {
+        const fromIdx = directories.findIndex((d) => d.id === sourceId);
+        const toIdx = dirDropIndex;
+        if (fromIdx !== -1 && fromIdx !== toIdx) {
+          const reordered = [...directories];
+          const [moved] = reordered.splice(fromIdx, 1);
+          reordered.splice(toIdx, 0, moved);
+          // Optimistic UI update
+          setDirectories(reordered);
+          // Persist
+          invoke("reorder_directories", { orderedIds: reordered.map((d) => d.id) })
+            .catch((err) => {
+              console.error("Failed to reorder directories:", err);
+              loadDirectories(); // rollback on failure
+            });
+        }
+      }
+
+      dirDragState = null;
+      dirDropIndex = null;
+    };
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [directories, loadDirectories]);
+
   const handleFileClick = async (path: string, name: string, metaKey: boolean) => {
     if (!name.endsWith(".md")) return;
 
@@ -557,14 +644,25 @@ export function Sidebar() {
           </p>
         </div>
       ) : (
-        directories.map((dir) => {
+        directories.map((dir, idx) => {
           const isCollapsed = collapsedDirs.includes(dir.id);
           return (
             <div key={dir.id} className="sidebar-directory">
               <div
                 className="sidebar-header"
                 style={{ borderLeft: `2px solid ${dir.color}` }}
+                data-dir-id={dir.id}
+                data-dir-idx={idx}
                 onClick={() => toggleDirCollapsed(dir.id)}
+                onPointerDown={(e) => {
+                  if (e.button !== 0) return;
+                  dirDragState = {
+                    dirId: dir.id,
+                    sourceEl: e.currentTarget,
+                    startY: e.clientY,
+                    active: false,
+                  };
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();

@@ -214,6 +214,7 @@ pub fn run() {
             commands::register_directory,
             commands::unregister_directory,
             commands::update_directory_icon,
+            commands::reorder_directories,
             commands::search_files,
             commands::search_content,
             commands::get_backlinks,
