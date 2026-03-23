@@ -2963,6 +2963,14 @@
     display: none;
   }
 
+  /* Focused table: monospace so padded columns align */
+  .cm-line.cm-focused-table-line,
+  .cm-line.cm-focused-table-line span {
+    font-family: var(--font-mono) !important;
+    font-size: calc(var(--editor-font-size, 16px) * 0.85) !important;
+    letter-spacing: 0 !important;
+  }
+
   /* Source mode: show gutters with dark theme styling */
   .editor-container.source-mode .cm-lineNumbers .cm-gutterElement {
     color: var(--text-tertiary);

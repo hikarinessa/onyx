@@ -1,5 +1,5 @@
 import { type EditorView } from "@codemirror/view";
-import { type EditorState } from "@codemirror/state";
+import { type EditorState, type ChangeSpec, ChangeSet, EditorSelection, type Text } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 import {
   ITextEditor,
@@ -17,13 +17,26 @@ import {
  * The library uses 0-indexed rows/columns.
  * CM6 uses 1-indexed line numbers (doc.line(1) is the first line).
  * All conversions happen here.
+ *
+ * transact() batches all mutations into a single CM6 dispatch so that
+ * edit-script operations (sequential insert/delete) don't invalidate
+ * each other's row references.
  */
 export class CM6TextEditor extends ITextEditor {
   view: EditorView;
+  private _inTransaction = false;
+  private _txDoc: Text | null = null;
+  private _txComposed: ChangeSet | null = null;
+  private _txSelection: { anchor: number; head: number } | null = null;
 
   constructor(view: EditorView) {
     super();
     this.view = view;
+  }
+
+  /** Current document — either the transaction-in-progress doc or the real doc. */
+  private get doc(): Text {
+    return this._txDoc ?? this.view.state.doc;
   }
 
   getCursorPosition(): Point {
@@ -33,21 +46,31 @@ export class CM6TextEditor extends ITextEditor {
   }
 
   setCursorPosition(pos: Point): void {
-    const line = this.view.state.doc.line(pos.row + 1);
+    const d = this.doc;
+    const line = d.line(pos.row + 1);
     const offset = line.from + Math.min(pos.column, line.length);
-    this.view.dispatch({ selection: { anchor: offset } });
+    if (this._inTransaction) {
+      this._txSelection = { anchor: offset, head: offset };
+    } else {
+      this.view.dispatch({ selection: { anchor: offset } });
+    }
   }
 
   setSelectionRange(range: Range): void {
-    const startLine = this.view.state.doc.line(range.start.row + 1);
-    const endLine = this.view.state.doc.line(range.end.row + 1);
+    const d = this.doc;
+    const startLine = d.line(range.start.row + 1);
+    const endLine = d.line(range.end.row + 1);
     const anchor = startLine.from + Math.min(range.start.column, startLine.length);
     const head = endLine.from + Math.min(range.end.column, endLine.length);
-    this.view.dispatch({ selection: { anchor, head } });
+    if (this._inTransaction) {
+      this._txSelection = { anchor, head };
+    } else {
+      this.view.dispatch({ selection: { anchor, head } });
+    }
   }
 
   getLastRow(): number {
-    return this.view.state.doc.lines - 1;
+    return this.doc.lines - 1;
   }
 
   acceptsTableEdit(row: number): boolean {
@@ -56,7 +79,6 @@ export class CM6TextEditor extends ITextEditor {
     const line = this.view.state.doc.line(lineNum);
     const tree = syntaxTree(this.view.state);
     const node = tree.resolveInner(line.from);
-    // Reject if inside fenced code block or frontmatter
     let cur = node;
     while (cur.parent) {
       if (cur.name === "FencedCode" || cur.name === "CodeBlock") return false;
@@ -67,54 +89,85 @@ export class CM6TextEditor extends ITextEditor {
   }
 
   getLine(row: number): string {
+    const d = this.doc;
     const lineNum = row + 1;
-    if (lineNum < 1 || lineNum > this.view.state.doc.lines) return "";
-    return this.view.state.doc.line(lineNum).text;
+    if (lineNum < 1 || lineNum > d.lines) return "";
+    return d.line(lineNum).text;
+  }
+
+  /** Apply a change — either immediately or batched into the current transaction. */
+  private applyChange(change: ChangeSpec): void {
+    if (this._inTransaction) {
+      // Build a ChangeSet against the current transaction doc, then compose
+      const cs = ChangeSet.of(change, this._txDoc!.length);
+      this._txComposed = this._txComposed!.compose(cs);
+      // Update the transaction doc so subsequent reads see the new state
+      this._txDoc = cs.apply(this._txDoc!);
+    } else {
+      this.view.dispatch({ changes: change });
+    }
   }
 
   insertLine(row: number, line: string): void {
-    const doc = this.view.state.doc;
-    if (row > doc.lines - 1) {
-      // Append after last line
-      const lastLine = doc.line(doc.lines);
-      this.view.dispatch({
-        changes: { from: lastLine.to, insert: "\n" + line },
-      });
+    const d = this.doc;
+    if (row > d.lines - 1) {
+      const lastLine = d.line(d.lines);
+      this.applyChange({ from: lastLine.to, insert: "\n" + line });
     } else {
-      const targetLine = doc.line(row + 1);
-      this.view.dispatch({
-        changes: { from: targetLine.from, insert: line + "\n" },
-      });
+      const targetLine = d.line(row + 1);
+      this.applyChange({ from: targetLine.from, insert: line + "\n" });
     }
   }
 
   deleteLine(row: number): void {
-    const doc = this.view.state.doc;
+    const d = this.doc;
     const lineNum = row + 1;
-    if (lineNum < 1 || lineNum > doc.lines) return;
-    const line = doc.line(lineNum);
-    if (lineNum === doc.lines) {
-      // Last line: delete including preceding newline
-      const from = lineNum > 1 ? doc.line(lineNum - 1).to : line.from;
-      this.view.dispatch({ changes: { from, to: line.to } });
+    if (lineNum < 1 || lineNum > d.lines) return;
+    const line = d.line(lineNum);
+    if (lineNum === d.lines) {
+      const from = lineNum > 1 ? d.line(lineNum - 1).to : line.from;
+      this.applyChange({ from, to: line.to });
     } else {
-      // Delete line including trailing newline
-      this.view.dispatch({ changes: { from: line.from, to: line.to + 1 } });
+      this.applyChange({ from: line.from, to: line.to + 1 });
     }
   }
 
   replaceLines(startRow: number, endRow: number, lines: string[]): void {
-    const doc = this.view.state.doc;
-    const fromLine = doc.line(startRow + 1);
-    const toLine = doc.line(endRow + 1);
+    const d = this.doc;
+    const fromLine = d.line(startRow + 1);
+    const toLine = d.line(endRow + 1);
     const insert = lines.join("\n");
-    this.view.dispatch({
-      changes: { from: fromLine.from, to: toLine.to, insert },
-    });
+    this.applyChange({ from: fromLine.from, to: toLine.to, insert });
   }
 
   transact(func: () => void): void {
-    func();
+    const origDoc = this.view.state.doc;
+    this._inTransaction = true;
+    this._txDoc = origDoc;
+    this._txComposed = ChangeSet.empty(origDoc.length);
+    this._txSelection = null;
+    try {
+      func();
+      const hasChanges = !this._txComposed.empty;
+      if (hasChanges || this._txSelection) {
+        const spec: Parameters<EditorView["dispatch"]>[0] = {};
+        if (hasChanges) {
+          spec.changes = this._txComposed;
+        }
+        if (this._txSelection) {
+          // Selection was computed against _txDoc (final post-change doc)
+          spec.selection = EditorSelection.create([
+            EditorSelection.range(this._txSelection.anchor, this._txSelection.head),
+          ]);
+        }
+        this.view.dispatch(spec);
+      }
+    } finally {
+      this._inTransaction = false;
+      this._txDoc = null;
+      this._txComposed = null;
+      this._txSelection = null;
+    }
   }
 }
 

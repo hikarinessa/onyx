@@ -564,10 +564,15 @@ function preScanDocument(view: EditorView): PreScanResult {
 function detectTableRanges(
   view: EditorView,
   fmEnd: number,
-): { skipLines: Set<number>; decos: { from: number; to: number; text: string; table: Table }[] } {
+): {
+  skipLines: Set<number>;
+  focusedTableLines: Set<number>;
+  decos: { from: number; to: number; text: string; table: Table }[];
+} {
   const doc = view.state.doc;
   const cursorLine = doc.lineAt(view.state.selection.main.head).number;
   const skipLines = new Set<number>();
+  const focusedTableLines = new Set<number>();
   const decos: { from: number; to: number; text: string; table: Table }[] = [];
 
   for (const { from, to } of view.visibleRanges) {
@@ -576,8 +581,14 @@ function detectTableRanges(
       const tableStartLine = doc.lineAt(t.from).number;
       const tableEndLine = doc.lineAt(t.to).number;
 
-      if (cursorLine >= tableStartLine && cursorLine <= tableEndLine) continue;
       if (fmEnd > 0 && tableStartLine <= fmEnd) continue;
+
+      if (cursorLine >= tableStartLine && cursorLine <= tableEndLine) {
+        for (let ln = tableStartLine; ln <= tableEndLine; ln++) {
+          focusedTableLines.add(ln);
+        }
+        continue;
+      }
 
       const rangeFrom = doc.line(tableStartLine).from;
       const rangeTo = doc.line(tableEndLine).to;
@@ -592,10 +603,12 @@ function detectTableRanges(
     }
   }
 
-  return { skipLines, decos };
+  return { skipLines, focusedTableLines, decos };
 }
 
-function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSkipLines: Set<number>): DecorationSet {
+const DECO_TABLE_LINE = Decoration.line({ class: "cm-focused-table-line" });
+
+function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSkipLines: Set<number>, focusedTableLines: Set<number>): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
   const { fmEnd, codeBlockStates } = scan;
@@ -623,6 +636,11 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
 
       // Skip lines covered by table widgets
       if (tableSkipLines.has(i)) continue;
+
+      // Monospace font for focused (editing) table lines
+      if (focusedTableLines.has(i)) {
+        builder.add(line.from, line.from, DECO_TABLE_LINE);
+      }
 
       const text = line.text;
 
@@ -940,7 +958,7 @@ const livePreviewPlugin = ViewPlugin.fromClass(
       if (active) {
         const td = detectTableRanges(view, this.scan.fmEnd);
         this.tableSkipLines = td.skipLines;
-        this.decorations = buildPreviewDecorations(view, this.scan, td.skipLines);
+        this.decorations = buildPreviewDecorations(view, this.scan, td.skipLines, td.focusedTableLines);
       } else {
         this.decorations = Decoration.none;
       }
@@ -966,7 +984,7 @@ const livePreviewPlugin = ViewPlugin.fromClass(
       ) {
         const td = detectTableRanges(update.view, this.scan.fmEnd);
         this.tableSkipLines = td.skipLines;
-        this.decorations = buildPreviewDecorations(update.view, this.scan, td.skipLines);
+        this.decorations = buildPreviewDecorations(update.view, this.scan, td.skipLines, td.focusedTableLines);
       }
     }
   },
