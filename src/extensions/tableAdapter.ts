@@ -148,19 +148,21 @@ export class CM6TextEditor extends ITextEditor {
     this._txSelection = null;
     try {
       func();
-      const hasChanges = !this._txComposed.empty;
-      if (hasChanges || this._txSelection) {
-        const spec: Parameters<EditorView["dispatch"]>[0] = {};
-        if (hasChanges) {
-          spec.changes = this._txComposed;
+      const composed = this._txComposed!;
+      const sel = this._txSelection as { anchor: number; head: number } | null;
+      if (!composed.empty) {
+        if (sel) {
+          this.view.dispatch({
+            changes: composed,
+            selection: EditorSelection.create([EditorSelection.range(sel.anchor, sel.head)]),
+          });
+        } else {
+          this.view.dispatch({ changes: composed });
         }
-        if (this._txSelection) {
-          // Selection was computed against _txDoc (final post-change doc)
-          spec.selection = EditorSelection.create([
-            EditorSelection.range(this._txSelection.anchor, this._txSelection.head),
-          ]);
-        }
-        this.view.dispatch(spec);
+      } else if (sel) {
+        this.view.dispatch({
+          selection: EditorSelection.create([EditorSelection.range(sel.anchor, sel.head)]),
+        });
       }
     } finally {
       this._inTransaction = false;
