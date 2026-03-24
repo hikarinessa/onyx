@@ -25,7 +25,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 10 (Split Panes):** Complete
 - **Phase 11 (Tier 2 Features):** In progress (slash commands, callouts, tag chips, 13 new themes, theme preview)
 
-**Current version:** 0.10.2
+**Current version:** 0.10.3
 
 ## Project Structure
 
@@ -39,7 +39,7 @@ src/                          # Frontend (React + TypeScript)
 ├── components/
 │   ├── Titlebar.tsx          #    8 lines — Custom titlebar with traffic lights spacer
 │   ├── TabBar.tsx            #  103 lines — Per-pane tab strip with drag-to-reorder
-│   ├── Sidebar.tsx           #  591 lines — File tree, collapsible dirs, inline rename, orphan notes
+│   ├── Sidebar.tsx           #  815 lines — File tree, collapsible dirs, inline rename, orphan notes
 │   ├── BookmarkStrip.tsx     #  116 lines — Bookmarks section pinned at sidebar bottom
 │   ├── SidebarContextMenu.tsx#  120 lines — Right-click context menu for file tree
 │   ├── ErrorBoundary.tsx     #   50 lines — React error boundary
@@ -71,7 +71,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── linting.ts            #  402 lines — CM6: markdown lint rules (10 autofix + 4 warning) + autofix on save
 │   ├── spellcheck.ts         #  188 lines — CM6: macOS native spellcheck integration
 │   ├── blocks.ts             #  398 lines — CM6: block detection, hover copy button (right margin), move/delete/extract
-│   ├── tableAdapter.ts       #  188 lines — CM6: md-advanced-tables adapter (0-indexed↔1-indexed)
+│   ├── tableAdapter.ts       #  242 lines — CM6: md-advanced-tables adapter (0-indexed↔1-indexed)
 │   └── tableEditor.ts        #  175 lines — CM6: table keymap (Tab/Enter) + TSV paste + command palette
 ├── lib/
 │   ├── fileOps.ts            #  169 lines — Centralized file mutations (with link warnings, fs:change event-driven)
@@ -89,7 +89,7 @@ src/                          # Frontend (React + TypeScript)
 └── styles/
     ├── reset.css             #   67 lines — CSS reset (@layer reset, prefers-reduced-motion)
     ├── theme.css             #  760 lines — CSS layer order + custom properties (18 themes via data-theme)
-    └── layout.css            # 2980 lines — Layout/component styles (@layer layout, components) + unlayered editor overrides
+    └── layout.css            # 3438 lines — Layout/component styles (@layer layout, components) + unlayered editor overrides
 
 src-tauri/                    # Backend (Rust)
 ├── Cargo.toml                # Dependencies
@@ -166,3 +166,4 @@ Every issue must have exactly one label from each category: **Priority**, **Type
 - **CM6 ViewPlugin cannot create multi-line replace decorations.** `Decoration.replace()` from a ViewPlugin must not cross line boundaries. Multi-line replaces (block-level) must come from a `StateField` with `provide: EditorView.decorations.from(f)`. Violating this causes infinite viewport growth. See `tableBlockField` in `livePreview.ts` for the correct pattern.
 - **CM6 DOM is not your DOM — never use DOM text/classes for click dispatch.** CM6's syntax highlighting splits text into multiple `<span>` elements with opaque classes (`ͼ12`, `ͼ13`). Mark decorations from ViewPlugins (e.g. `.cm-preview-wikilink`) may not produce findable DOM targets — `target.closest(".cm-preview-wikilink")` can return null even when the decoration exists in the DecorationSet. `el.textContent` on a mark span may return partial text (e.g. a URL without its `https://` prefix). **All click handlers must use `view.posAtCoords({ x, y })` to get the document position, then regex-match against the line text to determine what was clicked.** The document model is the source of truth; the DOM is a rendering artifact.
 - **CM6 click handler ownership: one dispatcher, not many.** Link-like click handling (wikilinks, URLs, embeds) should live in a single `EditorView.domEventHandlers` registration with a clear priority chain: check wikilink regex → check markdown link regex → check bare URL regex → return false. Splitting click dispatch across multiple extensions (e.g. wikilinks.ts and livePreview.ts) leads to handler ordering bugs, duplicated logic, and interactions that are impossible to debug.
+- **Zustand `activeTabId` compat getter in useEffect deps.** `useAppStore((s) => s.activeTabId)` returns a frozen value after the first `set()` call (see existing compat getter gotcha). Effects that depend on it will never re-trigger on tab switch. Use `useAppStore(selectActiveTabPath)` or `useAppStore(selectActiveTab)` from the memoized selectors instead. Bug confirmed in ContextPanel backlinks/bookmarks (#61).

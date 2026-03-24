@@ -4,6 +4,17 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.10.4] — 2026-03-24
+
+### Added
+- **Drag-to-reorder directories** — pointer-based drag on directory headers in sidebar, persisted to directories.json (#60)
+
+### Fixed
+- Table formatting in live preview: batch `transact()` for correct column padding, monospace font on focused tables (#17)
+- Backlinks and bookmarks not updating on tab switch — replaced frozen `activeTabId` compat getter with `activeTabPath` selector (#61)
+
+---
+
 ## [0.10.3] — 2026-03-23
 
 ### Added
