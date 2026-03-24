@@ -688,7 +688,6 @@ function useAccordionSection(
 
 export function ContextPanel() {
   const visible = useAppStore((s) => s.contextPanelVisible);
-  const activeTabId = useAppStore((s) => s.activeTabId);
   const activeTabPath = useAppStore(selectActiveTabPath);
   const activeTabName = useAppStore(selectActiveTabName);
   const saveVersion = useAppStore((s) => s.saveVersion);
@@ -734,7 +733,7 @@ export function ContextPanel() {
         setBacklinks([]);
       });
     return () => { stale = true; };
-  }, [activeTabId, fileTreeVersion]);
+  }, [activeTabPath, saveVersion, fileTreeVersion]);
 
   // Check bookmark state (directory bookmark OR global bookmark)
   useEffect(() => {
@@ -747,7 +746,7 @@ export function ContextPanel() {
       invoke<boolean>("is_file_bookmarked", { path: activeTabPath }).catch(() => false),
       invoke<boolean>("is_global_bookmarked", { path: activeTabPath }).catch(() => false),
     ]).then(([dir, global]) => setIsBookmarked(dir || global));
-  }, [activeTabId]);
+  }, [activeTabPath]);
 
   const handleBacklinkClick = async (record: BacklinkRecord, newTab: boolean) => {
     const name = record.source_title
