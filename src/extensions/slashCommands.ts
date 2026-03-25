@@ -73,6 +73,37 @@ interface SlashCommand {
   apply: string | ((view: EditorView, completion: Completion, from: number, to: number) => void);
 }
 
+// ── Checkbox slash commands ──
+
+const CHECKBOX_RE = /^(\s*[-*+]\s)\[(.)\]/;
+
+function checkboxCommand(marker: string, label: string, detail: string): SlashCommand {
+  return {
+    label,
+    detail,
+    apply: (view, _completion, from, to) => {
+      const line = view.state.doc.lineAt(from);
+      const match = line.text.match(CHECKBOX_RE);
+      if (match) {
+        // Replace existing checkbox marker
+        const markerPos = line.from + match[1].length + 1; // position of the char inside [ ]
+        view.dispatch({
+          changes: [
+            { from, to, insert: "" },            // remove slash command text
+            { from: markerPos, to: markerPos + 1, insert: marker },
+          ],
+        });
+      } else {
+        // No checkbox on this line — insert one
+        view.dispatch({
+          changes: { from, to, insert: `- [${marker}] ` },
+          selection: EditorSelection.cursor(from + 6),
+        });
+      }
+    },
+  };
+}
+
 const STATIC_COMMANDS: SlashCommand[] = [
   {
     label: "table",
@@ -131,6 +162,11 @@ const STATIC_COMMANDS: SlashCommand[] = [
       view.dispatch({ changes: { from, to, insert: link } });
     },
   },
+  checkboxCommand(">", ">", "Forwarded / migrated"),
+  checkboxCommand("<", "<", "Scheduled / deferred"),
+  checkboxCommand("/", "/", "In progress"),
+  checkboxCommand("-", "-", "Cancelled"),
+  checkboxCommand("!", "!", "Important"),
 ];
 
 // ── Template commands (fetched from Rust) ──
@@ -163,7 +199,7 @@ export async function slashCommandCompletion(
   context: CompletionContext
 ): Promise<CompletionResult | null> {
   // Match / at start of line or after whitespace
-  const match = context.matchBefore(/(?:^|(?<=\s))\/\w*/);
+  const match = context.matchBefore(/(?:^|(?<=\s))\/[\w><!/-]*/);
   if (!match) return null;
 
   if (isInsideSuppressedContext(context)) return null;
