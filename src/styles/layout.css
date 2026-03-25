@@ -2976,6 +2976,11 @@
     outline: none;
   }
 
+  /* Block comments (%%...%%) hidden in preview */
+  .cm-line.cm-comment-hidden {
+    display: none !important;
+  }
+
   /* Preview mode: hide gutters (fold handled inline) */
   .editor-container.preview-mode .cm-gutters {
     display: none;

@@ -475,6 +475,7 @@ const TAG_RE = /(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
 const CALLOUT_RE = /^(\s*>)\s*\[!(\w+)\]([+-])?\s*(.*)/;
 const BARE_URL_RE = /(?<![(\[])https?:\/\/[^\s<>\[\])(]+(?:\([^\s<>]*\))*[^\s<>\[\])("',.:;!?]/g;
 const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+const COMMENT_RE = /%%(.+?)%%/g;
 
 // ── Hoisted decoration objects (immutable, reused across calls) ──
 
@@ -488,6 +489,7 @@ const DECO_WIKILINK = Decoration.mark({ class: "cm-preview-wikilink" });
 const DECO_CHECKED = Decoration.mark({ class: "cm-preview-checked" });
 const DECO_DIMMED = Decoration.mark({ class: "cm-preview-dimmed" });
 const DECO_CODE_NOOP = Decoration.mark({ class: "cm-preview-code" });
+const DECO_COMMENT = Decoration.mark({ class: "cm-preview-comment" });
 const DECO_URL = Decoration.mark({ class: "cm-preview-url" });
 class MdLinkWidget extends WidgetType {
   text: string;
@@ -620,7 +622,8 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
     const endLine = doc.lineAt(to).number;
 
     let inCodeBlock = codeBlockStates.get(startLine) ?? false;
-    // Track active callout across consecutive blockquote lines
+    // Track block comments (%%...%%) and callouts across lines
+    let inBlockComment = false;
     let activeCallout: { def: CalloutDef; foldable: boolean; collapsed: boolean } | null = null;
     // Cache heading fold ranges per visible range (avoid double tree walk per heading)
     const headingFoldCache = new Map<number, { from: number; to: number } | null>();
@@ -655,6 +658,21 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         continue;
       }
       if (inCodeBlock) continue;
+
+      // Track block comments (%% on its own line)
+      if (text.trim() === "%%") {
+        inBlockComment = !inBlockComment;
+        if (i !== cursorLine) {
+          builder.add(line.from, line.from, Decoration.line({ class: "cm-comment-hidden" }));
+        }
+        continue;
+      }
+      if (inBlockComment) {
+        if (i !== cursorLine) {
+          builder.add(line.from, line.from, Decoration.line({ class: "cm-comment-hidden" }));
+        }
+        continue;
+      }
 
       // Reset callout tracking on non-blockquote lines
       const bqMatch = text.match(BLOCKQUOTE_RE);
@@ -920,6 +938,16 @@ function addInlineDecorations(
     claimed.push({ from, to });
   }
 
+  // Inline comments %%...%% — hide entirely in preview
+  COMMENT_RE.lastIndex = 0;
+  while ((m = COMMENT_RE.exec(text)) !== null) {
+    const from = line.from + m.index;
+    const to = from + m[0].length;
+    if (isClaimed(from, to)) continue;
+    ranges.push({ from, to, deco: DECO_REPLACE });
+    claimed.push({ from, to });
+  }
+
   // Tags — replace entire #tag with a single widget chip
   TAG_RE.lastIndex = 0;
   while ((m = TAG_RE.exec(text)) !== null) {
@@ -1132,6 +1160,9 @@ const previewTheme = EditorView.theme({
   },
   ".cm-preview-dimmed": {
     opacity: "0.5",
+  },
+  ".cm-preview-comment": {
+    display: "none",
   },
   ".cm-preview-wikilink": {
     color: "var(--link-color)",
