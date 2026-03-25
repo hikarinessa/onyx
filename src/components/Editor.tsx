@@ -17,7 +17,7 @@ import {
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, setFlushSaveHook, setSnapshotEditorHook, selectActivePane } from "../stores/app";
+import { useAppStore, setFlushSaveHook, setSnapshotEditorHook, selectActivePane, selectActiveTab } from "../stores/app";
 import { frontmatterExtension, clearAutoFoldForTab, toggleFrontmatterFoldCommand } from "../extensions/frontmatter";
 import { headingFoldExtension } from "../extensions/headingFold";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
@@ -230,8 +230,9 @@ function buildExtensions(): Extension[] {
     {
       key: "Mod-/",
       run: () => {
-        const { activeTabId, toggleEditorMode } = useAppStore.getState();
-        if (activeTabId) toggleEditorMode(activeTabId);
+        const s = useAppStore.getState();
+        const tab = selectActiveTab(s);
+        if (tab) s.toggleEditorMode(tab.id);
         return true;
       },
     },

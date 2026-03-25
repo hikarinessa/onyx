@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/app";
+import { useAppStore, selectActiveTab } from "../stores/app";
 import { loadFileIntoCache } from "../components/Editor";
 import { recordRecentDoc } from "./recentDocs";
 
@@ -71,11 +71,12 @@ export async function openFileInEditor(
  */
 export async function navigateHistory(direction: "back" | "forward"): Promise<void> {
   const store = useAppStore.getState();
-  if (!store.activeTabId) return;
+  const tab = selectActiveTab(store);
+  if (!tab) return;
 
   const entry = direction === "back"
-    ? store.navigateBack(store.activeTabId)
-    : store.navigateForward(store.activeTabId);
+    ? store.navigateBack(tab.id)
+    : store.navigateForward(tab.id);
   if (!entry) return;
 
   const content = await invoke<string>("read_file", { path: entry.path });

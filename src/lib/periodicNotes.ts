@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/app";
+import { useAppStore, selectActiveTab } from "../stores/app";
 import { openFileInEditor } from "./openFile";
 import { loadFileIntoCache } from "../components/Editor";
 
@@ -25,7 +25,7 @@ export async function createOrOpenPeriodicNote(
   if (result.created) {
     const content = await invoke<string>("read_file", { path: result.path });
     loadFileIntoCache(result.path, content);
-    if (replaceActive && useAppStore.getState().activeTabId) {
+    if (replaceActive && selectActiveTab(useAppStore.getState())) {
       useAppStore.getState().replaceActiveTab(result.path, name);
     } else {
       useAppStore.getState().openFile(result.path, name);

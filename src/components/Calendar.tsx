@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/app";
+import { useAppStore, selectActiveTabPath } from "../stores/app";
 import { Icon } from "./Icon";
 
 const WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
@@ -77,6 +77,11 @@ export function Calendar({ onDateClick, onWeekClick, onDateContextMenu }: Calend
   const [notesByMonth, setNotesByMonth] = useState<Map<string, Set<number>>>(new Map());
   const [weeksWithNotes, setWeeksWithNotes] = useState<Set<string>>(new Set());
   const fileTreeVersion = useAppStore((s) => s.fileTreeVersion);
+  const activeTabPath = useAppStore(selectActiveTabPath);
+
+  // Extract YYYY-MM-DD from active tab filename for highlighting
+  const activeDate = activeTabPath?.match(/(\d{4})-(\d{2})-(\d{2})\.md$/);
+  const activeDateStr = activeDate ? `${activeDate[1]}-${activeDate[2]}-${activeDate[3]}` : null;
 
   const fetchNoteIndicators = useCallback(async () => {
     // Fetch daily note indicators for current month + adjacent months (visible in grid)
@@ -237,14 +242,16 @@ export function Calendar({ onDateClick, onWeekClick, onDateContextMenu }: Calend
                 const monthKey = `${cell.year}-${cell.month}`;
                 const hasNote = notesByMonth.get(monthKey)?.has(cell.day) ?? false;
                 const isPast = cell.isCurrentMonth && cellDate < today && !isToday;
+                const isoDate = toISODate(cell.year, cell.month, cell.day);
+                const isActive = activeDateStr === isoDate;
                 const classes = [
                   "calendar-day",
                   cell.isCurrentMonth ? "" : "other-month",
                   isToday ? "today" : "",
                   isPast ? "past" : "",
                   hasNote ? "has-note" : "",
+                  isActive ? "active" : "",
                 ].filter(Boolean).join(" ");
-                const isoDate = toISODate(cell.year, cell.month, cell.day);
 
                 return (
                   <div

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useAppStore } from "../stores/app";
+import { useAppStore, selectActiveTabPath, selectAllTabs } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import * as fileOps from "../lib/fileOps";
 import type { DirEntry } from "../types";
@@ -242,7 +242,7 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
 
 export function Sidebar() {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
-  const activeTabId = useAppStore((s) => s.activeTabId);
+  const activeTabPath = useAppStore(selectActiveTabPath);
   const fileTreeVersion = useAppStore((s) => s.fileTreeVersion);
   const collapsedDirs = useAppStore((s) => s.collapsedDirs);
   const toggleDirCollapsed = useAppStore((s) => s.toggleDirCollapsed);
@@ -280,7 +280,7 @@ export function Sidebar() {
       const dir = directories.find((d) => d.id === id);
       if (dir) {
         const store = useAppStore.getState();
-        const affectedTabs = store.tabs.filter((t) =>
+        const affectedTabs = selectAllTabs(store).filter((t) =>
           t.path.startsWith(dir.path + "/") || t.path === dir.path
         );
         if (affectedTabs.length > 0) {
@@ -692,7 +692,7 @@ export function Sidebar() {
                       key={entry.path}
                       entry={entry}
                       depth={0}
-                      activeFilePath={activeTabId}
+                      activeFilePath={activeTabPath ?? ""}
                       renamingPath={renamingPath}
                       fileTreeVersion={fileTreeVersion}
                       onFileClick={handleFileClick}
@@ -725,7 +725,7 @@ export function Sidebar() {
           {!orphansCollapsed && <div className="sidebar-content">
             {orphanPaths.map((p) => {
               const name = p.split("/").pop() || p;
-              const isActive = p === activeTabId;
+              const isActive = p === activeTabPath;
               return (
                 <div
                   key={p}

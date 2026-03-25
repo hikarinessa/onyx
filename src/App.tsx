@@ -10,7 +10,7 @@ import { QuickOpen } from "./components/QuickOpen";
 import { CommandPalette } from "./components/CommandPalette";
 import { Settings } from "./components/Settings";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { useAppStore } from "./stores/app";
+import { useAppStore, selectActiveTab, selectActivePane, selectAllTabs } from "./stores/app";
 import { restoreSession, initSessionPersistence } from "./lib/session";
 import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
 import { registerCommand, getAllCommands } from "./lib/commands";
@@ -33,7 +33,6 @@ import { invalidateCache } from "./lib/ipcCache";
 import { loadAndApplyConfig } from "./lib/configBridge";
 import { clearEditorCache, migrateEditorCache, cancelPendingSave, lastSavedContent, replaceTabContent } from "./components/Editor";
 import { updateRecentDocPath, markRecentDocDeleted } from "./lib/recentDocs";
-import { selectAllTabs } from "./stores/app";
 
 interface FsChangeEvent {
   kind: "create" | "modify" | "remove" | "rename";
@@ -53,7 +52,7 @@ function toggleQuickOpen() {
 
 function openQuickOpenForWikilink() {
   const s = useAppStore.getState();
-  if (!s.activeTabId) return; // No editor to insert into
+  if (!selectActiveTab(s)) return; // No editor to insert into
   s.setQuickOpenMode("insert-wikilink");
   s.setQuickOpenVisible(true);
 }
@@ -111,8 +110,9 @@ function registerCommands() {
     shortcut: "Cmd+W",
     category: "File",
     execute: () => {
-      const { activeTabId, closeTab } = store();
-      if (activeTabId) closeTab(activeTabId);
+      const s = store();
+      const tab = selectActiveTab(s);
+      if (tab) s.closeTab(tab.id);
     },
   });
   registerCommand({
@@ -159,8 +159,9 @@ function registerCommands() {
     shortcut: "Cmd+/",
     category: "Editor",
     execute: () => {
-      const { activeTabId, toggleEditorMode } = store();
-      if (activeTabId) toggleEditorMode(activeTabId);
+      const s = store();
+      const tab = selectActiveTab(s);
+      if (tab) s.toggleEditorMode(tab.id);
     },
   });
 
@@ -191,11 +192,12 @@ function registerCommands() {
     shortcut: "Ctrl+Tab",
     category: "Navigate",
     execute: () => {
-      const { tabs, activeTabId, setActiveTab } = store();
-      if (tabs.length <= 1) return;
-      const idx = tabs.findIndex((t) => t.id === activeTabId);
-      const next = (idx + 1) % tabs.length;
-      setActiveTab(tabs[next].id);
+      const s = store();
+      const pane = selectActivePane(s);
+      if (pane.tabs.length <= 1) return;
+      const idx = pane.tabs.findIndex((t) => t.id === pane.activeTabId);
+      const next = (idx + 1) % pane.tabs.length;
+      s.setActiveTab(pane.tabs[next].id);
     },
   });
 
@@ -205,11 +207,12 @@ function registerCommands() {
     shortcut: "Ctrl+Shift+Tab",
     category: "Navigate",
     execute: () => {
-      const { tabs, activeTabId, setActiveTab } = store();
-      if (tabs.length <= 1) return;
-      const idx = tabs.findIndex((t) => t.id === activeTabId);
-      const prev = (idx - 1 + tabs.length) % tabs.length;
-      setActiveTab(tabs[prev].id);
+      const s = store();
+      const pane = selectActivePane(s);
+      if (pane.tabs.length <= 1) return;
+      const idx = pane.tabs.findIndex((t) => t.id === pane.activeTabId);
+      const prev = (idx - 1 + pane.tabs.length) % pane.tabs.length;
+      s.setActiveTab(pane.tabs[prev].id);
     },
   });
 
@@ -218,7 +221,7 @@ function registerCommands() {
     label: "Reveal in Finder",
     category: "File",
     execute: async () => {
-      const tab = store().tabs.find((t) => t.id === store().activeTabId);
+      const tab = selectActiveTab(store());
       if (tab) {
         const { invoke } = await import("@tauri-apps/api/core");
         await invoke("reveal_in_finder", { path: tab.path });
@@ -231,7 +234,7 @@ function registerCommands() {
     label: "Copy File Path",
     category: "File",
     execute: () => {
-      const tab = store().tabs.find((t) => t.id === store().activeTabId);
+      const tab = selectActiveTab(store());
       if (tab) navigator.clipboard.writeText(tab.path).catch(() => {});
     },
   });
@@ -381,8 +384,7 @@ function registerCommands() {
       if (!v) return;
       const block = getCurrentBlock(v);
       if (!block) return;
-      const s = store();
-      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      const tab = selectActiveTab(store());
       if (!tab) return;
       const dir = tab.path.substring(0, tab.path.lastIndexOf("/"));
       const firstLine = block.text.split("\n")[0].replace(/^#+\s*/, "").trim();
@@ -440,8 +442,9 @@ export default function App() {
           toggleQuickOpen();
           break;
         case "close_tab": {
-          const { activeTabId, closeTab } = store();
-          if (activeTabId) closeTab(activeTabId);
+          const s = store();
+          const tab = selectActiveTab(s);
+          if (tab) s.closeTab(tab.id);
           break;
         }
         case "toggle_sidebar":
