@@ -526,35 +526,24 @@ pub fn resolve_wikilink(
     db.resolve_by_title(&link)
 }
 
+// ── Unified Bookmarks (JSON-backed) ──
+
 #[tauri::command]
 pub fn toggle_bookmark(
     path: String,
+    label: String,
     state: State<AppState>,
 ) -> Result<bool, String> {
-    let file_path = PathBuf::from(&path);
-    validate_path(&file_path, &state)?;
-
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-
-    let file_id = db.get_file_id(&path)?
-        .ok_or_else(|| format!("File not indexed: {}", path))?;
-
-    let currently_bookmarked = db.is_bookmarked(file_id)?;
-    if currently_bookmarked {
-        db.remove_bookmark(file_id)?;
-        Ok(false)
-    } else {
-        db.add_bookmark(file_id, None, None)?;
-        Ok(true)
-    }
+    let mut bm = state.bookmarks.lock().map_err(|e| e.to_string())?;
+    bm.toggle(&path, &label)
 }
 
 #[tauri::command]
 pub fn get_bookmarks(
     state: State<AppState>,
-) -> Result<Vec<crate::db::BookmarkRecord>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.get_bookmarks()
+) -> Result<Vec<crate::bookmarks::Bookmark>, String> {
+    let bm = state.bookmarks.lock().map_err(|e| e.to_string())?;
+    Ok(bm.list().to_vec())
 }
 
 #[tauri::command]
@@ -562,8 +551,8 @@ pub fn is_file_bookmarked(
     path: String,
     state: State<AppState>,
 ) -> Result<bool, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.is_path_bookmarked(&path)
+    let bm = state.bookmarks.lock().map_err(|e| e.to_string())?;
+    Ok(bm.is_bookmarked(&path))
 }
 
 #[tauri::command]
@@ -747,6 +736,15 @@ pub fn rename_file(
     }
     drop(db);
 
+    // Update bookmark paths
+    if let Ok(mut bm) = state.bookmarks.lock() {
+        if is_dir {
+            let _ = bm.rename_prefix(&old_path, &new_path);
+        } else {
+            let _ = bm.rename_path(&old_path, &new_path);
+        }
+    }
+
     // Emit fs:change rename event before returning
     let _ = app.emit("fs:change", &FileChangeEvent {
         kind: "rename".to_string(),
@@ -776,6 +774,11 @@ pub fn trash_file(path: String, state: State<AppState>, app: tauri::AppHandle) -
         db.delete_file(&path)?;
     }
     drop(db);
+
+    // Remove bookmark for deleted file
+    if let Ok(mut bm) = state.bookmarks.lock() {
+        let _ = bm.remove_path(&path);
+    }
 
     // Emit fs:change remove event before returning
     let _ = app.emit("fs:change", &FileChangeEvent {
@@ -868,6 +871,19 @@ pub struct GlobalBookmark {
 
 fn global_bookmarks_path() -> Result<PathBuf, String> {
     Ok(crate::paths::onyx_dir()?.join("global-bookmarks.json"))
+}
+
+/// Read legacy global bookmarks for migration. Public for lib.rs.
+pub fn read_legacy_global_bookmarks() -> Result<Vec<(String, String)>, String> {
+    let path = global_bookmarks_path()?;
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read global-bookmarks.json: {}", e))?;
+    let bookmarks: Vec<GlobalBookmark> = serde_json::from_str(&raw)
+        .map_err(|e| format!("Failed to parse global-bookmarks.json: {}", e))?;
+    Ok(bookmarks.into_iter().map(|b| (b.path, b.label)).collect())
 }
 
 fn read_global_bookmarks_file() -> Result<Vec<GlobalBookmark>, String> {

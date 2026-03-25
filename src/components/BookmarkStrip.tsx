@@ -4,49 +4,22 @@ import { useAppStore, selectActiveTabPath } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import { Icon } from "./Icon";
 
-interface BookmarkRecord {
-  path: string;
-  title: string | null;
-  label: string | null;
-}
-
-interface GlobalBookmark {
+interface Bookmark {
   path: string;
   label: string;
-}
-
-interface DisplayBookmark {
-  path: string;
-  label: string;
-  global: boolean;
+  position: number;
 }
 
 export function BookmarkStrip() {
   const activeTabPath = useAppStore(selectActiveTabPath);
   const bookmarkVersion = useAppStore((s) => s.bookmarkVersion);
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
-  const [bookmarks, setBookmarks] = useState<DisplayBookmark[]>([]);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
 
   const loadBookmarks = useCallback(async () => {
     try {
-      const [dirBookmarks, globalBookmarks] = await Promise.all([
-        invoke<BookmarkRecord[]>("get_bookmarks"),
-        invoke<GlobalBookmark[]>("get_global_bookmarks"),
-      ]);
-
-      const display: DisplayBookmark[] = [
-        ...dirBookmarks.map((b) => ({
-          path: b.path,
-          label: b.label || b.title || b.path.split("/").pop() || b.path,
-          global: false,
-        })),
-        ...globalBookmarks.map((b) => ({
-          path: b.path,
-          label: b.label || b.path.split("/").pop() || b.path,
-          global: true,
-        })),
-      ];
-      setBookmarks(display);
+      const bm = await invoke<Bookmark[]>("get_bookmarks");
+      setBookmarks(bm);
     } catch (err) {
       console.error("Failed to load bookmarks:", err);
       setBookmarks([]);
@@ -57,7 +30,7 @@ export function BookmarkStrip() {
     if (sidebarVisible) loadBookmarks();
   }, [loadBookmarks, bookmarkVersion, sidebarVisible]);
 
-  const handleBookmarkClick = async (bookmark: DisplayBookmark, newTab: boolean) => {
+  const handleBookmarkClick = async (bookmark: Bookmark, newTab: boolean) => {
     const name = bookmark.label;
     try {
       await openFileInEditor(bookmark.path, name, { replaceActive: !newTab });
@@ -104,7 +77,7 @@ export function BookmarkStrip() {
               >
                 <span className="tree-item-chevron" />
                 <span className="tree-item-icon">
-                  <Icon name={bookmark.global ? "bookmark-check" : "bookmark"} size={14} />
+                  <Icon name="bookmark" size={14} />
                 </span>
                 <span className="tree-item-label">{bookmark.label}</span>
               </div>

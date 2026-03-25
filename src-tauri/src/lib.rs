@@ -1,3 +1,4 @@
+mod bookmarks;
 mod commands;
 mod config;
 mod db;
@@ -39,6 +40,7 @@ fn disable_app_nap() {
 }
 
 pub struct AppState {
+    pub bookmarks: Mutex<bookmarks::BookmarkManager>,
     pub directories: Mutex<dirs::DirectoryManager>,
     pub watcher: Mutex<Option<watcher::FileWatcher>>,
     pub db: Arc<Mutex<db::Database>>,
@@ -63,6 +65,18 @@ pub fn run() {
 
     let database = db::Database::new(&db_path).expect("Failed to initialize database");
     let db = Arc::new(Mutex::new(database));
+
+    // Initialize bookmark manager and migrate from legacy storage
+    let mut bookmark_manager = bookmarks::BookmarkManager::new()
+        .expect("Failed to initialize bookmark manager");
+    {
+        let db_lock = db.lock().unwrap();
+        let db_bookmarks = db_lock.get_bookmarks_for_migration().unwrap_or_default();
+        let global_bookmarks = commands::read_legacy_global_bookmarks().unwrap_or_default();
+        if let Err(e) = bookmark_manager.migrate(db_bookmarks, global_bookmarks) {
+            log::error!("Failed to migrate bookmarks: {}", e);
+        }
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -199,6 +213,7 @@ pub fn run() {
             Ok(())
         })
         .manage(AppState {
+            bookmarks: Mutex::new(bookmark_manager),
             directories: Mutex::new(dir_manager),
             watcher: Mutex::new(None),
             db,
@@ -235,9 +250,6 @@ pub fn run() {
             commands::reveal_in_finder,
             commands::read_session,
             commands::write_session,
-            commands::get_global_bookmarks,
-            commands::toggle_global_bookmark,
-            commands::is_global_bookmarked,
             commands::get_periodic_config,
             commands::save_periodic_config,
             commands::create_periodic_note,

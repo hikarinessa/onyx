@@ -431,6 +431,26 @@ impl Database {
         Ok(count > 0)
     }
 
+    /// Extract bookmarks as (path, label) pairs for migration to JSON storage.
+    pub fn get_bookmarks_for_migration(&self) -> Result<Vec<(String, Option<String>)>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT f.path, b.label
+             FROM bookmarks b
+             JOIN files f ON f.id = b.file_id
+             ORDER BY b.position ASC, f.title ASC"
+        ).map_err(|e| format!("Failed to prepare migration query: {}", e))?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        }).map_err(|e| format!("Failed to execute migration query: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read migration row: {}", e))?);
+        }
+        Ok(results)
+    }
+
     pub fn is_path_bookmarked(&self, path: &str) -> Result<bool, String> {
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM bookmarks b JOIN files f ON f.id = b.file_id WHERE f.path = ?1",
