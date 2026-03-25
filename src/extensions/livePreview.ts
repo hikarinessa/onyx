@@ -289,8 +289,8 @@ class CheckboxWidget extends WidgetType {
     }
     span.title = variant.label;
 
-    // Standard checkboxes toggle on click
-    if (this.marker === " " || this.marker === "x") {
+    // Basic checkboxes toggle on click: unchecked ↔ checked, alt basic states → checked
+    if (BASIC_MARKERS.includes(this.marker)) {
       span.style.cursor = "pointer";
       span.addEventListener("mousedown", (e) => {
         e.preventDefault();

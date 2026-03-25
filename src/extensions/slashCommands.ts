@@ -89,8 +89,8 @@ function checkboxCommand(marker: string, label: string, detail: string): SlashCo
         const markerPos = line.from + match[1].length + 1; // position of the char inside [ ]
         view.dispatch({
           changes: [
-            { from, to, insert: "" },            // remove slash command text
             { from: markerPos, to: markerPos + 1, insert: marker },
+            { from, to, insert: "" },
           ],
         });
       } else {
