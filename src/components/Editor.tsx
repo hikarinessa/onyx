@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { EditorState, EditorSelection, type Extension } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+import { EditorView, keymap, lineNumbers, drawSelection } from "@codemirror/view";
 import { defaultKeymap, historyKeymap, history } from "@codemirror/commands";
 import { searchKeymap } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
@@ -285,6 +285,7 @@ function buildExtensions(): Extension[] {
     ...(getShowLineNumbers() ? [lineNumbers()] : []),
     indentUnit.of(" ".repeat(getTabSize())),
     onyxTheme,
+    drawSelection(),
     EditorView.lineWrapping,
     updateListener,
     frontmatterExtension(),

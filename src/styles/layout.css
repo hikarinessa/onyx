@@ -2978,7 +2978,10 @@
 
   /* Block comments (%%...%%) hidden in preview */
   .cm-line.cm-comment-hidden {
-    display: none !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    border: none !important;
   }
 
   /* Preview mode: hide gutters (fold handled inline) */
@@ -3317,7 +3320,10 @@
   }
 
   .cm-callout-hidden {
-    display: none !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    border: none !important;
   }
 
 

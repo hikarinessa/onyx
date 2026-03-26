@@ -32,6 +32,14 @@ import {
  * Elements: headings, bold/italic, checkboxes, wikilinks, tags
  */
 
+/** Read base line height (px) from CSS custom properties for widget estimatedHeight. */
+function getBaseLineHeight(): number {
+  const s = document.documentElement.style;
+  const fontSize = parseFloat(s.getPropertyValue("--editor-font-size")) || 16;
+  const lineHeight = parseFloat(s.getPropertyValue("--editor-line-height")) || 1.7;
+  return fontSize * lineHeight;
+}
+
 // ── Effects & State ──
 
 export const togglePreviewEffect = StateEffect.define<boolean>();
@@ -220,7 +228,7 @@ class CalloutHeaderWidget extends WidgetType {
   }
 
   get estimatedHeight(): number {
-    return 36;
+    return getBaseLineHeight() + 12; // line + padding
   }
 
   eq(other: CalloutHeaderWidget): boolean {
@@ -321,7 +329,7 @@ class HRWidget extends WidgetType {
   }
 
   get estimatedHeight(): number {
-    return 8; // 1px border + 0.15em margin top/bottom
+    return Math.max(8, getBaseLineHeight() * 0.3 + 1);
   }
 
   eq(): boolean {
@@ -364,10 +372,6 @@ class TableWidget extends WidgetType {
     return this.tableText === other.tableText;
   }
 
-  get estimatedHeight(): number {
-    return (this.rowCount + 1) * 28;
-  }
-
   toDOM(): HTMLElement {
     const table = this.parsedTable;
     const rows = table.getRows();
@@ -384,10 +388,13 @@ class TableWidget extends WidgetType {
       }
     }
 
+    // Wrapper div — avoids margin collapsing issues with CM6 height measurement
+    const wrapper = document.createElement("div");
+    wrapper.style.padding = "4px 0";
+
     const el = document.createElement("table");
     el.className = "cm-preview-table";
     el.style.borderCollapse = "collapse";
-    el.style.margin = "0.5em 0";
 
     // Header (row 0)
     if (rows.length > 0) {
@@ -429,7 +436,8 @@ class TableWidget extends WidgetType {
       el.appendChild(tbody);
     }
 
-    return el;
+    wrapper.appendChild(el);
+    return wrapper;
   }
 
   ignoreEvent(): boolean {
