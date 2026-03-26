@@ -461,24 +461,13 @@ function EditorSection({
 // ── Section: Appearance ──
 
 const THEME_SWATCHES: Record<string, { bg: string; surface: string; accent: string; text: string }> = {
-  dark: { bg: "#0e0e12", surface: "#1a1a20", accent: "#8b7cf6", text: "#e8e8ec" },
+  dark: { bg: "#232323", surface: "#2d2d2d", accent: "#00a3d7", text: "#ebebeb" },
   light: { bg: "#ffffff", surface: "#eeeef0", accent: "#6b5ce7", text: "#1d1d1f" },
-  warm2: { bg: "#232323", surface: "#2d2d2d", accent: "#00a3d7", text: "#ebebeb" },
-  warm: { bg: "#1c1917", surface: "#292523", accent: "#d4a574", text: "#ede8e3" },
   cream: { bg: "#e8ded6", surface: "#006a81", accent: "#2e7d7d", text: "#2c3030" },
-  catppuccin: { bg: "#1e1e2e", surface: "#313244", accent: "#89b4fa", text: "#cdd6f4" },
-  nord: { bg: "#2e3440", surface: "#3b4252", accent: "#88c0d0", text: "#eceff4" },
-  "rose-pine": { bg: "#191724", surface: "#26233a", accent: "#ebbcba", text: "#e0def4" },
-  dracula: { bg: "#282a36", surface: "#44475a", accent: "#bd93f9", text: "#f8f8f2" },
-  gruvbox: { bg: "#282828", surface: "#3c3836", accent: "#83a598", text: "#ebdbb2" },
   sakura: { bg: "#fdf6f4", surface: "#f5ebe8", accent: "#c45b84", text: "#3d2b2b" },
-  midnight: { bg: "#0a0e1a", surface: "#182030", accent: "#00d4aa", text: "#c8d8f0" },
-  campfire: { bg: "#1a1210", surface: "#2e201a", accent: "#e88a40", text: "#e8d4c4" },
-  aurora: { bg: "#0e1018", surface: "#1c202e", accent: "#50e8b0", text: "#d0d8e8" },
-  sandstorm: { bg: "#f4ece2", surface: "#ddd0c2", accent: "#c06030", text: "#3a3028" },
-  noir: { bg: "#141414", surface: "#222222", accent: "#d4a040", text: "#d8d8d8" },
   velvet: { bg: "#1a1018", surface: "#2c202a", accent: "#d4a050", text: "#e0d4dc" },
   reef: { bg: "#f0f6f6", surface: "#d8e6e6", accent: "#e05848", text: "#1a3030" },
+  midnight: { bg: "#0e0e12", surface: "#1a1a20", accent: "#8b7cf6", text: "#e8e8ec" },
 };
 
 function AppearanceSection({
@@ -518,7 +507,7 @@ function AppearanceSection({
   };
 
   const HEADING_DEFAULTS: Record<string, number> = {
-    h1: 1.6, h2: 1.3, h3: 1.1, h4: 1.05, h5: 1.0, h6: 0.9,
+    h1: 2.0, h2: 1.75, h3: 1.6, h4: 1.4, h5: 1.2, h6: 1.1,
   };
 
   const getHeading = (key: string): HeadingStyle =>

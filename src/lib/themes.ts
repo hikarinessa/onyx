@@ -5,101 +5,14 @@ export interface Theme {
   name: string;
 }
 
-const darkTheme: Theme = {
-  id: "dark",
-  name: "Dark",
-};
-
-const lightTheme: Theme = {
-  id: "light",
-  name: "Light",
-};
-
-const warm2Theme: Theme = {
-  id: "warm2",
-  name: "Warm 2",
-};
-
-const warmTheme: Theme = {
-  id: "warm",
-  name: "Warm",
-};
-
-const creamTheme: Theme = {
-  id: "cream",
-  name: "Cream",
-};
-
-const catppuccinTheme: Theme = {
-  id: "catppuccin",
-  name: "Catppuccin",
-};
-
-const nordTheme: Theme = {
-  id: "nord",
-  name: "Nord",
-};
-
-const rosePineTheme: Theme = {
-  id: "rose-pine",
-  name: "Rosé Pine",
-};
-
-const draculaTheme: Theme = {
-  id: "dracula",
-  name: "Dracula",
-};
-
-const gruvboxTheme: Theme = {
-  id: "gruvbox",
-  name: "Gruvbox",
-};
-
-const sakuraTheme: Theme = {
-  id: "sakura",
-  name: "Sakura",
-};
-
-const midnightTheme: Theme = {
-  id: "midnight",
-  name: "Midnight",
-};
-
-const campfireTheme: Theme = {
-  id: "campfire",
-  name: "Campfire",
-};
-
-const auroraTheme: Theme = {
-  id: "aurora",
-  name: "Aurora",
-};
-
-const sandstormTheme: Theme = {
-  id: "sandstorm",
-  name: "Sandstorm",
-};
-
-const noirTheme: Theme = {
-  id: "noir",
-  name: "Noir",
-};
-
-const velvetTheme: Theme = {
-  id: "velvet",
-  name: "Velvet",
-};
-
-const reefTheme: Theme = {
-  id: "reef",
-  name: "Reef",
-};
-
 const builtInThemes: Theme[] = [
-  darkTheme, lightTheme, creamTheme, warmTheme, warm2Theme,
-  catppuccinTheme, nordTheme, rosePineTheme, draculaTheme, gruvboxTheme,
-  sakuraTheme, midnightTheme, campfireTheme, auroraTheme, sandstormTheme,
-  noirTheme, velvetTheme, reefTheme,
+  { id: "dark", name: "Dark" },
+  { id: "light", name: "Light" },
+  { id: "cream", name: "Cream" },
+  { id: "sakura", name: "Sakura" },
+  { id: "velvet", name: "Velvet" },
+  { id: "reef", name: "Reef" },
+  { id: "midnight", name: "Midnight" },
 ];
 let activeThemeId = "dark";
 
@@ -111,7 +24,24 @@ export function getActiveThemeId(): string {
   return activeThemeId;
 }
 
+// Migrate removed/renamed theme IDs — old dark → midnight, old warm2 → dark
+const THEME_MIGRATION: Record<string, string> = {
+  warm2: "dark",
+  warm: "dark",
+  catppuccin: "midnight",
+  nord: "midnight",
+  "rose-pine": "midnight",
+  dracula: "midnight",
+  gruvbox: "dark",
+  campfire: "dark",
+  aurora: "midnight",
+  sandstorm: "dark",
+  noir: "midnight",
+};
+
 export function applyTheme(themeId: string) {
+  const migrated = THEME_MIGRATION[themeId];
+  if (migrated) themeId = migrated;
   const theme = builtInThemes.find((t) => t.id === themeId);
   if (!theme) return;
 
@@ -134,13 +64,18 @@ export function restoreTheme(configTheme?: string) {
   try {
     const saved = localStorage.getItem("onyx-theme");
     if (saved) {
+      // One-time migration: old "dark" (blue-purple) is now "midnight"
+      if (saved === "dark" && !localStorage.getItem("onyx-theme-migrated")) {
+        localStorage.setItem("onyx-theme-migrated", "1");
+        applyTheme("midnight");
+        return;
+      }
       applyTheme(saved);
       return;
     }
   } catch {
     // ignore
   }
-  // Fall back to config value if localStorage is empty
   if (configTheme) {
     applyTheme(configTheme);
   }
