@@ -139,23 +139,8 @@ pub fn load_object_types() -> Result<Vec<ObjectType>, String> {
     let path = config_path()?;
 
     if !path.exists() {
-        // Create the file with default types
         let defaults = default_types();
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create config directory: {}", e))?;
-        }
-        let json = serde_json::to_string_pretty(&defaults)
-            .map_err(|e| format!("Failed to serialize default object types: {}", e))?;
-        let dir = path.parent().unwrap();
-        let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let temp_path = dir.join(format!(".obj-types-tmp-{}-{}", std::process::id(), counter));
-        std::fs::write(&temp_path, &json)
-            .map_err(|e| format!("Failed to write object-types temp file: {}", e))?;
-        std::fs::rename(&temp_path, &path).map_err(|e| {
-            let _ = std::fs::remove_file(&temp_path);
-            format!("Failed to rename object-types temp file: {}", e)
-        })?;
+        save_object_types(&defaults)?;
         return Ok(defaults);
     }
 
