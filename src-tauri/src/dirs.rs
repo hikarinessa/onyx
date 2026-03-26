@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisteredDirectory {
@@ -135,8 +138,15 @@ impl DirectoryManager {
     fn save(&self) -> Result<(), String> {
         let data = serde_json::to_string_pretty(&self.directories)
             .map_err(|e| format!("Failed to serialize: {}", e))?;
-        fs::write(&self.config_path, data)
-            .map_err(|e| format!("Failed to write directories.json: {}", e))
+        let dir = self.config_path.parent().unwrap();
+        let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let temp_path = dir.join(format!(".dirs-tmp-{}-{}", std::process::id(), counter));
+        fs::write(&temp_path, &data)
+            .map_err(|e| format!("Failed to write directories temp file: {}", e))?;
+        fs::rename(&temp_path, &self.config_path).map_err(|e| {
+            let _ = fs::remove_file(&temp_path);
+            format!("Failed to rename directories temp file: {}", e)
+        })
     }
 }
 

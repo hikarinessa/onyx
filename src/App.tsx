@@ -403,7 +403,7 @@ function registerCommands() {
         changes: { from: block.from, to: block.to, insert: `[[${linkName}]]` },
       });
       await invoke("reindex_file", { path: notePath });
-      s.bumpFileTreeVersion();
+      store().bumpFileTreeVersion();
     },
   });
 

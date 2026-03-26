@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PropertyDef {
@@ -118,9 +121,10 @@ pub fn save_object_types(types: &[ObjectType]) -> Result<(), String> {
     let json = serde_json::to_string_pretty(types)
         .map_err(|e| format!("Failed to serialize object types: {}", e))?;
 
-    // Atomic write
-    let counter = std::sync::atomic::AtomicU64::new(0);
-    let temp_path = path.with_extension(format!("tmp-{}", counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    // Atomic write: temp + rename
+    let dir = path.parent().unwrap();
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_path = dir.join(format!(".obj-types-tmp-{}-{}", std::process::id(), counter));
     std::fs::write(&temp_path, &json)
         .map_err(|e| format!("Failed to write temp file: {}", e))?;
     std::fs::rename(&temp_path, &path)
@@ -143,8 +147,15 @@ pub fn load_object_types() -> Result<Vec<ObjectType>, String> {
         }
         let json = serde_json::to_string_pretty(&defaults)
             .map_err(|e| format!("Failed to serialize default object types: {}", e))?;
-        std::fs::write(&path, json)
-            .map_err(|e| format!("Failed to write object-types.json: {}", e))?;
+        let dir = path.parent().unwrap();
+        let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let temp_path = dir.join(format!(".obj-types-tmp-{}-{}", std::process::id(), counter));
+        std::fs::write(&temp_path, &json)
+            .map_err(|e| format!("Failed to write object-types temp file: {}", e))?;
+        std::fs::rename(&temp_path, &path).map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            format!("Failed to rename object-types temp file: {}", e)
+        })?;
         return Ok(defaults);
     }
 
