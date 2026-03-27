@@ -98,7 +98,7 @@ function wikilinkAtPos(doc: { lineAt(pos: number): { from: number; text: string 
   WIKILINK_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = WIKILINK_RE.exec(line.text)) !== null) {
-    if (offset >= m.index && offset <= m.index + m[0].length) return extractLinkText(m[0]);
+    if (offset >= m.index && offset < m.index + m[0].length) return extractLinkText(m[0]);
   }
   return null;
 }
@@ -112,13 +112,13 @@ function urlAtPos(doc: { lineAt(pos: number): { from: number; text: string } }, 
   // Markdown links first — return the href, not display text
   MD_LINK_RE.lastIndex = 0;
   while ((m = MD_LINK_RE.exec(line.text)) !== null) {
-    if (offset >= m.index && offset <= m.index + m[0].length) return m[2];
+    if (offset >= m.index && offset < m.index + m[0].length) return m[2];
   }
 
   // Bare URLs
   BARE_URL_RE.lastIndex = 0;
   while ((m = BARE_URL_RE.exec(line.text)) !== null) {
-    if (offset >= m.index && offset <= m.index + m[0].length) return m[0];
+    if (offset >= m.index && offset < m.index + m[0].length) return m[0];
   }
 
   return null;
@@ -174,6 +174,10 @@ const linkClickHandler = EditorView.domEventHandlers({
     // 2. Regular text: posAtCoords + regex against document text
     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
     if (pos == null) return false;
+
+    // Ignore clicks in empty space past line end
+    const coords = view.coordsAtPos(pos);
+    if (coords && event.clientX > coords.right + 2) return false;
 
     const linkText = wikilinkAtPos(view.state.doc, pos);
     if (linkText && wikilinkFollowRef.current) {
