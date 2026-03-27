@@ -498,7 +498,6 @@ const DECO_WIKILINK = Decoration.mark({ class: "cm-preview-wikilink" });
 const DECO_CHECKED = Decoration.mark({ class: "cm-preview-checked" });
 const DECO_DIMMED = Decoration.mark({ class: "cm-preview-dimmed" });
 const DECO_CODE_NOOP = Decoration.mark({ class: "cm-preview-code" });
-const DECO_COMMENT = Decoration.mark({ class: "cm-preview-comment" });
 const DECO_URL = Decoration.mark({ class: "cm-preview-url" });
 class MdLinkWidget extends WidgetType {
   text: string;

@@ -60,11 +60,6 @@ function updatePane(panes: Pane[], paneId: string, updater: (p: Pane) => Pane): 
   return panes.map((p) => (p.id === paneId ? updater(p) : p));
 }
 
-function activePane(state: { paneState: PaneState }): Pane {
-  return state.paneState.panes.find((p) => p.id === state.paneState.activePaneId)
-    || state.paneState.panes[0];
-}
-
 interface AppState {
   // Sidebar
   sidebarVisible: boolean;
@@ -85,12 +80,6 @@ interface AppState {
   lockScroll: () => void;
   unlockScroll: () => void;
   setScrollLockAnchors: (anchors: Map<string, number> | null) => void;
-
-  // ── Compat getters (derived from active pane) ──
-  // These allow existing components to keep reading tabs/activeTabId
-  // without being pane-aware. They operate on the active pane.
-  get tabs(): Tab[];
-  get activeTabId(): string | null;
 
   // Tab operations (operate on specified pane, or active pane by default)
   moveTabToPane: (tabId: string, targetPaneId: string) => void;
@@ -273,18 +262,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({
       paneState: { ...s.paneState, scrollLockAnchors: anchors },
     }));
-  },
-
-  // ── Compat getters ──
-  // WARNING: These getters are destroyed by Zustand's Object.assign merge on first set().
-  // They work in React selectors (useAppStore(s => s.tabs)) but return STALE data from
-  // imperative code (useAppStore.getState().tabs). Use selectAllTabs() or read
-  // paneState.panes directly for imperative access.
-  get tabs() {
-    return activePane(get()).tabs;
-  },
-  get activeTabId() {
-    return activePane(get()).activeTabId;
   },
 
   // ── Tab operations ──

@@ -13,6 +13,57 @@ const IGNORED_NAMES: &[&str] = &[".obsidian", ".git", "node_modules", ".DS_Store
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// Atomic write + self-write mark + mtime update + reindex.
+/// Shared by write_file and update_frontmatter.
+fn commit_file(target: &PathBuf, content: &str, state: &State<AppState>) -> Result<(), String> {
+    let dir = target.parent().ok_or("Invalid file path")?;
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_path = dir.join(format!(".onyx-tmp-{}-{}", std::process::id(), counter));
+
+    std::fs::write(&temp_path, content)
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    // Mark self-write BEFORE rename so the watcher suppresses the event
+    {
+        let watcher_lock = state.watcher.lock().map_err(|e| e.to_string())?;
+        if let Some(ref fw) = *watcher_lock {
+            fw.mark_self_write(target);
+        }
+    }
+
+    std::fs::rename(&temp_path, target)
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            format!("Failed to rename temp file: {}", e)
+        })?;
+
+    // Update mtime tracking after successful write (use canonical key)
+    let canonical_key = target.canonicalize()
+        .unwrap_or_else(|_| target.clone())
+        .to_string_lossy().to_string();
+    if let Ok(meta) = std::fs::metadata(target) {
+        if let Ok(mtime) = meta.modified() {
+            if let Ok(mut mtimes) = state.last_read_mtimes.lock() {
+                mtimes.insert(canonical_key, mtime);
+            }
+        }
+    }
+
+    // Reindex immediately — watcher event is suppressed, so we must reindex here
+    if target.extension().and_then(|e| e.to_str()) == Some("md") {
+        let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+        let dir_id = dirs.list().iter().find_map(|d| {
+            if target.starts_with(&d.path) { Some(d.id.clone()) } else { None }
+        });
+        drop(dirs);
+        if let Some(id) = dir_id {
+            let _ = crate::indexer::Indexer::reindex_file(target, &id, &state.db);
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Serialize)]
 pub struct DirEntry {
     pub name: String,
@@ -146,7 +197,14 @@ pub fn read_file(path: String, state: State<AppState>) -> Result<String, String>
     if let Ok(meta) = std::fs::metadata(&file_path) {
         if let Ok(mtime) = meta.modified() {
             let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
-            if mtimes.len() > 500 { mtimes.clear(); }
+            if mtimes.len() > 500 {
+                // Evict oldest half instead of clearing everything
+                let mut entries: Vec<_> = mtimes.iter().map(|(k, v)| (k.clone(), *v)).collect();
+                entries.sort_by_key(|(_, t)| *t);
+                let keep_from = entries.len() / 2;
+                let evict: std::collections::HashSet<_> = entries[..keep_from].iter().map(|(k, _)| k.clone()).collect();
+                mtimes.retain(|k, _| !evict.contains(k));
+            }
             mtimes.insert(canonical_key, mtime);
         }
     }
@@ -168,9 +226,13 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
     {
         let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
 
-        // Cap the map to prevent unbounded growth over long sessions
+        // Evict oldest half to prevent unbounded growth over long sessions
         if mtimes.len() > 500 {
-            mtimes.clear();
+            let mut entries: Vec<_> = mtimes.iter().map(|(k, v)| (k.clone(), *v)).collect();
+            entries.sort_by_key(|(_, t)| *t);
+            let keep_from = entries.len() / 2;
+            let evict: std::collections::HashSet<_> = entries[..keep_from].iter().map(|(k, _)| k.clone()).collect();
+            mtimes.retain(|k, _| !evict.contains(k));
         }
 
         if let Some(&last_known) = mtimes.get(&canonical_key) {
@@ -198,49 +260,7 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
         }
     }
 
-    let dir = target.parent().ok_or("Invalid file path")?;
-    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let temp_path = dir.join(format!(".onyx-tmp-{}-{}", std::process::id(), counter));
-
-    std::fs::write(&temp_path, &content)
-        .map_err(|e| format!("Failed to write temp file: {}", e))?;
-
-    // Mark self-write BEFORE rename so the watcher suppresses the event
-    {
-        let watcher_lock = state.watcher.lock().map_err(|e| e.to_string())?;
-        if let Some(ref fw) = *watcher_lock {
-            fw.mark_self_write(&target);
-        }
-    }
-
-    std::fs::rename(&temp_path, &target)
-        .map_err(|e| {
-            let _ = std::fs::remove_file(&temp_path);
-            format!("Failed to rename temp file: {}", e)
-        })?;
-
-    // Update mtime tracking after successful write (use canonical key)
-    if let Ok(meta) = std::fs::metadata(&target) {
-        if let Ok(mtime) = meta.modified() {
-            let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
-            mtimes.insert(canonical_key, mtime);
-        }
-    }
-
-    // Reindex immediately so frontmatter/links/tags stay current
-    // (the self-write guard suppresses the watcher, so we must reindex here)
-    if target.extension().and_then(|e| e.to_str()) == Some("md") {
-        let dirs = state.directories.lock().map_err(|e| e.to_string())?;
-        let dir_id = dirs.list().iter().find_map(|d| {
-            if target.starts_with(&d.path) { Some(d.id.clone()) } else { None }
-        });
-        drop(dirs);
-        if let Some(id) = dir_id {
-            let _ = crate::indexer::Indexer::reindex_file(&target, &id, &state.db);
-        }
-    }
-
-    Ok(())
+    commit_file(&target, &content, &state)
 }
 
 #[tauri::command]
@@ -631,53 +651,7 @@ pub fn update_frontmatter(
         format!("---\n{}---\n\n{}", yaml_str, content)
     };
 
-    // Atomic write: temp file + rename
-    let dir = target.parent().ok_or("Invalid file path")?;
-    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let temp_path = dir.join(format!(".onyx-tmp-{}-{}", std::process::id(), counter));
-
-    std::fs::write(&temp_path, &new_content)
-        .map_err(|e| format!("Failed to write temp file: {}", e))?;
-
-    // Mark self-write BEFORE rename so the watcher suppresses the event
-    {
-        let watcher_lock = state.watcher.lock().map_err(|e| e.to_string())?;
-        if let Some(ref fw) = *watcher_lock {
-            fw.mark_self_write(&target);
-        }
-    }
-
-    std::fs::rename(&temp_path, &target)
-        .map_err(|e| {
-            let _ = std::fs::remove_file(&temp_path);
-            format!("Failed to rename temp file: {}", e)
-        })?;
-
-    // Update mtime tracking after write (mirrors write_file logic)
-    let canonical_key = target.canonicalize()
-        .unwrap_or_else(|_| target.clone())
-        .to_string_lossy().to_string();
-    if let Ok(meta) = std::fs::metadata(&target) {
-        if let Ok(mtime) = meta.modified() {
-            let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
-            mtimes.insert(canonical_key, mtime);
-        }
-    }
-
-    // Full reindex — watcher event is suppressed, so we must reindex here.
-    // db.update_frontmatter alone misses tags/links extracted from YAML.
-    if target.extension().and_then(|e| e.to_str()) == Some("md") {
-        let dirs = state.directories.lock().map_err(|e| e.to_string())?;
-        let dir_id = dirs.list().iter().find_map(|d| {
-            if target.starts_with(&d.path) { Some(d.id.clone()) } else { None }
-        });
-        drop(dirs);
-        if let Some(id) = dir_id {
-            let _ = crate::indexer::Indexer::reindex_file(&target, &id, &state.db);
-        }
-    }
-
-    Ok(())
+    commit_file(&target, &new_content, &state)
 }
 
 #[tauri::command]
@@ -889,67 +863,6 @@ pub fn read_legacy_global_bookmarks() -> Result<Vec<(String, String)>, String> {
     let bookmarks: Vec<GlobalBookmark> = serde_json::from_str(&raw)
         .map_err(|e| format!("Failed to parse global-bookmarks.json: {}", e))?;
     Ok(bookmarks.into_iter().map(|b| (b.path, b.label)).collect())
-}
-
-fn read_global_bookmarks_file() -> Result<Vec<GlobalBookmark>, String> {
-    let path = global_bookmarks_path()?;
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let raw = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read global-bookmarks.json: {}", e))?;
-    serde_json::from_str(&raw)
-        .map_err(|e| format!("Failed to parse global-bookmarks.json: {}", e))
-}
-
-fn write_global_bookmarks_file(bookmarks: &[GlobalBookmark]) -> Result<(), String> {
-    let dir = crate::paths::onyx_dir()?;
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create onyx dir: {}", e))?;
-
-    let path = dir.join("global-bookmarks.json");
-    let json = serde_json::to_string_pretty(bookmarks)
-        .map_err(|e| format!("Failed to serialize global bookmarks: {}", e))?;
-
-    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let temp_path = dir.join(format!(".global-bm-tmp-{}-{}", std::process::id(), counter));
-
-    std::fs::write(&temp_path, &json)
-        .map_err(|e| format!("Failed to write global bookmarks temp file: {}", e))?;
-
-    std::fs::rename(&temp_path, &path).map_err(|e| {
-        let _ = std::fs::remove_file(&temp_path);
-        format!("Failed to rename global bookmarks temp file: {}", e)
-    })
-}
-
-#[tauri::command]
-pub fn get_global_bookmarks() -> Result<Vec<GlobalBookmark>, String> {
-    read_global_bookmarks_file()
-}
-
-#[tauri::command]
-pub fn toggle_global_bookmark(path: String, label: String) -> Result<bool, String> {
-    let mut bookmarks = read_global_bookmarks_file()?;
-
-    if let Some(idx) = bookmarks.iter().position(|b| b.path == path) {
-        bookmarks.remove(idx);
-        write_global_bookmarks_file(&bookmarks)?;
-        Ok(false)
-    } else {
-        bookmarks.push(GlobalBookmark {
-            path,
-            label,
-        });
-        write_global_bookmarks_file(&bookmarks)?;
-        Ok(true)
-    }
-}
-
-#[tauri::command]
-pub fn is_global_bookmarked(path: String) -> Result<bool, String> {
-    let bookmarks = read_global_bookmarks_file()?;
-    Ok(bookmarks.iter().any(|b| b.path == path))
 }
 
 // ── Autocomplete & Metadata ──

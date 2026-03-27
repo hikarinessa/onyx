@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, selectAllTabs, type Tab } from "../stores/app";
 import { loadFileIntoCache, migrateEditorCache, clearEditorCache } from "../components/Editor";
 
-/** Get live tabs from paneState (the compat `store.tabs` getter is broken by Zustand's Object.assign) */
+/** Get all tabs across all panes */
 function getAllTabs(): Tab[] {
   return selectAllTabs(useAppStore.getState());
 }
