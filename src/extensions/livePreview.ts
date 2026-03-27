@@ -488,6 +488,7 @@ const COMMENT_RE = /%%(.+?)%%/g;
 // ── Hoisted decoration objects (immutable, reused across calls) ──
 
 const DECO_REPLACE = Decoration.replace({});
+const DECO_REPLACE_OPEN = Decoration.replace({ inclusiveEnd: false });
 const DECO_BOLD = Decoration.mark({ class: "cm-preview-bold" });
 const DECO_ITALIC = Decoration.mark({ class: "cm-preview-italic" });
 const DECO_BOLD_ITALIC = Decoration.mark({ class: "cm-preview-bold cm-preview-italic" });
@@ -891,7 +892,7 @@ function addInlineDecorations(
       if (skipClaimed && isClaimed(from, to)) continue;
       ranges.push({ from, to: from + markerLen, deco: DECO_REPLACE });
       ranges.push({ from: from + markerLen, to: to - markerLen, deco });
-      ranges.push({ from: to - markerLen, to, deco: DECO_REPLACE });
+      ranges.push({ from: to - markerLen, to, deco: DECO_REPLACE_OPEN });
       claimed.push({ from, to });
     }
   }
@@ -919,7 +920,7 @@ function addInlineDecorations(
     }
     const displayFrom = m[2] ? from + m[0].indexOf("|") + 1 : from + 2;
     ranges.push({ from: displayFrom, to: to - 2, deco: DECO_WIKILINK });
-    ranges.push({ from: to - 2, to, deco: DECO_REPLACE });
+    ranges.push({ from: to - 2, to, deco: DECO_REPLACE_OPEN });
   }
 
   // Markdown links [text](url) — replace with styled display text
@@ -931,7 +932,7 @@ function addInlineDecorations(
     ranges.push({
       from,
       to,
-      deco: Decoration.replace({ widget: new MdLinkWidget(m[1], m[2]) }),
+      deco: Decoration.replace({ widget: new MdLinkWidget(m[1], m[2]), inclusiveEnd: false }),
     });
     claimed.push({ from, to });
   }
@@ -965,7 +966,7 @@ function addInlineDecorations(
     ranges.push({
       from: hashFrom,
       to: tagTo,
-      deco: Decoration.replace({ widget: new TagChipWidget(m[1]) }),
+      deco: Decoration.replace({ widget: new TagChipWidget(m[1]), inclusiveEnd: false }),
     });
     claimed.push({ from: hashFrom, to: tagTo });
   }
