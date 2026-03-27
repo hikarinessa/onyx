@@ -4,6 +4,30 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.10.5] — 2026-03-27
+
+### Added
+- **Hidden comments** — `%%text%%` inline and block syntax, hidden in preview, visible on cursor line (#64)
+- **Alt checkbox slash commands** — `/> /< // /- /!` transform or insert alt checkboxes; basic checkbox states (space, x, /, -, >, <, !) clickable to toggle
+- **Active file highlight** — sidebar tree and calendar bold/accent on the currently open file (#56)
+- **Directory reorder** — drag-to-reorder registered directories in sidebar (#60)
+
+### Fixed
+- Cursor position offset with live preview decorations — `drawSelection()`, config-aware widget heights, table wrapper div, `height:0` instead of `display:none` for hidden lines (#55)
+- Backlinks and bookmarks not updating on tab switch — frozen `activeTabId` compat getter replaced across 12 call sites (#61, #63)
+- Wikilinks with explicit paths and `.md` extension — double `.md` prevention, directory-root-relative resolution (#58)
+- Cursor placement after decorations at line end — `inclusiveEnd: false` on closing replace decorations, `coordsAtPos` guard in click handler (#79)
+- Non-atomic saves in `dirs.rs` and `object_types.rs` — temp+rename pattern, static `TEMP_COUNTER` (#66, #67)
+- Bookmark loss on re-indexing — unified bookmarks into standalone JSON file, decoupled from SQLite index (#65)
+- Table formatting in live preview — batch `transact()`, monospace font on focused tables (#17)
+
+### Changed
+- Themes trimmed from 18 to 7 (dark, light, cream, sakura, velvet, reef, midnight); warm2 renamed to dark, old dark renamed to midnight
+- CSP enabled (`default-src 'self'`), `allow_path` blocks dangerous system/home paths (#68)
+- Dead legacy global bookmark code removed, `commit_file()` helper extracted, mtime eviction improved, compat getters removed (#72)
+
+---
+
 ## [0.10.4] — 2026-03-24
 
 ### Added
