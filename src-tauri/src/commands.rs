@@ -506,14 +506,8 @@ pub fn resolve_wikilink(
     // Normalise: strip .md suffix if present (avoid double .md)
     let base = link.strip_suffix(".md").unwrap_or(&link);
 
-    // Step 1: Path with '/' — try relative to context dir, then each registered directory root
+    // Step 1: Path with '/' — resolve relative to each registered directory root
     if base.contains('/') {
-        let candidate = context_dir.join(format!("{}.md", base));
-        if candidate.exists() {
-            let canonical = candidate.canonicalize().map_err(|e| e.to_string())?;
-            validate_path(&canonical, &state)?;
-            return Ok(Some(canonical.to_string_lossy().to_string()));
-        }
         let dirs = state.directories.lock().map_err(|e| e.to_string())?;
         for dir in dirs.list() {
             let candidate = dir.path.join(format!("{}.md", base));
