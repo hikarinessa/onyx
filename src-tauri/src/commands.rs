@@ -503,18 +503,29 @@ pub fn resolve_wikilink(
     let context = PathBuf::from(&context_path);
     let context_dir = context.parent().map(PathBuf::from).unwrap_or_default();
 
-    // Step 1: Exact path match — link contains '/', treat as relative path
-    if link.contains('/') {
-        let candidate = context_dir.join(format!("{}.md", link));
+    // Normalise: strip .md suffix if present (avoid double .md)
+    let base = link.strip_suffix(".md").unwrap_or(&link);
+
+    // Step 1: Path with '/' — try relative to context dir, then each registered directory root
+    if base.contains('/') {
+        let candidate = context_dir.join(format!("{}.md", base));
         if candidate.exists() {
             let canonical = candidate.canonicalize().map_err(|e| e.to_string())?;
             validate_path(&canonical, &state)?;
             return Ok(Some(canonical.to_string_lossy().to_string()));
         }
+        let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+        for dir in dirs.list() {
+            let candidate = dir.path.join(format!("{}.md", base));
+            if candidate.exists() {
+                let canonical = candidate.canonicalize().map_err(|e| e.to_string())?;
+                return Ok(Some(canonical.to_string_lossy().to_string()));
+            }
+        }
     }
 
     // Step 2: Same directory as context file
-    let same_dir_candidate = context_dir.join(format!("{}.md", link));
+    let same_dir_candidate = context_dir.join(format!("{}.md", base));
     if same_dir_candidate.exists() {
         let canonical = same_dir_candidate.canonicalize().map_err(|e| e.to_string())?;
         validate_path(&canonical, &state)?;
@@ -523,7 +534,7 @@ pub fn resolve_wikilink(
 
     // Step 3: Query SQLite by title or filename (already in index = already validated)
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.resolve_by_title(&link)
+    db.resolve_by_title(base)
 }
 
 // ── Unified Bookmarks (JSON-backed) ──
