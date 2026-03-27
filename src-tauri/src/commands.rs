@@ -1135,8 +1135,30 @@ fn parse_week_string(s: &str) -> Option<NaiveDate> {
 #[tauri::command]
 pub fn allow_path(path: String, state: State<AppState>) -> Result<(), String> {
     let canonical = canonical_path(&PathBuf::from(&path))?;
+    let canonical_str = canonical.to_string_lossy().to_string();
+
+    // Block known-dangerous paths
+    const BLOCKED_PREFIXES: &[&str] = &[
+        "/etc", "/var", "/usr", "/bin", "/sbin", "/System", "/Library",
+        "/private/etc", "/private/var",
+    ];
+    let home = dirs_next::home_dir().unwrap_or_default();
+    let blocked_home: Vec<PathBuf> = [".ssh", ".gnupg", ".aws", ".config/gcloud", ".kube"]
+        .iter().map(|s| home.join(s)).collect();
+
+    for prefix in BLOCKED_PREFIXES {
+        if canonical_str.starts_with(prefix) {
+            return Err(format!("Access denied: {}", path));
+        }
+    }
+    for blocked in &blocked_home {
+        if canonical.starts_with(blocked) {
+            return Err(format!("Access denied: {}", path));
+        }
+    }
+
     let mut allowed = state.allowed_paths.lock().map_err(|e| e.to_string())?;
-    allowed.insert(canonical.to_string_lossy().to_string());
+    allowed.insert(canonical_str);
     Ok(())
 }
 
