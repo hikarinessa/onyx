@@ -49,6 +49,8 @@ pub struct AppState {
     pub last_read_mtimes: Mutex<std::collections::HashMap<String, std::time::SystemTime>>,
     /// Paths explicitly allowed outside registered directories (orphan notes opened by the user)
     pub allowed_paths: Mutex<std::collections::HashSet<String>>,
+    /// Files requested via Finder "Open With" before frontend is ready
+    pub pending_open_files: Mutex<Vec<String>>,
     pub config: Mutex<config::Config>,
 }
 
@@ -219,6 +221,7 @@ pub fn run() {
             db,
             last_read_mtimes: Mutex::new(std::collections::HashMap::new()),
             allowed_paths: Mutex::new(std::collections::HashSet::new()),
+            pending_open_files: Mutex::new(Vec::new()),
             config: Mutex::new(app_config),
         })
         .invoke_handler(tauri::generate_handler![
@@ -270,6 +273,7 @@ pub fn run() {
             plugins::mac_rounded_corners::reposition_traffic_lights,
             commands::list_templates,
             commands::check_spelling,
+            commands::drain_pending_open_files,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -289,6 +293,10 @@ pub fn run() {
                     })
                     .collect();
                 if !paths.is_empty() {
+                    // Buffer for cold-launch (frontend may not be listening yet)
+                    if let Ok(mut pending) = app_handle.state::<AppState>().pending_open_files.lock() {
+                        pending.extend(paths.clone());
+                    }
                     let _ = app_handle.emit("open-files", paths);
                 }
             }

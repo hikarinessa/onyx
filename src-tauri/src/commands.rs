@@ -1321,3 +1321,10 @@ pub fn check_spelling(text: String) -> Vec<SpellingError> {
 pub fn check_spelling(_text: String) -> Vec<SpellingError> {
     Vec::new()
 }
+
+/// Drain any files buffered from Finder "Open With" before frontend was ready.
+#[tauri::command]
+pub fn drain_pending_open_files(state: State<AppState>) -> Vec<String> {
+    let mut pending = state.pending_open_files.lock().unwrap();
+    pending.drain(..).collect()
+}

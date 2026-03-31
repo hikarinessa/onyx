@@ -583,6 +583,15 @@ export default function App() {
       }
     });
 
+    // Drain any files buffered before frontend was ready (cold-launch case)
+    invoke<string[]>("drain_pending_open_files").then((paths) => {
+      if (cancelled) return;
+      for (const filePath of paths) {
+        const name = filePath.split("/").pop() || filePath;
+        openFileInEditor(filePath, name).catch(console.error);
+      }
+    });
+
     // Tauri 2 native drag-drop (HTML5 File.path doesn't exist in Tauri 2)
     const unlistenDragDrop = getCurrentWebview().onDragDropEvent((event) => {
       if (cancelled) return;
