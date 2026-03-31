@@ -477,6 +477,7 @@ const STRIKETHROUGH_RE = /~~(.+?)~~/g;
 const HIGHLIGHT_RE = /==(.+?)==/g;
 const CHECKBOX_RE = /^(\s*[-*+]\s)\[([ x/\-><!?*"libSIpcfkwudn])\]\s/;
 const BULLET_RE = /^(\s*)([-*+])\s/;
+const ORDERED_RE = /^(\s*)(\d+\.)\s/;
 const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 const INLINE_CODE_RE = /`([^`]+)`/g;
 const TAG_RE = /(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
@@ -617,6 +618,47 @@ function detectTableRanges(
 }
 
 const DECO_TABLE_LINE = Decoration.line({ class: "cm-focused-table-line" });
+
+// ── Hanging indent metrics ──
+// Measure actual pixel widths for accurate hanging indents with proportional fonts.
+let hangMetrics: { space: number; bullet: number; checkbox: number } | null = null;
+
+function getHangMetrics(view: EditorView): { space: number; bullet: number; checkbox: number } {
+  if (hangMetrics) return hangMetrics;
+  const container = view.contentDOM;
+
+  // Space width
+  const sp = document.createElement("span");
+  sp.style.cssText = "position:absolute;visibility:hidden;white-space:pre;font:inherit";
+  sp.textContent = "          ";
+  container.appendChild(sp);
+  const space = sp.offsetWidth / 10;
+  sp.remove();
+
+  // Bullet widget width (matches BulletWidget DOM) — offsetWidth excludes margins
+  const bp = document.createElement("span");
+  bp.className = "cm-preview-bullet";
+  bp.textContent = "\u2022";
+  bp.style.position = "absolute";
+  bp.style.visibility = "hidden";
+  container.appendChild(bp);
+  const bpStyle = getComputedStyle(bp);
+  const bullet = bp.offsetWidth + parseFloat(bpStyle.marginLeft) + parseFloat(bpStyle.marginRight);
+  bp.remove();
+
+  // Checkbox widget width (matches CheckboxWidget DOM) — offsetWidth excludes margins
+  const cb = document.createElement("span");
+  cb.className = "cm-preview-alt-cb";
+  cb.style.position = "absolute";
+  cb.style.visibility = "hidden";
+  container.appendChild(cb);
+  const cbStyle = getComputedStyle(cb);
+  const checkbox = (cb.offsetWidth || 14) + parseFloat(cbStyle.marginLeft) + parseFloat(cbStyle.marginRight);
+  cb.remove();
+
+  hangMetrics = { space, bullet, checkbox };
+  return hangMetrics;
+}
 
 function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSkipLines: Set<number>, focusedTableLines: Set<number>): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
@@ -812,6 +854,12 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         const marker = cbMatch[2];
         const bracketStart = line.from + cbMatch[1].length;
         const indent = cbMatch[1].match(/^\s*/)?.[0].length ?? 0;
+        // Hanging indent: spaces (as text) + checkbox widget replaces marker+bracket
+        const m = getHangMetrics(view);
+        const hangPx = indent * m.space + m.checkbox + m.space;
+        builder.add(line.from, line.from, Decoration.line({
+          attributes: { style: `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important` },
+        }));
         // Replace "- [ ] " (marker + checkbox + space) with just the checkbox widget
         builder.add(
           line.from + indent,
@@ -843,6 +891,12 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
       if (bulletMatch) {
         const indent = bulletMatch[1].length;
         const markerStart = line.from + indent;
+        // Hanging indent: spaces (as text) + bullet widget + trailing space
+        const m = getHangMetrics(view);
+        const hangPx = indent * m.space + m.bullet + m.space;
+        builder.add(line.from, line.from, Decoration.line({
+          attributes: { style: `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important` },
+        }));
         // Replace the marker character (-, *, +) with a bullet dot
         builder.add(
           markerStart,
@@ -854,6 +908,26 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         if (afterBullet.length > 0) {
           const contentLine = { from: line.from + bulletMatch[0].length, to: line.to };
           addInlineDecorations(builder, contentLine, afterBullet);
+        }
+        continue;
+      }
+
+      // ── Ordered list markers ──
+      const orderedMatch = text.match(ORDERED_RE);
+      if (orderedMatch) {
+        // Hanging indent: spaces + marker digits + "." + space (no widget replacement)
+        const m = getHangMetrics(view);
+        const indentOl = orderedMatch[1].length;
+        const markerText = orderedMatch[2]; // e.g. "1." or "12."
+        const hangPx = indentOl * m.space + markerText.length * view.defaultCharacterWidth + m.space;
+        builder.add(line.from, line.from, Decoration.line({
+          attributes: { style: `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important` },
+        }));
+        // Process inline decorations on the rest of the line
+        const afterMarker = text.slice(orderedMatch[0].length);
+        if (afterMarker.length > 0) {
+          const contentLine = { from: line.from + orderedMatch[0].length, to: line.to };
+          addInlineDecorations(builder, contentLine, afterMarker);
         }
         continue;
       }
