@@ -1,7 +1,7 @@
 import { linter, type Diagnostic } from "@codemirror/lint";
 import type { Text } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
-import { isLintingEnabled, getLintRules } from "../lib/configBridge";
+import { isLintingEnabled, getLintRules, getTabSize } from "../lib/configBridge";
 import { useAppStore, type LintIssue } from "../stores/app";
 
 // ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ const noHardTabs: LintRule = (doc) => {
         actions: [{
           name: "Fix",
           apply: (view) => {
-            view.dispatch({ changes: { from, to: from + 1, insert: "    " } });
+            view.dispatch({ changes: { from, to: from + 1, insert: " ".repeat(getTabSize()) } });
           },
         }],
       });
@@ -351,7 +351,7 @@ export function autofixContent(content: string): string {
   const rules = getLintRules();
 
   if (rules.trailing_spaces) result = result.replace(/[ \t]+$/gm, "");
-  if (rules.hard_tabs) result = result.replace(/\t/g, "    ");
+  if (rules.hard_tabs) result = result.replace(/\t/g, " ".repeat(getTabSize()));
   if (rules.multiple_blanks) result = result.replace(/\n{3,}/g, "\n\n");
   if (rules.trailing_newline) result = result.replace(/\n*$/, "\n");
   if (rules.atx_spacing) result = result.replace(/^(#{1,6})([^ #\n])/gm, "$1 $2");

@@ -1,5 +1,6 @@
 import { EditorView } from "@codemirror/view";
 import { EditorSelection } from "@codemirror/state";
+import { indentUnit } from "@codemirror/language";
 
 /**
  * Outliner keybindings for list editing:
@@ -27,8 +28,9 @@ function indentListItem(view: EditorView): boolean {
   const info = getListInfo(line.text);
   if (!info) return false;
 
+  const unit = state.facet(indentUnit);
   view.dispatch({
-    changes: { from: line.from, to: line.from, insert: "  " },
+    changes: { from: line.from, to: line.from, insert: unit },
   });
   return true;
 }
@@ -39,7 +41,8 @@ function outdentListItem(view: EditorView): boolean {
   const info = getListInfo(line.text);
   if (!info || info.indent.length === 0) return false;
 
-  const removeChars = Math.min(2, info.indent.length);
+  const unitLen = state.facet(indentUnit).length;
+  const removeChars = Math.min(unitLen, info.indent.length);
   view.dispatch({
     changes: { from: line.from, to: line.from + removeChars, insert: "" },
   });
