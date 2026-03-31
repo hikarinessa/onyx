@@ -352,7 +352,10 @@ export function getCurrentBlock(view: EditorView): { text: string; from: number;
 
 const blockTheme = EditorView.baseTheme({
   ".cm-block-hover-line": {
-    boxShadow: "0 -1px 0 0 var(--border-subtle)",
+    backgroundImage: "linear-gradient(to right, transparent 50%, var(--border-subtle))",
+    backgroundSize: "100% 1px",
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "top",
   },
 });
 

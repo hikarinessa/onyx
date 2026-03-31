@@ -332,6 +332,15 @@ function EditorSection({
         />
       </SettingRow>
 
+      <SettingRow label="Indent guides" description="Show vertical lines at list indent levels">
+        <Toggle
+          checked={config.editor.indent_guides}
+          onChange={(v) =>
+            updateConfig({ editor: { indent_guides: v } })
+          }
+        />
+      </SettingRow>
+
       <SettingRow label="Tab size" description="Takes effect on restart">
         <select
           className="settings-select"

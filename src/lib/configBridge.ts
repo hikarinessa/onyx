@@ -14,6 +14,7 @@ let spellcheckEnabled = false;
 let defaultEditorMode: string = "preview";
 let showLineNumbers = true;
 let tabSize = 4;
+let indentGuides = true;
 
 // Per-rule flags (all default true)
 let ruleTrailingSpaces = true;
@@ -54,6 +55,10 @@ export function getShowLineNumbers(): boolean {
 
 export function getTabSize(): number {
   return tabSize;
+}
+
+export function getIndentGuides(): boolean {
+  return indentGuides;
 }
 
 export function getLintRules() {
@@ -223,6 +228,7 @@ export function applyConfig(config: AppConfig) {
   defaultEditorMode = config.editor.default_mode || "preview";
   showLineNumbers = config.editor.show_line_numbers ?? true;
   tabSize = config.editor.tab_size ?? 4;
+  indentGuides = config.editor.indent_guides ?? true;
 
   // Behavior
   autoSaveMs = config.behavior.auto_save_ms;

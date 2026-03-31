@@ -27,6 +27,7 @@ export interface AppConfig {
     default_mode: string;
     show_line_numbers: boolean;
     tab_size: number;
+    indent_guides: boolean;
   };
   appearance: {
     theme: string;

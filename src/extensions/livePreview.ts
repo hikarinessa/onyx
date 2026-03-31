@@ -13,7 +13,8 @@ import {
   type EditorState,
   type Extension,
 } from "@codemirror/state";
-import { syntaxTree, foldEffect, unfoldEffect, foldedRanges } from "@codemirror/language";
+import { indentUnit, syntaxTree, foldEffect, unfoldEffect, foldedRanges } from "@codemirror/language";
+import { getIndentGuides } from "../lib/configBridge";
 import { findTablesInRange } from "./tableAdapter";
 import {
   readTable,
@@ -652,11 +653,27 @@ function getHangMetrics(view: EditorView): { space: number; digit: number; bulle
   return hangMetrics;
 }
 
+/** Build inline style for a list line: hanging indent + vertical indent guides. */
+function listLineStyle(hangPx: number, indentSpaces: number, unitLen: number, spaceWidth: number): string {
+  let style = `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important`;
+  const depth = unitLen > 0 ? Math.floor(indentSpaces / unitLen) : 0;
+  if (depth > 0 && getIndentGuides()) {
+    const guides: string[] = [];
+    for (let d = 1; d <= depth; d++) {
+      const x = d * unitLen * spaceWidth - 7;
+      guides.push(`linear-gradient(var(--border-subtle) 0 0) ${x}px 0 / 1px 100% no-repeat`);
+    }
+    style += `; background: ${guides.join(", ")} !important; background-origin: border-box !important`;
+  }
+  return style;
+}
+
 function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSkipLines: Set<number>, focusedTableLines: Set<number>): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
   const { fmEnd, codeBlockStates } = scan;
   const metrics = getHangMetrics(view);
+  const unitLen = view.state.facet(indentUnit).length;
 
   const cursorLine = doc.lineAt(view.state.selection.main.head).number;
 
@@ -847,10 +864,9 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         const marker = cbMatch[2];
         const bracketStart = line.from + cbMatch[1].length;
         const indent = cbMatch[1].match(/^\s*/)?.[0].length ?? 0;
-        // Hanging indent: spaces (as text) + checkbox widget replaces marker+bracket
         const hangPx = indent * metrics.space + metrics.checkbox + metrics.space;
         builder.add(line.from, line.from, Decoration.line({
-          attributes: { style: `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important` },
+          attributes: { style: listLineStyle(hangPx, indent, unitLen, metrics.space) },
         }));
         // Replace "- [ ] " (marker + checkbox + space) with just the checkbox widget
         builder.add(
@@ -883,10 +899,9 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
       if (bulletMatch) {
         const indent = bulletMatch[1].length;
         const markerStart = line.from + indent;
-        // Hanging indent: spaces (as text) + bullet widget + trailing space
         const hangPx = indent * metrics.space + metrics.bullet + metrics.space;
         builder.add(line.from, line.from, Decoration.line({
-          attributes: { style: `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important` },
+          attributes: { style: listLineStyle(hangPx, indent, unitLen, metrics.space) },
         }));
         // Replace the marker character (-, *, +) with a bullet dot
         builder.add(
@@ -906,12 +921,11 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
       // ── Ordered list markers ──
       const orderedMatch = text.match(ORDERED_RE);
       if (orderedMatch) {
-        // Hanging indent: spaces + marker digits + "." + space (no widget replacement)
         const indentOl = orderedMatch[1].length;
         const markerText = orderedMatch[2]; // e.g. "1." or "12."
         const hangPx = indentOl * metrics.space + markerText.length * metrics.digit + metrics.space;
         builder.add(line.from, line.from, Decoration.line({
-          attributes: { style: `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important` },
+          attributes: { style: listLineStyle(hangPx, indentOl, unitLen, metrics.space) },
         }));
         // Process inline decorations on the rest of the line
         const afterMarker = text.slice(orderedMatch[0].length);

@@ -27,6 +27,7 @@ pub struct EditorConfig {
     pub default_mode: String,
     pub show_line_numbers: bool,
     pub tab_size: u32,
+    pub indent_guides: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +112,7 @@ impl Default for EditorConfig {
             default_mode: "preview".to_string(),
             show_line_numbers: true,
             tab_size: 4,
+            indent_guides: true,
         }
     }
 }
