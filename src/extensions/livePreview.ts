@@ -621,42 +621,34 @@ const DECO_TABLE_LINE = Decoration.line({ class: "cm-focused-table-line" });
 
 // ── Hanging indent metrics ──
 // Measure actual pixel widths for accurate hanging indents with proportional fonts.
-let hangMetrics: { space: number; bullet: number; checkbox: number } | null = null;
+// Cache is invalidated on font/size config changes via resetHangMetrics().
+let hangMetrics: { space: number; digit: number; bullet: number; checkbox: number } | null = null;
 
-function getHangMetrics(view: EditorView): { space: number; bullet: number; checkbox: number } {
+export function resetHangMetrics() {
+  hangMetrics = null;
+}
+
+function getHangMetrics(view: EditorView): { space: number; digit: number; bullet: number; checkbox: number } {
   if (hangMetrics) return hangMetrics;
   const container = view.contentDOM;
+  const measure = (text: string, className?: string): number => {
+    const el = document.createElement("span");
+    if (className) el.className = className;
+    el.style.cssText = "position:absolute;visibility:hidden;white-space:pre;font:inherit";
+    el.textContent = text;
+    container.appendChild(el);
+    const style = getComputedStyle(el);
+    const width = el.offsetWidth + parseFloat(style.marginLeft) + parseFloat(style.marginRight);
+    el.remove();
+    return width;
+  };
 
-  // Space width
-  const sp = document.createElement("span");
-  sp.style.cssText = "position:absolute;visibility:hidden;white-space:pre;font:inherit";
-  sp.textContent = "          ";
-  container.appendChild(sp);
-  const space = sp.offsetWidth / 10;
-  sp.remove();
+  const space = measure("          ") / 10;
+  const digit = measure("0000000000") / 10;
+  const bullet = measure("\u2022", "cm-preview-bullet");
+  const checkbox = measure("", "cm-preview-alt-cb") || 14;
 
-  // Bullet widget width (matches BulletWidget DOM) — offsetWidth excludes margins
-  const bp = document.createElement("span");
-  bp.className = "cm-preview-bullet";
-  bp.textContent = "\u2022";
-  bp.style.position = "absolute";
-  bp.style.visibility = "hidden";
-  container.appendChild(bp);
-  const bpStyle = getComputedStyle(bp);
-  const bullet = bp.offsetWidth + parseFloat(bpStyle.marginLeft) + parseFloat(bpStyle.marginRight);
-  bp.remove();
-
-  // Checkbox widget width (matches CheckboxWidget DOM) — offsetWidth excludes margins
-  const cb = document.createElement("span");
-  cb.className = "cm-preview-alt-cb";
-  cb.style.position = "absolute";
-  cb.style.visibility = "hidden";
-  container.appendChild(cb);
-  const cbStyle = getComputedStyle(cb);
-  const checkbox = (cb.offsetWidth || 14) + parseFloat(cbStyle.marginLeft) + parseFloat(cbStyle.marginRight);
-  cb.remove();
-
-  hangMetrics = { space, bullet, checkbox };
+  hangMetrics = { space, digit, bullet, checkbox };
   return hangMetrics;
 }
 
@@ -664,6 +656,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
   const { fmEnd, codeBlockStates } = scan;
+  const metrics = getHangMetrics(view);
 
   const cursorLine = doc.lineAt(view.state.selection.main.head).number;
 
@@ -855,8 +848,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         const bracketStart = line.from + cbMatch[1].length;
         const indent = cbMatch[1].match(/^\s*/)?.[0].length ?? 0;
         // Hanging indent: spaces (as text) + checkbox widget replaces marker+bracket
-        const m = getHangMetrics(view);
-        const hangPx = indent * m.space + m.checkbox + m.space;
+        const hangPx = indent * metrics.space + metrics.checkbox + metrics.space;
         builder.add(line.from, line.from, Decoration.line({
           attributes: { style: `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important` },
         }));
@@ -892,8 +884,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         const indent = bulletMatch[1].length;
         const markerStart = line.from + indent;
         // Hanging indent: spaces (as text) + bullet widget + trailing space
-        const m = getHangMetrics(view);
-        const hangPx = indent * m.space + m.bullet + m.space;
+        const hangPx = indent * metrics.space + metrics.bullet + metrics.space;
         builder.add(line.from, line.from, Decoration.line({
           attributes: { style: `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important` },
         }));
@@ -916,10 +907,9 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
       const orderedMatch = text.match(ORDERED_RE);
       if (orderedMatch) {
         // Hanging indent: spaces + marker digits + "." + space (no widget replacement)
-        const m = getHangMetrics(view);
         const indentOl = orderedMatch[1].length;
         const markerText = orderedMatch[2]; // e.g. "1." or "12."
-        const hangPx = indentOl * m.space + markerText.length * view.defaultCharacterWidth + m.space;
+        const hangPx = indentOl * metrics.space + markerText.length * metrics.digit + metrics.space;
         builder.add(line.from, line.from, Decoration.line({
           attributes: { style: `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important` },
         }));

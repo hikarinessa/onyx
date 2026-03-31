@@ -28,7 +28,7 @@ import { tableEditorExtension } from "../extensions/tableEditor";
 import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
-import { livePreviewExtension } from "../extensions/livePreview";
+import { livePreviewExtension, resetHangMetrics } from "../extensions/livePreview";
 import { lintingExtension, autofixContent, applyLintFix } from "../extensions/linting";
 import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
@@ -507,6 +507,7 @@ export function Editor() {
     });
     setFlushSaveHook(flushSaveForTab);
     setRemeasureHook(() => {
+      resetHangMetrics();
       for (const [, view] of paneViews) {
         view.requestMeasure();
       }
