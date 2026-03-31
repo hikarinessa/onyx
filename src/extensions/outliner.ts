@@ -1,5 +1,5 @@
 import { EditorView } from "@codemirror/view";
-import { EditorSelection } from "@codemirror/state";
+import { EditorSelection, type ChangeSpec } from "@codemirror/state";
 import { indentUnit } from "@codemirror/language";
 
 /**
@@ -22,6 +22,49 @@ function getListInfo(lineText: string) {
   };
 }
 
+function isOrderedMarker(marker: string): boolean {
+  return /^\d+\.$/.test(marker);
+}
+
+/** Collect changes to renumber ordered siblings at a given indent level. */
+function collectRenumberChanges(
+  view: EditorView, startLine: number, indent: string, startNum: number
+): ChangeSpec[] {
+  const { state } = view;
+  const changes: ChangeSpec[] = [];
+  let num = startNum;
+  for (let i = startLine; i <= state.doc.lines; i++) {
+    const l = state.doc.line(i);
+    const info = getListInfo(l.text);
+    if (!info) break;
+    if (info.indent.length < indent.length) break;
+    if (info.indent.length > indent.length) continue;
+    if (!isOrderedMarker(info.marker)) break;
+    const newMarker = num + ".";
+    if (info.marker !== newMarker) {
+      const markerFrom = l.from + info.indent.length;
+      changes.push({ from: markerFrom, to: markerFrom + info.marker.length, insert: newMarker });
+    }
+    num++;
+  }
+  return changes;
+}
+
+/** Find what number a new item should get at the given indent level by looking above. */
+function findNextNumber(view: EditorView, aboveLine: number, indent: string): number {
+  const { state } = view;
+  for (let i = aboveLine; i >= 1; i--) {
+    const l = state.doc.line(i);
+    const info = getListInfo(l.text);
+    if (!info) break;
+    if (info.indent.length < indent.length) break;
+    if (info.indent === indent && isOrderedMarker(info.marker)) {
+      return parseInt(info.marker) + 1;
+    }
+  }
+  return 1;
+}
+
 function indentListItem(view: EditorView): boolean {
   const { state } = view;
   const line = state.doc.lineAt(state.selection.main.head);
@@ -29,9 +72,21 @@ function indentListItem(view: EditorView): boolean {
   if (!info) return false;
 
   const unit = state.facet(indentUnit);
-  view.dispatch({
-    changes: { from: line.from, to: line.from, insert: unit },
-  });
+
+  if (isOrderedMarker(info.marker)) {
+    const newIndent = info.indent + unit;
+    const newNum = findNextNumber(view, line.number - 1, newIndent);
+    const markerEnd = line.from + info.indent.length + info.marker.length;
+    const changes: ChangeSpec[] = [
+      { from: line.from, to: markerEnd, insert: newIndent + newNum + "." },
+      ...collectRenumberChanges(view, line.number + 1, info.indent, parseInt(info.marker)),
+    ];
+    view.dispatch({ changes });
+  } else {
+    view.dispatch({
+      changes: { from: line.from, to: line.from, insert: unit },
+    });
+  }
   return true;
 }
 
@@ -43,9 +98,24 @@ function outdentListItem(view: EditorView): boolean {
 
   const unitLen = state.facet(indentUnit).length;
   const removeChars = Math.min(unitLen, info.indent.length);
-  view.dispatch({
-    changes: { from: line.from, to: line.from + removeChars, insert: "" },
-  });
+
+  if (isOrderedMarker(info.marker)) {
+    const newIndent = info.indent.slice(removeChars);
+    const newNum = findNextNumber(view, line.number - 1, newIndent);
+    const markerEnd = line.from + info.indent.length + info.marker.length;
+    const changes: ChangeSpec[] = [
+      { from: line.from, to: markerEnd, insert: newIndent + newNum + "." },
+      // Renumber old siblings at the deeper indent level
+      ...collectRenumberChanges(view, line.number + 1, info.indent, parseInt(info.marker)),
+      // Renumber new siblings at the shallower indent level
+      ...collectRenumberChanges(view, line.number + 1, newIndent, newNum + 1),
+    ];
+    view.dispatch({ changes });
+  } else {
+    view.dispatch({
+      changes: { from: line.from, to: line.from + removeChars, insert: "" },
+    });
+  }
   return true;
 }
 
