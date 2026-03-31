@@ -271,6 +271,26 @@ pub fn run() {
             commands::list_templates,
             commands::check_spelling,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Opened { urls } = event {
+                let paths: Vec<String> = urls
+                    .iter()
+                    .filter_map(|url| {
+                        url.to_file_path().ok().and_then(|p| {
+                            let s = p.to_string_lossy().to_string();
+                            if s.ends_with(".md") || s.ends_with(".markdown") {
+                                Some(s)
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .collect();
+                if !paths.is_empty() {
+                    let _ = app_handle.emit("open-files", paths);
+                }
+            }
+        });
 }

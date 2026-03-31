@@ -574,6 +574,15 @@ export default function App() {
       }
     });
 
+    // Handle files opened via Finder "Open With" or dock icon drop
+    const unlistenOpenFiles = listen<string[]>("open-files", (event) => {
+      if (cancelled) return;
+      for (const filePath of event.payload) {
+        const name = filePath.split("/").pop() || filePath;
+        openFileInEditor(filePath, name).catch(console.error);
+      }
+    });
+
     // Tauri 2 native drag-drop (HTML5 File.path doesn't exist in Tauri 2)
     const unlistenDragDrop = getCurrentWebview().onDragDropEvent((event) => {
       if (cancelled) return;
@@ -597,6 +606,7 @@ export default function App() {
       cancelled = true;
       unlisten.then((fn) => fn());
       unlistenFsChange.then((fn) => fn());
+      unlistenOpenFiles.then((fn) => fn());
       unlistenDragDrop.then((fn) => fn());
       for (const timer of pendingRemoves.values()) clearTimeout(timer);
       pendingRemoves.clear();
