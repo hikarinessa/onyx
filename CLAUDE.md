@@ -25,7 +25,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 10 (Split Panes):** Complete
 - **Phase 11 (Tier 2 Features):** In progress (slash commands, callouts, tag chips, 13 new themes, theme preview)
 
-**Current version:** 0.10.4
+**Current version:** 0.10.5
 
 ## Project Structure
 
@@ -43,7 +43,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── BookmarkStrip.tsx     #   90 lines — Bookmarks section pinned at sidebar bottom
 │   ├── SidebarContextMenu.tsx#  120 lines — Right-click context menu for file tree
 │   ├── ErrorBoundary.tsx     #   50 lines — React error boundary
-│   ├── Editor.tsx            #  625 lines — CM6 editor, inline title, live preview sync, split pane layout
+│   ├── Editor.tsx            #  671 lines — CM6 editor, inline title, live preview sync, split pane layout
 │   ├── ContextPanel.tsx      #  938 lines — Calendar, backlinks, properties, outline, recent docs
 │   ├── Calendar.tsx          #  273 lines — Month-grid calendar with week numbers
 │   ├── StatusBar.tsx         #  110 lines — Cursor, word count, lint status, editor mode, file path, conflict/deleted indicators
@@ -60,17 +60,17 @@ src/                          # Frontend (React + TypeScript)
 │   ├── wikilinks.ts          #  273 lines — CM6: link handling (wikilinks + URLs), click dispatch, decorations
 │   ├── tags.ts               #  109 lines — CM6: #tag syntax highlighting (viewport-aware)
 │   ├── formatting.ts         #  118 lines — CM6: Cmd+B/I/Shift+C toggle wrap (multi-cursor safe)
-│   ├── outliner.ts           #  160 lines — CM6: list item indent/outdent/move/enter
+│   ├── outliner.ts           #  233 lines — CM6: list item indent/outdent/move/enter + ordered renumbering
 │   ├── urlPaste.ts           #   30 lines — CM6: URL paste → markdown link
 │   ├── autocomplete.ts       #   99 lines — CM6: wikilink + tag + slash command autocomplete
 │   ├── slashCommands.ts      #  221 lines — CM6: slash commands (/table, /code, /callout, /today, /template)
-│   ├── livePreview.ts        # 1200 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, URLs, callouts, tag chips, fold)
+│   ├── livePreview.ts        # 1278 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, URLs, callouts, tag chips, fold, hanging indent, indent guides)
 │   ├── headingFold.ts        #   70 lines — CM6: foldService for heading-based section folding
 │   ├── inlineSvgIcons.ts     #  115 lines — Compact SVG icon renderer for CM6 widgets (callouts, alt checkboxes)
 │   ├── symbolWrap.ts         #   61 lines — CM6: wrap selection with brackets/quotes/markdown on type
-│   ├── linting.ts            #  402 lines — CM6: markdown lint rules (10 autofix + 4 warning) + autofix on save
+│   ├── linting.ts            #  441 lines — CM6: markdown lint rules (10 autofix + 4 warning) + autofix on save
 │   ├── spellcheck.ts         #  188 lines — CM6: macOS native spellcheck integration
-│   ├── blocks.ts             #  398 lines — CM6: block detection, hover copy button (right margin), move/delete/extract
+│   ├── blocks.ts             #  382 lines — CM6: block detection, hover copy button (right margin), move/delete/extract
 │   ├── tableAdapter.ts       #  243 lines — CM6: md-advanced-tables adapter (0-indexed↔1-indexed)
 │   └── tableEditor.ts        #  175 lines — CM6: table keymap (Tab/Enter) + TSV paste + command palette
 ├── lib/
@@ -83,8 +83,8 @@ src/                          # Frontend (React + TypeScript)
 │   ├── commands.ts           #   33 lines — Command registry for palette + menu bar
 │   ├── keybindings.ts        #  174 lines — Keybinding registry (parse, normalise, conflict detect, global keymap)
 │   ├── themes.ts             #   82 lines — Theme system (7 built-in themes, data-theme attribute switching)
-│   ├── configBridge.ts       #  286 lines — Config bridge: loads Rust config → CSS custom properties, remeasure hook
-│   ├── configTypes.ts        #   87 lines — Typed config schema + defaults
+│   ├── configBridge.ts       #  315 lines — Config bridge: loads Rust config → CSS custom properties, remeasure hook
+│   ├── configTypes.ts        #   90 lines — Typed config schema + defaults
 │   └── iconCatalog.ts        #  363 lines — Curated ~250 Lucide icons + category metadata
 └── styles/
     ├── reset.css             #   67 lines — CSS reset (@layer reset, prefers-reduced-motion)
@@ -96,10 +96,10 @@ src-tauri/                    # Backend (Rust)
 ├── tauri.conf.json           # Window config, dev URL, CSP
 └── src/
     ├── main.rs               #    6 lines — Entry point
-    ├── lib.rs                #  276 lines — Tauri setup, native menu bar, AppState, App Nap prevention, plugins
-    ├── commands.rs           # 1323 lines — Tauri commands (file ops, search, bookmarks, autocomplete, config, keybindings, spellcheck)
+    ├── lib.rs                #  304 lines — Tauri setup, native menu bar, AppState, App Nap prevention, plugins, file association handler
+    ├── commands.rs           # 1317 lines — Tauri commands (file ops, search, bookmarks, autocomplete, config, keybindings, spellcheck)
     ├── config.rs             #  397 lines — App config + keybinding persistence (~/.onyx/config.json, keybindings.json)
-    ├── db.rs                 #  629 lines — SQLite (WAL, files/links/tags + tag/title queries, reconciliation)
+    ├── db.rs                 #  665 lines — SQLite (WAL, files/links/tags + tag/title queries, reconciliation)
     ├── dirs.rs               #  161 lines — Directory registration (~/.onyx/directories.json)
     ├── indexer.rs            #  387 lines — Background indexer (frontmatter, wikilinks, tags) + startup reconciliation
     ├── watcher.rs            #  247 lines — File watcher with debounced reindex + rescan handling
@@ -111,7 +111,7 @@ src-tauri/                    # Backend (Rust)
         └── mac_rounded_corners.rs # 217 lines — macOS window corner radius fix
 ```
 
-**Total:** ~21,400 lines (13,000 TS/TSX + 4,500 Rust + 4,000 CSS)
+**Total:** ~21,900 lines (13,400 TS/TSX + 4,500 Rust + 4,000 CSS)
 
 ## Architecture Essentials
 
@@ -171,3 +171,6 @@ Every issue must have exactly one label from each category: **Priority**, **Type
 - **Zustand `activeTabId` compat getter in useEffect deps.** `useAppStore((s) => s.activeTabId)` returns a frozen value after the first `set()` call (see existing compat getter gotcha). Effects that depend on it will never re-trigger on tab switch. Use `useAppStore(selectActiveTabPath)` or `useAppStore(selectActiveTab)` from the memoized selectors instead. Bug confirmed in ContextPanel backlinks/bookmarks (#61).
 - **`drawSelection()` is required for correct cursor rendering.** The editor uses CM6's `drawSelection()` extension to render the cursor independently of the browser's native caret. Without it, WebKit misplaces the cursor around replace decorations. Don't remove it from `buildExtensions()` in Editor.tsx.
 - **Never use `display: none` on `.cm-line` elements.** CM6's heightmap expects all lines to exist in the DOM. Use `height: 0 !important; overflow: hidden !important; padding: 0 !important;` instead to visually collapse lines while keeping them measurable.
+- **`indentWithTab` is registered in the default keymap.** It handles Tab/Shift-Tab outside lists and tables, using the configured `indentUnit`. Don't remove it — without it, Tab does nothing (or falls through to browser default) when the cursor isn't on a list line or in a table.
+- **Hanging indent metrics are cached at module level.** `hangMetrics` in `livePreview.ts` measures space/digit/bullet/checkbox widths via DOM. Cache is invalidated on font config changes via `resetHangMetrics()` called from the remeasure hook. If widget CSS (`.cm-preview-bullet`, `.cm-preview-alt-cb`) changes margins/sizing, the cache must be invalidated too.
+- **`dir_has_markdown` uses SQLite, not filesystem.** The `list_directory` command checks for empty folders via `db.has_files_under()` — a `SELECT 1 FROM files WHERE path LIKE ?1 LIMIT 1` query. This replaced a recursive filesystem traversal that caused 100% CPU after sleep wake. If the index is stale (e.g. before initial reconciliation), some folders may appear empty temporarily.
