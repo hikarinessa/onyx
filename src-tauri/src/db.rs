@@ -608,6 +608,22 @@ impl Database {
         Ok(results)
     }
 
+    /// Check if any indexed .md file exists under the given directory path.
+    pub fn has_files_under(&self, dir_path: &str) -> bool {
+        let pattern = if dir_path.ends_with('/') {
+            format!("{}%", dir_path)
+        } else {
+            format!("{}/%", dir_path)
+        };
+        self.conn
+            .query_row(
+                "SELECT 1 FROM files WHERE path LIKE ?1 LIMIT 1",
+                params![pattern],
+                |_| Ok(()),
+            )
+            .is_ok()
+    }
+
     /// Batch delete files by path. More efficient than individual deletes for reconciliation.
     pub fn delete_files_batch(&self, paths: &[String]) -> Result<u32, String> {
         if paths.is_empty() {

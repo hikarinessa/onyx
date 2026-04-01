@@ -97,24 +97,9 @@ fn validate_path(path: &PathBuf, state: &State<AppState>) -> Result<(), String> 
     Err(format!("Access denied: path is not under a registered directory"))
 }
 
-/// Check if a directory contains any .md files (recursively).
-fn dir_has_markdown(path: &std::path::Path) -> bool {
-    let Ok(entries) = std::fs::read_dir(path) else { return false };
-    for entry in entries.flatten() {
-        let p = entry.path();
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if name_str.starts_with('.') || IGNORED_NAMES.contains(&name_str.as_ref()) {
-            continue;
-        }
-        if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("md") {
-            return true;
-        }
-        if p.is_dir() && dir_has_markdown(&p) {
-            return true;
-        }
-    }
-    false
+/// Check if a directory contains any indexed .md files (via SQLite, not filesystem).
+fn dir_has_markdown(path: &std::path::Path, db: &crate::db::Database) -> bool {
+    db.has_files_under(&path.to_string_lossy())
 }
 
 #[tauri::command]
@@ -129,6 +114,8 @@ pub fn list_directory(path: String, state: State<AppState>) -> Result<Vec<DirEnt
     let hide_empty = state.config.lock()
         .map(|c| c.behavior.hide_empty_folders)
         .unwrap_or(true);
+
+    let db = state.db.lock().map_err(|e| format!("DB lock error: {}", e))?;
 
     let mut entries: Vec<DirEntry> = std::fs::read_dir(&dir_path)
         .map_err(|e| format!("Failed to read directory: {}", e))?
@@ -153,7 +140,7 @@ pub fn list_directory(path: String, state: State<AppState>) -> Result<Vec<DirEnt
             }
 
             // Hide empty folders if setting is enabled
-            if is_dir && hide_empty && !dir_has_markdown(&path) {
+            if is_dir && hide_empty && !dir_has_markdown(&path, &db) {
                 return None;
             }
 
