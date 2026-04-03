@@ -977,16 +977,18 @@ function addInlineDecorations(
     }
   }
 
+  // Inline code first — claim these ranges so no other decorations apply inside backticks
+  matchInline(INLINE_CODE_RE, 1, DECO_CODE_NOOP, false);
+
   // Order matters: longer markers first to prevent partial matches
-  matchInline(BOLD_ITALIC_RE, 3, DECO_BOLD_ITALIC, false);
-  matchInline(BOLD_ITALIC_UNDER_RE, 3, DECO_BOLD_ITALIC, false);
+  matchInline(BOLD_ITALIC_RE, 3, DECO_BOLD_ITALIC);
+  matchInline(BOLD_ITALIC_UNDER_RE, 3, DECO_BOLD_ITALIC);
   matchInline(BOLD_RE, 2, DECO_BOLD);
   matchInline(BOLD_UNDER_RE, 2, DECO_BOLD);
   matchInline(ITALIC_STAR_RE, 1, DECO_ITALIC);
   matchInline(ITALIC_UNDER_RE, 1, DECO_ITALIC);
   matchInline(STRIKETHROUGH_RE, 2, DECO_STRIKETHROUGH);
   matchInline(HIGHLIGHT_RE, 2, DECO_HIGHLIGHT);
-  matchInline(INLINE_CODE_RE, 1, DECO_CODE_NOOP);
 
   // Wikilinks
   WIKILINK_RE.lastIndex = 0;
