@@ -9,6 +9,7 @@ import * as fileOps from "../lib/fileOps";
 import type { DirEntry } from "../types";
 import { BookmarkStrip } from "./BookmarkStrip";
 import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
+import { getSortOrder } from "../lib/configBridge";
 
 // Pointer-based drag state (HTML5 drag-drop doesn't work in Tauri — native handler intercepts drops)
 let dragState: {
@@ -128,36 +129,37 @@ interface TreeNodeProps {
   activeFilePath: string | null;
   renamingPath: string | null;
   fileTreeVersion: number;
+  sortOrder: string;
   onFileClick: (path: string, name: string, metaKey: boolean) => void;
   onContextMenu: (e: React.MouseEvent, entry: DirEntry) => void;
   onRenameSubmit: (entry: DirEntry, newName: string) => void;
   onRenameCancel: () => void;
 }
 
-function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion, onFileClick, onContextMenu, onRenameSubmit, onRenameCancel }: TreeNodeProps) {
+function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion, sortOrder, onFileClick, onContextMenu, onRenameSubmit, onRenameCancel }: TreeNodeProps) {
   const expandedSubdirs = useAppStore((s) => s.expandedSubdirs);
   const toggleSubdirExpanded = useAppStore((s) => s.toggleSubdirExpanded);
   const expanded = entry.is_dir && expandedSubdirs.includes(entry.path);
   const [children, setChildren] = useState<DirEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  // Re-fetch children when fileTreeVersion bumps (file was created/renamed/deleted)
+  // Re-fetch children when fileTreeVersion bumps or sort order changes
   useEffect(() => {
     if (expanded && loaded && entry.is_dir) {
-      invoke<DirEntry[]>("list_directory", { path: entry.path })
+      invoke<DirEntry[]>("list_directory", { path: entry.path, sortOrder })
         .then(setChildren)
         .catch(() => { setChildren([]); setLoaded(false); });
     }
-  }, [fileTreeVersion]); // eslint-disable-line -- only re-fetch on version bump
+  }, [fileTreeVersion, sortOrder]); // eslint-disable-line -- only re-fetch on version/sort bump
 
   // Load children when first expanded (from persisted state or user click)
   useEffect(() => {
     if (expanded && !loaded && entry.is_dir) {
-      invoke<DirEntry[]>("list_directory", { path: entry.path })
+      invoke<DirEntry[]>("list_directory", { path: entry.path, sortOrder })
         .then((entries) => { setChildren(entries); setLoaded(true); })
         .catch(() => {});
     }
-  }, [expanded, loaded, entry.is_dir, entry.path]);
+  }, [expanded, loaded, entry.is_dir, entry.path, sortOrder]);
 
   const toggle = async (e: React.MouseEvent) => {
     if (!entry.is_dir) {
@@ -169,6 +171,7 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
       try {
         const entries = await invoke<DirEntry[]>("list_directory", {
           path: entry.path,
+          sortOrder,
         });
         setChildren(entries);
         setLoaded(true);
@@ -229,6 +232,7 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
               activeFilePath={activeFilePath}
               renamingPath={renamingPath}
               fileTreeVersion={fileTreeVersion}
+              sortOrder={sortOrder}
               onFileClick={onFileClick}
               onContextMenu={onContextMenu}
               onRenameSubmit={onRenameSubmit}
@@ -241,10 +245,16 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
   );
 }
 
+const SORT_CYCLE: Array<"name" | "modified" | "created"> = ["name", "modified", "created"];
+const SORT_LABELS: Record<string, string> = { name: "Name", modified: "Modified", created: "Created" };
+const SORT_ICONS: Record<string, string> = { name: "arrow-down-a-z", modified: "clock", created: "calendar-plus" };
+
 export function Sidebar() {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const activeTabPath = useAppStore(selectActiveTabPath);
   const fileTreeVersion = useAppStore((s) => s.fileTreeVersion);
+  const sortOrder = useAppStore((s) => s.sortOrder);
+  const setSortOrder = useAppStore((s) => s.setSortOrder);
   const collapsedDirs = useAppStore((s) => s.collapsedDirs);
   const toggleDirCollapsed = useAppStore((s) => s.toggleDirCollapsed);
   const orphanPaths = useAppStore((s) => s.orphanPaths);
@@ -315,6 +325,7 @@ export function Sidebar() {
         try {
           const dirEntries = await invoke<DirEntry[]>("list_directory", {
             path: dir.path,
+            sortOrder,
           });
           entries.set(dir.id, dirEntries);
         } catch (err) {
@@ -326,7 +337,7 @@ export function Sidebar() {
     } catch (err) {
       console.error("Failed to load directories:", err);
     }
-  }, []);
+  }, [sortOrder]);
 
   useEffect(() => {
     loadDirectories();
@@ -600,8 +611,10 @@ export function Sidebar() {
   const sidebarTab = useAppStore((s) => s.sidebarTab);
   const setSidebarTab = useAppStore((s) => s.setSidebarTab);
 
+  const sidebarWidthPx = useAppStore((s) => s.sidebarWidth);
+
   return (
-    <div className={`sidebar ${sidebarVisible ? "" : "collapsed"}`}>
+    <div className={`sidebar ${sidebarVisible ? "" : "collapsed"}`} style={sidebarVisible ? { width: sidebarWidthPx } : undefined}>
       <div className="sidebar-tabs">
         <button
           className={`sidebar-tab ${sidebarTab === "files" ? "active" : ""}`}
@@ -623,13 +636,27 @@ export function Sidebar() {
         <SearchPanel />
       ) : (
       <>
-      <button
-        className="sidebar-add-folder-btn"
-        onClick={addDirectory}
-        title="Add Folder"
-      >
-        <Icon name="folder-plus" size={14} /> Add Folder
-      </button>
+      <div className="sidebar-toolbar">
+        <button
+          className="sidebar-add-folder-btn"
+          onClick={addDirectory}
+          title="Add Folder"
+        >
+          <Icon name="folder-plus" size={14} /> Add Folder
+        </button>
+        <button
+          className="sidebar-sort-btn"
+          onClick={() => {
+            const idx = SORT_CYCLE.indexOf(sortOrder as "name" | "modified" | "created");
+            const next = SORT_CYCLE[(idx + 1) % SORT_CYCLE.length];
+            setSortOrder(next);
+            invoke("update_config", { json: JSON.stringify({ behavior: { sort_order: next } }) }).catch(() => {});
+          }}
+          title={`Sort by: ${SORT_LABELS[sortOrder] || "Name"}`}
+        >
+          <Icon name={SORT_ICONS[sortOrder] || "arrow-down-a-z"} size={14} />
+        </button>
+      </div>
       <div className="sidebar-directories">
       {directories.length === 0 ? (
         <div className="sidebar-empty">
@@ -696,6 +723,7 @@ export function Sidebar() {
                       activeFilePath={activeTabPath ?? ""}
                       renamingPath={renamingPath}
                       fileTreeVersion={fileTreeVersion}
+                      sortOrder={sortOrder}
                       onFileClick={handleFileClick}
                       onContextMenu={handleContextMenu}
                       onRenameSubmit={handleRenameSubmit}

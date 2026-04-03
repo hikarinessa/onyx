@@ -167,6 +167,16 @@ interface AppState {
   sidebarTab: "files" | "search";
   setSidebarTab: (tab: "files" | "search") => void;
 
+  // File tree sort order
+  sortOrder: "name" | "modified" | "created";
+  setSortOrder: (order: "name" | "modified" | "created") => void;
+
+  // Panel widths (resizable via drag)
+  sidebarWidth: number;
+  contextPanelWidth: number;
+  setSidebarWidth: (width: number) => void;
+  setContextPanelWidth: (width: number) => void;
+
   // Lint
   lintErrors: number;
   lintWarnings: number;
@@ -685,6 +695,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   sidebarTab: "files",
   setSidebarTab: (tab) => set({ sidebarTab: tab }),
+
+  sortOrder: "name",
+  setSortOrder: (order) => set({ sortOrder: order }),
+
+  sidebarWidth: 240,
+  contextPanelWidth: 280,
+  setSidebarWidth: (width) => set({ sidebarWidth: width }),
+  setContextPanelWidth: (width) => set({ contextPanelWidth: width }),
 
   lintErrors: 0,
   lintWarnings: 0,

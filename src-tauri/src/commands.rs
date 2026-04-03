@@ -70,6 +70,10 @@ pub struct DirEntry {
     pub path: String,
     pub is_dir: bool,
     pub extension: Option<String>,
+    /// Seconds since UNIX epoch (modified time)
+    pub modified: Option<f64>,
+    /// Seconds since UNIX epoch (created time)
+    pub created: Option<f64>,
 }
 
 /// Canonicalize a path, falling back to canonicalizing the parent for new files.
@@ -103,7 +107,7 @@ fn dir_has_markdown(path: &std::path::Path, db: &crate::db::Database) -> bool {
 }
 
 #[tauri::command]
-pub fn list_directory(path: String, state: State<AppState>) -> Result<Vec<DirEntry>, String> {
+pub fn list_directory(path: String, sort_order: Option<String>, state: State<AppState>) -> Result<Vec<DirEntry>, String> {
     let dir_path = PathBuf::from(&path);
     validate_path(&dir_path, &state)?;
 
@@ -150,18 +154,47 @@ pub fn list_directory(path: String, state: State<AppState>) -> Result<Vec<DirEnt
                 path.extension().map(|e| e.to_string_lossy().to_string())
             };
 
+            // Read timestamps from metadata
+            let meta = std::fs::metadata(&path).ok();
+            let modified = meta.as_ref().and_then(|m| m.modified().ok()).map(|t| {
+                t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
+            });
+            let created = meta.as_ref().and_then(|m| m.created().ok()).map(|t| {
+                t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
+            });
+
             Some(DirEntry {
                 name,
                 path: path.to_string_lossy().to_string(),
                 is_dir,
                 extension,
+                modified,
+                created,
             })
         })
         .collect();
 
+    let sort = sort_order.as_deref().unwrap_or("name");
     entries.sort_by(|a, b| {
+        // Directories always first
         b.is_dir.cmp(&a.is_dir).then_with(|| {
-            a.name.to_lowercase().cmp(&b.name.to_lowercase())
+            match sort {
+                "modified" => {
+                    // Newest first
+                    let am = a.modified.unwrap_or(0.0);
+                    let bm = b.modified.unwrap_or(0.0);
+                    bm.partial_cmp(&am).unwrap_or(std::cmp::Ordering::Equal)
+                }
+                "created" => {
+                    // Newest first
+                    let ac = a.created.unwrap_or(0.0);
+                    let bc = b.created.unwrap_or(0.0);
+                    bc.partial_cmp(&ac).unwrap_or(std::cmp::Ordering::Equal)
+                }
+                _ => {
+                    a.name.to_lowercase().cmp(&b.name.to_lowercase())
+                }
+            }
         })
     });
 

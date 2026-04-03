@@ -4,4 +4,8 @@ export interface DirEntry {
   path: string;
   is_dir: boolean;
   extension: string | null;
+  /** Seconds since UNIX epoch (modified time) */
+  modified: number | null;
+  /** Seconds since UNIX epoch (created time) */
+  created: number | null;
 }

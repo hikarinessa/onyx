@@ -7,6 +7,7 @@ export function setRemeasureHook(fn: () => void) {
   remeasureHook = fn;
 }
 
+let sortOrder: string = "name";
 let autoSaveMs = 500;
 let lintingEnabled = true;
 let autofixOnSave = false;
@@ -28,6 +29,10 @@ let ruleHeadingIncrement = true;
 let ruleConsistentListMarker = true;
 let ruleHrStyle = true;
 let ruleEmptyLinks = true;
+
+export function getSortOrder(): string {
+  return sortOrder;
+}
 
 export function getAutoSaveMs(): number {
   return autoSaveMs;
@@ -237,6 +242,23 @@ export function applyConfig(config: AppConfig) {
   // Behavior
   autoSaveMs = config.behavior.auto_save_ms;
   spellcheckEnabled = config.behavior.spellcheck;
+  sortOrder = config.behavior.sort_order || "name";
+
+  // Sync sort order and panel widths to Zustand store (lazy import to avoid circular dependency)
+  const sidebarW = config.appearance.sidebar_width;
+  const contextW = config.appearance.context_panel_width;
+  import("../stores/app").then(({ useAppStore }) => {
+    const validOrders = ["name", "modified", "created"] as const;
+    const order = validOrders.includes(sortOrder as typeof validOrders[number])
+      ? (sortOrder as typeof validOrders[number])
+      : "name";
+    const state = useAppStore.getState();
+    // Only set widths from config if they haven't been overridden by session restore
+    const updates: Record<string, unknown> = { sortOrder: order };
+    if (state.sidebarWidth === 240) updates.sidebarWidth = sidebarW;
+    if (state.contextPanelWidth === 280) updates.contextPanelWidth = contextW;
+    useAppStore.setState(updates);
+  });
   document.documentElement.setAttribute("spellcheck", config.behavior.spellcheck ? "true" : "false");
 
   // Style

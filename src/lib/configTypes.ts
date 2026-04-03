@@ -44,6 +44,7 @@ export interface AppConfig {
     new_note_location: string;
     hide_empty_folders: boolean;
     template_dirs: string[];
+    sort_order: string;
   };
   style: {
     accent_color: string;

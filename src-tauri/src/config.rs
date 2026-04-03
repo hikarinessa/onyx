@@ -50,6 +50,7 @@ pub struct BehaviorConfig {
     pub new_note_location: String,
     pub hide_empty_folders: bool,
     pub template_dirs: Vec<String>,
+    pub sort_order: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +142,7 @@ impl Default for BehaviorConfig {
             new_note_location: "first_dir".to_string(),
             hide_empty_folders: true,
             template_dirs: Vec::new(),
+            sort_order: "name".to_string(),
         }
     }
 }
