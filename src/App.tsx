@@ -412,7 +412,7 @@ function registerCommands() {
     id: "file.print",
     label: "Print / Export PDF",
     category: "File",
-    execute: () => invoke("print_page").catch(() => {}),
+    execute: () => { invoke("print_page").catch(() => {}); },
   });
 
   // Register keybindings for every command that has a shortcut

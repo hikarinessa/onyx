@@ -313,14 +313,19 @@ function renderInline(text: string): string {
 // ── Widgets ──
 
 class EmbedWidget extends WidgetType {
-  constructor(
-    readonly link: string,
-    readonly content: string,
-    readonly depth: number,
-    readonly ancestors: Set<string>,
-    readonly contextPath: string,
-  ) {
+  link: string;
+  content: string;
+  depth: number;
+  ancestors: Set<string>;
+  contextPath: string;
+
+  constructor(link: string, content: string, depth: number, ancestors: Set<string>, contextPath: string) {
     super();
+    this.link = link;
+    this.content = content;
+    this.depth = depth;
+    this.ancestors = ancestors;
+    this.contextPath = contextPath;
   }
 
   eq(other: EmbedWidget): boolean {
@@ -375,8 +380,11 @@ class EmbedWidget extends WidgetType {
 }
 
 class EmbedLoadingWidget extends WidgetType {
-  constructor(readonly link: string) {
+  link: string;
+
+  constructor(link: string) {
     super();
+    this.link = link;
   }
 
   eq(other: EmbedLoadingWidget): boolean {
@@ -403,11 +411,13 @@ class EmbedLoadingWidget extends WidgetType {
 }
 
 class EmbedErrorWidget extends WidgetType {
-  constructor(
-    readonly link: string,
-    readonly error: string,
-  ) {
+  link: string;
+  error: string;
+
+  constructor(link: string, error: string) {
     super();
+    this.link = link;
+    this.error = error;
   }
 
   eq(other: EmbedErrorWidget): boolean {
