@@ -842,10 +842,8 @@ export function ContextPanel() {
     }
   }, []);
 
-  const contextPanelWidthPx = useAppStore((s) => s.contextPanelWidth);
-
   return (
-    <div className={`context-panel ${visible ? "" : "collapsed"}`} style={visible ? { width: contextPanelWidthPx } : undefined}>
+    <div className={`context-panel ${visible ? "" : "collapsed"}`}>
       {/* Calendar — pinned */}
       <div className="context-panel-pinned">
         <Calendar onDateClick={handleDateClick} onWeekClick={handleWeekClick} onDateContextMenu={handleDateContextMenu} />

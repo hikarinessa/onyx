@@ -30,10 +30,6 @@ let ruleConsistentListMarker = true;
 let ruleHrStyle = true;
 let ruleEmptyLinks = true;
 
-export function getSortOrder(): string {
-  return sortOrder;
-}
-
 export function getAutoSaveMs(): number {
   return autoSaveMs;
 }

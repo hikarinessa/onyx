@@ -9,8 +9,6 @@ import * as fileOps from "../lib/fileOps";
 import type { DirEntry } from "../types";
 import { BookmarkStrip } from "./BookmarkStrip";
 import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
-import { getSortOrder } from "../lib/configBridge";
-
 // Pointer-based drag state (HTML5 drag-drop doesn't work in Tauri — native handler intercepts drops)
 let dragState: {
   sourcePath: string;
@@ -611,10 +609,8 @@ export function Sidebar() {
   const sidebarTab = useAppStore((s) => s.sidebarTab);
   const setSidebarTab = useAppStore((s) => s.setSidebarTab);
 
-  const sidebarWidthPx = useAppStore((s) => s.sidebarWidth);
-
   return (
-    <div className={`sidebar ${sidebarVisible ? "" : "collapsed"}`} style={sidebarVisible ? { width: sidebarWidthPx } : undefined}>
+    <div className={`sidebar ${sidebarVisible ? "" : "collapsed"}`}>
       <div className="sidebar-tabs">
         <button
           className={`sidebar-tab ${sidebarTab === "files" ? "active" : ""}`}

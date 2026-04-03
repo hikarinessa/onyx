@@ -693,8 +693,6 @@ export default function App() {
   // ── Resize handles for sidebar and context panel ──
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const contextPanelVisible = useAppStore((s) => s.contextPanelVisible);
-  const sidebarWidth = useAppStore((s) => s.sidebarWidth);
-  const contextPanelWidth = useAppStore((s) => s.contextPanelWidth);
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
   const setContextPanelWidth = useAppStore((s) => s.setContextPanelWidth);
 
@@ -702,11 +700,13 @@ export default function App() {
 
   const handleResizePointerDown = useCallback((target: "sidebar" | "context", e: React.PointerEvent) => {
     e.preventDefault();
-    const startWidth = target === "sidebar" ? sidebarWidth : contextPanelWidth;
+    const startWidth = target === "sidebar"
+      ? useAppStore.getState().sidebarWidth
+      : useAppStore.getState().contextPanelWidth;
     resizingRef.current = { target, startX: e.clientX, startWidth };
     document.body.classList.add("resizing-panels");
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  }, [sidebarWidth, contextPanelWidth]);
+  }, []);
 
   const handleResizePointerMove = useCallback((e: React.PointerEvent) => {
     if (!resizingRef.current) return;
@@ -730,12 +730,19 @@ export default function App() {
     resizingRef.current = null;
     document.body.classList.remove("resizing-panels");
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    // Persist to config
-    const width = target === "sidebar"
+    // Persist to config — round to integer for Rust u32
+    const width = Math.round(target === "sidebar"
       ? useAppStore.getState().sidebarWidth
-      : useAppStore.getState().contextPanelWidth;
+      : useAppStore.getState().contextPanelWidth);
     const key = target === "sidebar" ? "sidebar_width" : "context_panel_width";
     invoke("update_config", { json: JSON.stringify({ appearance: { [key]: width } }) }).catch(() => {});
+  }, []);
+
+  const handleResizePointerCancel = useCallback((e: React.PointerEvent) => {
+    if (!resizingRef.current) return;
+    resizingRef.current = null;
+    document.body.classList.remove("resizing-panels");
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   }, []);
 
   return (
@@ -751,6 +758,7 @@ export default function App() {
             onPointerDown={(e) => handleResizePointerDown("sidebar", e)}
             onPointerMove={handleResizePointerMove}
             onPointerUp={handleResizePointerUp}
+            onPointerCancel={handleResizePointerCancel}
           />
         )}
         <div className="editor-column">
@@ -765,6 +773,7 @@ export default function App() {
             onPointerDown={(e) => handleResizePointerDown("context", e)}
             onPointerMove={handleResizePointerMove}
             onPointerUp={handleResizePointerUp}
+            onPointerCancel={handleResizePointerCancel}
           />
         )}
         <ErrorBoundary label="context panel">
