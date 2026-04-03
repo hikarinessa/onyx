@@ -143,7 +143,6 @@
     align-items: stretch;
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border-subtle);
-    overflow-x: auto;
     flex-shrink: 0;
   }
 }
@@ -205,9 +204,51 @@
     color: var(--close-btn-text);
   }
 
-  /* Tab bar content */
-  .tabbar::-webkit-scrollbar {
+  /* Tab bar scrollable area */
+  .tabbar-scroll {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    overflow-x: auto;
+    min-width: 0;
+  }
+
+  .tabbar-scroll::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Tab bar scroll arrow buttons */
+  .tabbar-scroll-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    flex-shrink: 0;
+    background: var(--bg-surface);
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    z-index: 1;
+  }
+
+  .tabbar-scroll-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  .tabbar-scroll-btn-disabled {
+    color: var(--text-tertiary);
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .tabbar-scroll-left {
+    border-right: 1px solid var(--border-subtle);
+  }
+
+  .tabbar-scroll-right {
+    border-left: 1px solid var(--border-subtle);
   }
 
   .tabbar-inactive {
