@@ -1085,13 +1085,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         builder.add(line.from, line.from, Decoration.line({
           attributes: { style: listLineStyle(hangPx, indent, unitLen, metrics.space) },
         }));
-        // Replace the marker character (-, *, +) with a bullet dot
-        builder.add(
-          markerStart,
-          markerStart + 1,
-          Decoration.replace({ widget: new BulletWidget() })
-        );
-        // Fold chevron for list items with nested children — placed at bullet position
+        // Fold chevron for list items with nested children — before bullet
         const listFold = listFoldRange(view.state, line.from, line.to);
         if (listFold) {
           let isListFolded = false;
@@ -1103,12 +1097,17 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
             }
             foldIter.next();
           }
-          // Place at the marker position (where bullet dot is), side: -1 = before
           builder.add(markerStart, markerStart, Decoration.widget({
             widget: new ListFoldWidget(line.from, isListFolded),
             side: -1,
           }));
         }
+        // Replace the marker character (-, *, +) with a bullet dot
+        builder.add(
+          markerStart,
+          markerStart + 1,
+          Decoration.replace({ widget: new BulletWidget() })
+        );
         // Process inline decorations on the rest of the line
         const afterBullet = text.slice(bulletMatch[0].length);
         if (afterBullet.length > 0) {
@@ -1127,7 +1126,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         builder.add(line.from, line.from, Decoration.line({
           attributes: { style: listLineStyle(hangPx, indentOl, unitLen, metrics.space) },
         }));
-        // Fold chevron for ordered list items with nested children
+        // Fold chevron for ordered list items with nested children — before number
         const olFold = listFoldRange(view.state, line.from, line.to);
         if (olFold) {
           let isOlFolded = false;
@@ -1139,7 +1138,6 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
             }
             olFoldIter.next();
           }
-          // Place before the number marker
           const olMarkerStart = line.from + indentOl;
           builder.add(olMarkerStart, olMarkerStart, Decoration.widget({
             widget: new ListFoldWidget(line.from, isOlFolded),
