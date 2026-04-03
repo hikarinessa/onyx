@@ -626,6 +626,12 @@ function AppearanceSection({
           onChange={(e) => updateConfig({ editor: { preview_font_size: Number(e.target.value) } })}
         />
         <span className="settings-range-value">{config.editor.preview_font_size ?? config.editor.font_size}px</span>
+        {config.editor.preview_font_size != null && (
+          <button className="settings-range-reset" title="Reset to base font size"
+            onClick={() => updateConfig({ editor: { preview_font_size: null } })}>
+            <Icon name="x" size={12} />
+          </button>
+        )}
       </SettingRow>
 
       <SettingRow label="Source mode font size" description={`${config.editor.source_font_size ?? config.editor.font_size}px`}>
@@ -634,6 +640,12 @@ function AppearanceSection({
           onChange={(e) => updateConfig({ editor: { source_font_size: Number(e.target.value) } })}
         />
         <span className="settings-range-value">{config.editor.source_font_size ?? config.editor.font_size}px</span>
+        {config.editor.source_font_size != null && (
+          <button className="settings-range-reset" title="Reset to base font size"
+            onClick={() => updateConfig({ editor: { source_font_size: null } })}>
+            <Icon name="x" size={12} />
+          </button>
+        )}
       </SettingRow>
 
       <SettingRow label="Line height" description={`${config.editor.line_height.toFixed(1)}`}>
