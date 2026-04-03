@@ -1943,6 +1943,8 @@
     font-size: 12px;
     color: var(--text-secondary);
     font-family: var(--font-mono);
+    min-width: 48px;
+    text-align: right;
   }
 
   .settings-range-reset {
@@ -1964,8 +1966,6 @@
   .settings-range-reset:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
-    min-width: 48px;
-    text-align: right;
   }
 
   /* Select dropdown */
