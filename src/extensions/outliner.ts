@@ -1,6 +1,7 @@
 import { EditorView } from "@codemirror/view";
 import { EditorSelection, type ChangeSpec } from "@codemirror/state";
-import { indentUnit } from "@codemirror/language";
+import type { EditorState, Extension } from "@codemirror/state";
+import { foldService, indentUnit } from "@codemirror/language";
 
 /**
  * Outliner keybindings for list editing:
@@ -231,3 +232,72 @@ export const outlinerKeymap = [
   { key: "Enter", run: newListItem },
   { key: "Backspace", run: backspaceOnEmptyItem },
 ];
+
+/**
+ * List fold: collapse nested list items under their parent.
+ *
+ * A list item is foldable when the next line(s) are indented deeper.
+ * The foldable range extends from the end of the parent line to the
+ * last contiguous line that is more deeply indented (or a blank line
+ * followed by more deeply indented content).
+ *
+ * Integrates with CM6's codeFolding() + foldGutter() via foldService.
+ */
+
+function listItemIndent(lineText: string): number | null {
+  const m = lineText.match(LIST_RE);
+  if (!m) return null;
+  return m[1].length;
+}
+
+export function listFoldRange(
+  state: EditorState,
+  lineStart: number,
+  lineEnd: number,
+): { from: number; to: number } | null {
+  const doc = state.doc;
+  const line = doc.lineAt(lineStart);
+
+  // Must be a list item
+  const parentIndent = listItemIndent(line.text);
+  if (parentIndent === null) return null;
+
+  // Check that the next line exists and is more deeply indented
+  if (line.number >= doc.lines) return null;
+  const nextLine = doc.line(line.number + 1);
+  const nextIndent = listItemIndent(nextLine.text);
+  // Next line must be a list item indented deeper than parent
+  if (nextIndent === null || nextIndent <= parentIndent) return null;
+
+  // Walk forward: include all lines that are either:
+  // - list items indented deeper than the parent
+  // - blank lines (only if followed by deeper-indented content)
+  // - non-list continuation lines indented deeper than the parent
+  let lastContentLineEnd = nextLine.to;
+  for (let i = line.number + 1; i <= doc.lines; i++) {
+    const l = doc.line(i);
+    const trimmed = l.text.trimStart();
+
+    if (trimmed === "") {
+      // Blank line — peek ahead to see if deeper content continues
+      continue;
+    }
+
+    const ind = listItemIndent(l.text);
+    // Non-list line: check raw indent (continuation text)
+    const rawIndent = l.text.length - trimmed.length;
+
+    if (ind !== null && ind <= parentIndent) break; // sibling or parent-level item
+    if (ind === null && rawIndent <= parentIndent) break; // unindented non-list line
+
+    lastContentLineEnd = l.to;
+  }
+
+  // Fold from end of parent line to end of last child line
+  if (lastContentLineEnd <= lineEnd) return null;
+  return { from: lineEnd, to: lastContentLineEnd };
+}
+
+export function listFoldExtension(): Extension {
+  return foldService.of(listFoldRange);
+}

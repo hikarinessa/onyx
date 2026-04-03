@@ -23,7 +23,7 @@ import { headingFoldExtension } from "../extensions/headingFold";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
 import { tagExtension } from "../extensions/tags";
 import { formattingKeymap } from "../extensions/formatting";
-import { outlinerKeymap } from "../extensions/outliner";
+import { outlinerKeymap, listFoldExtension } from "../extensions/outliner";
 import { tableEditorExtension } from "../extensions/tableEditor";
 import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
@@ -292,6 +292,7 @@ function buildExtensions(): Extension[] {
     updateListener,
     frontmatterExtension(),
     headingFoldExtension(),
+    listFoldExtension(),
     wikilinkExtension(),
     tagExtension(),
     urlPasteExtension,
