@@ -813,7 +813,7 @@ function getHangMetrics(view: EditorView): { space: number; digit: number; bulle
 
 /** Build inline style for a list line: hanging indent + vertical indent guides. */
 function listLineStyle(hangPx: number, indentSpaces: number, unitLen: number, spaceWidth: number): string {
-  let style = `padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important`;
+  let style = `position: relative; padding-left: ${hangPx}px !important; text-indent: -${hangPx}px !important`;
   const depth = unitLen > 0 ? Math.floor(indentSpaces / unitLen) : 0;
   if (depth > 0 && getIndentGuides()) {
     const guides: string[] = [];
@@ -1091,7 +1091,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
           markerStart + 1,
           Decoration.replace({ widget: new BulletWidget() })
         );
-        // Fold chevron for list items with nested children
+        // Fold chevron for list items with nested children — placed at bullet position
         const listFold = listFoldRange(view.state, line.from, line.to);
         if (listFold) {
           let isListFolded = false;
@@ -1103,9 +1103,10 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
             }
             foldIter.next();
           }
-          builder.add(line.to, line.to, Decoration.widget({
+          // Place at the marker position (where bullet dot is), side: -1 = before
+          builder.add(markerStart, markerStart, Decoration.widget({
             widget: new ListFoldWidget(line.from, isListFolded),
-            side: 1,
+            side: -1,
           }));
         }
         // Process inline decorations on the rest of the line
@@ -1138,9 +1139,11 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
             }
             olFoldIter.next();
           }
-          builder.add(line.to, line.to, Decoration.widget({
+          // Place before the number marker
+          const olMarkerStart = line.from + indentOl;
+          builder.add(olMarkerStart, olMarkerStart, Decoration.widget({
             widget: new ListFoldWidget(line.from, isOlFolded),
-            side: 1,
+            side: -1,
           }));
         }
         // Process inline decorations on the rest of the line

@@ -3242,7 +3242,7 @@
   /* Source mode: plain monospace text, keep syntax colors */
   .editor-container.source-mode .cm-content {
     font-family: var(--font-mono);
-    font-size: 14px;
+    font-size: var(--editor-source-font-size, var(--editor-font-size, 14px)) !important;
     line-height: 1.6;
   }
 
@@ -3458,20 +3458,22 @@
   /* ── List fold chevron ── */
 
   .cm-list-fold {
+    position: absolute;
+    left: -18px;
     display: inline-flex;
     align-items: center;
-    margin-left: 6px;
     cursor: pointer;
     opacity: 0;
     color: var(--text-tertiary);
     transition: opacity var(--transition-fast), transform var(--transition-fast);
     transform: rotate(90deg);
-    vertical-align: middle;
+    top: 50%;
+    transform: translateY(-50%) rotate(90deg);
   }
 
   .cm-list-fold.folded {
-    transform: rotate(0deg);
-    opacity: 0.5;
+    transform: translateY(-50%) rotate(0deg);
+    opacity: 0.6;
   }
 
   .cm-list-fold svg {
