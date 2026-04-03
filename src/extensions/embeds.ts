@@ -2,6 +2,7 @@ import {
   Decoration,
   type DecorationSet,
   EditorView,
+  ViewPlugin,
   WidgetType,
 } from "@codemirror/view";
 import {
@@ -30,6 +31,14 @@ interface CacheEntry {
 
 const embedCache = new Map<string, CacheEntry>();
 const inflightFetches = new Map<string, Promise<void>>();
+/** Reverse map: resolved absolute path → set of link names that resolved to it */
+const pathToLinks = new Map<string, Set<string>>();
+
+function registerPathLink(resolvedPath: string, link: string) {
+  let links = pathToLinks.get(resolvedPath);
+  if (!links) { links = new Set(); pathToLinks.set(resolvedPath, links); }
+  links.add(link);
+}
 
 // ── Effects ──
 
@@ -48,12 +57,20 @@ function initFsListener() {
   fsListenerInit = true;
   listen<{ kind: string; path: string }>("fs:change", (event) => {
     const { path } = event.payload;
-    if (embedCache.has(path)) {
-      embedCache.delete(path);
-      inflightFetches.delete(path);
-      for (const view of activeViews) {
-        view.dispatch({ effects: embedContentReady.of(undefined) });
+    // Invalidate the resolved-path entry and all link-name entries that map to it
+    const links = pathToLinks.get(path);
+    if (!embedCache.has(path) && !links) return;
+    embedCache.delete(path);
+    inflightFetches.delete(path);
+    if (links) {
+      for (const link of links) {
+        embedCache.delete(link);
+        inflightFetches.delete(link);
       }
+      pathToLinks.delete(path);
+    }
+    for (const view of activeViews) {
+      view.dispatch({ effects: embedContentReady.of(undefined) });
     }
   });
 }
@@ -90,6 +107,7 @@ async function resolveAndFetch(
   if (ancestors.has(resolvedPath)) {
     embedCache.set(link, { content: "", status: "error", error: "Circular embed" });
     embedCache.set(resolvedPath, { content: "", status: "error", error: "Circular embed" });
+    registerPathLink(resolvedPath, link);
     view.dispatch({ effects: embedContentReady.of(undefined) });
     return;
   }
@@ -99,6 +117,7 @@ async function resolveAndFetch(
     const entry: CacheEntry = { content, status: "ready" };
     embedCache.set(link, entry);
     embedCache.set(resolvedPath, entry);
+    registerPathLink(resolvedPath, link);
 
     // Pre-fetch nested embeds (depth + 1) if within cap
     if (depth < 1) {
@@ -119,6 +138,7 @@ async function resolveAndFetch(
   } catch {
     embedCache.set(link, { content: "", status: "error", error: "Failed to read file" });
     embedCache.set(resolvedPath, { content: "", status: "error", error: "Failed to read file" });
+    registerPathLink(resolvedPath, link);
   }
 
   view.dispatch({ effects: embedContentReady.of(undefined) });
@@ -149,7 +169,6 @@ function renderMarkdownToHtml(
   const lines = content.split("\n");
   const parts: string[] = [];
   let inFrontmatter = false;
-  let frontmatterDone = false;
   let inCodeBlock = false;
   let codeLines: string[] = [];
 
@@ -164,7 +183,6 @@ function renderMarkdownToHtml(
     if (inFrontmatter) {
       if (raw.trim() === "---") {
         inFrontmatter = false;
-        frontmatterDone = true;
       }
       continue;
     }
@@ -218,8 +236,8 @@ function renderMarkdownToHtml(
       continue;
     }
 
-    // Horizontal rule
-    if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(raw) && frontmatterDone) {
+    // Horizontal rule (skip `---` only when it could be a frontmatter closer on line 2)
+    if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(raw)) {
       parts.push(`<hr class="cm-embed-hr">`);
       continue;
     }
@@ -428,39 +446,44 @@ function buildEmbedDecos(state: import("@codemirror/state").EditorState, view?: 
   const cursorLineNumber = doc.lineAt(cursorLine).number;
   const contextPath = selectActiveTabPath(useAppStore.getState()) || "";
 
-  for (let i = 1; i <= doc.lines; i++) {
-    const line = doc.line(i);
-    const match = line.text.match(EMBED_RE);
-    if (!match) continue;
+  // Scan only visible ranges (with margin) to avoid full-document iteration
+  const ranges = view?.visibleRanges ?? [{ from: 0, to: doc.length }];
+  const margin = 2000; // scan slightly beyond viewport for smooth scrolling
+  for (const { from, to } of ranges) {
+    const startLine = doc.lineAt(Math.max(0, from - margin)).number;
+    const endLine = doc.lineAt(Math.min(doc.length, to + margin)).number;
 
-    // Show raw markdown on cursor line
-    if (i === cursorLineNumber) continue;
+    for (let i = startLine; i <= endLine; i++) {
+      const line = doc.line(i);
+      const match = line.text.match(EMBED_RE);
+      if (!match) continue;
 
-    const link = match[1];
-    const cached = embedCache.get(link);
+      // Show raw markdown on cursor line
+      if (i === cursorLineNumber) continue;
 
-    if (!cached || cached.status === "loading") {
-      // Trigger fetch if we have a view
-      if (view && (!cached || cached.status !== "loading")) {
-        triggerFetch(view, link, contextPath, 0, new Set([contextPath]));
-      } else if (view && cached?.status === "loading") {
-        // Already loading — just show placeholder
+      const link = match[1];
+      const cached = embedCache.get(link);
+
+      if (!cached || cached.status === "loading") {
+        if (view && !cached) {
+          triggerFetch(view, link, contextPath, 0, new Set([contextPath]));
+        }
+        builder.add(line.from, line.to, Decoration.replace({
+          widget: new EmbedLoadingWidget(link),
+          block: true,
+        }));
+      } else if (cached.status === "error") {
+        builder.add(line.from, line.to, Decoration.replace({
+          widget: new EmbedErrorWidget(link, cached.error || "Error"),
+          block: true,
+        }));
+      } else {
+        const ancestors = new Set([contextPath]);
+        builder.add(line.from, line.to, Decoration.replace({
+          widget: new EmbedWidget(link, cached.content, 0, ancestors, contextPath),
+          block: true,
+        }));
       }
-      builder.add(line.from, line.to, Decoration.replace({
-        widget: new EmbedLoadingWidget(link),
-        block: true,
-      }));
-    } else if (cached.status === "error") {
-      builder.add(line.from, line.to, Decoration.replace({
-        widget: new EmbedErrorWidget(link, cached.error || "Error"),
-        block: true,
-      }));
-    } else {
-      const ancestors = new Set([contextPath]);
-      builder.add(line.from, line.to, Decoration.replace({
-        widget: new EmbedWidget(link, cached.content, 0, ancestors, contextPath),
-        block: true,
-      }));
     }
   }
 
@@ -671,8 +694,6 @@ const embedTheme = EditorView.theme({
 });
 
 // ── Export ──
-
-import { ViewPlugin } from "@codemirror/view";
 
 export function embedExtension(): Extension[] {
   initFsListener();
