@@ -211,6 +211,10 @@ export function applyConfig(config: AppConfig) {
   // Editor
   s.setProperty("--font-editor", `"${config.editor.font_family}", Georgia, serif`);
   s.setProperty("--editor-font-size", `${config.editor.font_size}px`);
+  const previewFs = config.editor.preview_font_size ?? config.editor.font_size;
+  const sourceFs = config.editor.source_font_size ?? config.editor.font_size;
+  s.setProperty("--editor-preview-font-size", `${previewFs}px`);
+  s.setProperty("--editor-source-font-size", `${sourceFs}px`);
   s.setProperty("--editor-line-height", `${config.editor.line_height}`);
   s.setProperty("--editor-max-width", config.editor.content_max_width ? `${config.editor.content_max_width}px` : "none");
 

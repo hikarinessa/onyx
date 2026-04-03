@@ -22,6 +22,8 @@ export interface AppConfig {
   editor: {
     font_family: string;
     font_size: number;
+    preview_font_size: number | null;
+    source_font_size: number | null;
     line_height: number;
     content_max_width: number | null;
     default_mode: string;

@@ -22,6 +22,8 @@ pub struct Config {
 pub struct EditorConfig {
     pub font_family: String,
     pub font_size: u32,
+    pub preview_font_size: Option<u32>,
+    pub source_font_size: Option<u32>,
     pub line_height: f64,
     pub content_max_width: Option<u32>,
     pub default_mode: String,
@@ -107,6 +109,8 @@ impl Default for EditorConfig {
         Self {
             font_family: "Literata".to_string(),
             font_size: 16,
+            preview_font_size: None,
+            source_font_size: None,
             line_height: 1.7,
             content_max_width: Some(720),
             default_mode: "preview".to_string(),
