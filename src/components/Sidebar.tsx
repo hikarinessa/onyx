@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore, selectActiveTabPath, selectAllTabs } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
+import { clearEditorCache } from "./Editor";
 import * as fileOps from "../lib/fileOps";
 import type { DirEntry } from "../types";
 import { BookmarkStrip } from "./BookmarkStrip";
@@ -741,7 +742,17 @@ export function Sidebar() {
                     style={{ opacity: 1, fontSize: "12px" }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      useAppStore.getState().removeOrphanPath(p);
+                      const store = useAppStore.getState();
+                      // Close any open tabs for this orphan file
+                      const tabsToClose = store.paneState.panes
+                        .flatMap((pn) => pn.tabs)
+                        .filter((t) => t.path === p)
+                        .map((t) => t.id);
+                      if (tabsToClose.length > 0) {
+                        clearEditorCache(p);
+                        store.removeTabs(tabsToClose);
+                      }
+                      store.removeOrphanPath(p);
                       invoke("disallow_path", { path: p }).catch(() => {});
                     }}
                     title="Remove from orphan notes"
