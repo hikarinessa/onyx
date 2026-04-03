@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Titlebar } from "./components/Titlebar";
 import { Sidebar } from "./components/Sidebar";
@@ -690,6 +690,54 @@ export default function App() {
     };
   }, []);
 
+  // ── Resize handles for sidebar and context panel ──
+  const sidebarVisible = useAppStore((s) => s.sidebarVisible);
+  const contextPanelVisible = useAppStore((s) => s.contextPanelVisible);
+  const sidebarWidth = useAppStore((s) => s.sidebarWidth);
+  const contextPanelWidth = useAppStore((s) => s.contextPanelWidth);
+  const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
+  const setContextPanelWidth = useAppStore((s) => s.setContextPanelWidth);
+
+  const resizingRef = useRef<{ target: "sidebar" | "context"; startX: number; startWidth: number } | null>(null);
+
+  const handleResizePointerDown = useCallback((target: "sidebar" | "context", e: React.PointerEvent) => {
+    e.preventDefault();
+    const startWidth = target === "sidebar" ? sidebarWidth : contextPanelWidth;
+    resizingRef.current = { target, startX: e.clientX, startWidth };
+    document.body.classList.add("resizing-panels");
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [sidebarWidth, contextPanelWidth]);
+
+  const handleResizePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!resizingRef.current) return;
+    const { target, startX, startWidth } = resizingRef.current;
+    const delta = e.clientX - startX;
+    if (target === "sidebar") {
+      const newWidth = Math.min(500, Math.max(180, startWidth + delta));
+      setSidebarWidth(newWidth);
+      document.documentElement.style.setProperty("--sidebar-width", `${newWidth}px`);
+    } else {
+      // Context panel: dragging left edge to the left increases width
+      const newWidth = Math.min(600, Math.max(200, startWidth - delta));
+      setContextPanelWidth(newWidth);
+      document.documentElement.style.setProperty("--context-panel-width", `${newWidth}px`);
+    }
+  }, [setSidebarWidth, setContextPanelWidth]);
+
+  const handleResizePointerUp = useCallback((e: React.PointerEvent) => {
+    if (!resizingRef.current) return;
+    const { target } = resizingRef.current;
+    resizingRef.current = null;
+    document.body.classList.remove("resizing-panels");
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    // Persist to config
+    const width = target === "sidebar"
+      ? useAppStore.getState().sidebarWidth
+      : useAppStore.getState().contextPanelWidth;
+    const key = target === "sidebar" ? "sidebar_width" : "context_panel_width";
+    invoke("update_config", { json: JSON.stringify({ appearance: { [key]: width } }) }).catch(() => {});
+  }, []);
+
   return (
     <div className="app">
       <Titlebar />
@@ -697,12 +745,28 @@ export default function App() {
         <ErrorBoundary label="sidebar">
           <Sidebar />
         </ErrorBoundary>
+        {sidebarVisible && (
+          <div
+            className="panel-resize-handle"
+            onPointerDown={(e) => handleResizePointerDown("sidebar", e)}
+            onPointerMove={handleResizePointerMove}
+            onPointerUp={handleResizePointerUp}
+          />
+        )}
         <div className="editor-column">
           <ErrorBoundary label="editor">
             <Editor />
           </ErrorBoundary>
           <LintPanel />
         </div>
+        {contextPanelVisible && (
+          <div
+            className="panel-resize-handle"
+            onPointerDown={(e) => handleResizePointerDown("context", e)}
+            onPointerMove={handleResizePointerMove}
+            onPointerUp={handleResizePointerUp}
+          />
+        )}
         <ErrorBoundary label="context panel">
           <ContextPanel />
         </ErrorBoundary>

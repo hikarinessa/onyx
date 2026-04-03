@@ -30,6 +30,8 @@ interface SessionData {
   accordionState?: AccordionState;
   orphanPaths?: string[];
   orphanIcon?: string;
+  sidebarWidth?: number;
+  contextPanelWidth?: number;
   timestamp: number;
 }
 
@@ -52,6 +54,8 @@ function getSessionData(): SessionData {
     accordionState: state.accordionState,
     orphanPaths: state.orphanPaths,
     orphanIcon: state.orphanIcon,
+    sidebarWidth: state.sidebarWidth,
+    contextPanelWidth: state.contextPanelWidth,
     timestamp: Date.now(),
   };
 }
@@ -150,6 +154,16 @@ export async function restoreSession(): Promise<void> {
   // Restore orphan icon
   if (data.orphanIcon) {
     useAppStore.getState().setOrphanIcon(data.orphanIcon);
+  }
+
+  // Restore panel widths
+  if (data.sidebarWidth && data.sidebarWidth >= 180 && data.sidebarWidth <= 500) {
+    useAppStore.setState({ sidebarWidth: data.sidebarWidth });
+    document.documentElement.style.setProperty("--sidebar-width", `${data.sidebarWidth}px`);
+  }
+  if (data.contextPanelWidth && data.contextPanelWidth >= 200 && data.contextPanelWidth <= 600) {
+    useAppStore.setState({ contextPanelWidth: data.contextPanelWidth });
+    document.documentElement.style.setProperty("--context-panel-width", `${data.contextPanelWidth}px`);
   }
 
   // Restore orphan paths — allow in Rust, validate existence, remove dead ones
