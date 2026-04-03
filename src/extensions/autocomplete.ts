@@ -24,13 +24,14 @@ interface TagInfo {
 async function wikilinkCompletion(
   context: CompletionContext
 ): Promise<CompletionResult | null> {
-  // Match [[ followed by any characters
-  const match = context.matchBefore(/\[\[([^\]]*)/);
+  // Match [[ or ![[ followed by any characters
+  const match = context.matchBefore(/!?\[\[([^\]]*)/);
   if (!match) return null;
 
-  // The prefix is everything after [[
-  const prefix = match.text.slice(2);
-  const from = match.from + 2; // position after [[
+  // The prefix is everything after [[ (or ![[)
+  const bracketIdx = match.text.indexOf("[[");
+  const prefix = match.text.slice(bracketIdx + 2);
+  const from = match.from + bracketIdx + 2; // position after [[
 
   try {
     let results: SearchResult[];

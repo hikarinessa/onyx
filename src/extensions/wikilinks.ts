@@ -27,7 +27,7 @@ export const wikilinkFollowRef = { current: null as ((link: string, newTab: bool
 
 // ── Regexes ──
 
-const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
+const WIKILINK_RE = /(?<!!)\[\[([^\]]+)\]\]/g;
 const BARE_URL_RE = /(?<![(\[])https?:\/\/[^\s<>\[\])(]+(?:\([^\s<>]*\))*[^\s<>\[\])("',.:;!?]/g;
 const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
 

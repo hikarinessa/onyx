@@ -32,6 +32,7 @@ import { livePreviewExtension, resetHangMetrics } from "../extensions/livePrevie
 import { lintingExtension, autofixContent, applyLintFix } from "../extensions/linting";
 import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
+import { embedExtension } from "../extensions/embeds";
 import { lintKeymap } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
 import { getAutoSaveMs, setRemeasureHook, isAutofixOnSave, getShowLineNumbers, getTabSize } from "../lib/configBridge";
@@ -297,6 +298,7 @@ function buildExtensions(): Extension[] {
     autocompleteExtension(),
     symbolWrapExtension(),
     livePreviewExtension(),
+    ...embedExtension(),
     ...blocksExtension(),
     keymap.of(lintKeymap),
     ...lintingExtension(),

@@ -479,7 +479,7 @@ const HIGHLIGHT_RE = /==(.+?)==/g;
 const CHECKBOX_RE = /^(\s*[-*+]\s)\[([ x/\-><!?*"libSIpcfkwudn])\]\s/;
 const BULLET_RE = /^(\s*)([-*+])\s/;
 const ORDERED_RE = /^(\s*)(\d+\.)\s/;
-const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+const WIKILINK_RE = /(?<!!)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 const INLINE_CODE_RE = /`([^`]+)`/g;
 const TAG_RE = /(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
 const CALLOUT_RE = /^(\s*>)\s*\[!(\w+)\]([+-])?\s*(.*)/;
@@ -696,6 +696,9 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
 
     for (let i = startLine; i <= endLine; i++) {
       const line = doc.line(i);
+
+      // Skip embed lines (handled by embedBlockField)
+      if (/^!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]\s*$/.test(line.text)) continue;
 
       // Skip lines covered by table widgets
       if (tableSkipLines.has(i)) continue;
