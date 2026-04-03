@@ -357,6 +357,89 @@ const tableParseOpts: Options = optionsWithDefaults({
   formatType: FormatType.NORMAL,
 });
 
+/**
+ * Render cell text with inline markdown formatting into a DOM element.
+ * Supports: bold, italic, bold+italic, strikethrough, highlight, inline code, wikilinks, tags.
+ */
+function renderCellContent(el: HTMLElement, text: string): void {
+  const CELL_RE = /(`[^`]+`)|(\*{3}.+?\*{3})|(\*{2}.+?\*{2})|(\*[^*]+\*)|(\~\~.+?\~\~)|(==.+?==)|(?<!!)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = CELL_RE.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      el.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+    }
+    lastIndex = match.index + match[0].length;
+
+    if (match[1]) {
+      // Inline code
+      const code = document.createElement("code");
+      code.textContent = match[1].slice(1, -1);
+      code.style.fontFamily = "var(--font-mono)";
+      code.style.fontSize = "0.9em";
+      code.style.background = "var(--bg-elevated)";
+      code.style.borderRadius = "3px";
+      code.style.padding = "1px 4px";
+      el.appendChild(code);
+    } else if (match[2]) {
+      // Bold+Italic ***text***
+      const span = document.createElement("span");
+      span.style.fontWeight = "700";
+      span.style.fontStyle = "italic";
+      span.textContent = match[2].slice(3, -3);
+      el.appendChild(span);
+    } else if (match[3]) {
+      // Bold **text**
+      const span = document.createElement("strong");
+      span.textContent = match[3].slice(2, -2);
+      el.appendChild(span);
+    } else if (match[4]) {
+      // Italic *text*
+      const span = document.createElement("em");
+      span.textContent = match[4].slice(1, -1);
+      el.appendChild(span);
+    } else if (match[5]) {
+      // Strikethrough ~~text~~
+      const span = document.createElement("s");
+      span.style.opacity = "0.7";
+      span.textContent = match[5].slice(2, -2);
+      el.appendChild(span);
+    } else if (match[6]) {
+      // Highlight ==text==
+      const span = document.createElement("mark");
+      span.style.background = "var(--syntax-highlight-bg, rgba(255, 204, 0, 0.3))";
+      span.style.borderRadius = "2px";
+      span.style.padding = "1px 0";
+      span.textContent = match[6].slice(2, -2);
+      el.appendChild(span);
+    } else if (match[7]) {
+      // Wikilink [[target|alias]] or [[target]]
+      const span = document.createElement("span");
+      span.className = "cm-preview-wikilink";
+      span.textContent = match[8] ?? match[7];
+      span.dataset.link = match[7];
+      el.appendChild(span);
+    } else if (match[9]) {
+      // Tag #tag
+      const span = document.createElement("span");
+      span.className = "cm-preview-tag";
+      span.textContent = match[9];
+      el.appendChild(span);
+    }
+  }
+
+  // Append remaining text
+  if (lastIndex < text.length) {
+    el.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
+
+  // If nothing was appended (empty text), ensure something is there
+  if (!el.hasChildNodes()) {
+    el.appendChild(document.createTextNode(text));
+  }
+}
+
 class TableWidget extends WidgetType {
   tableText: string;
   parsedTable: Table;
@@ -404,7 +487,7 @@ class TableWidget extends WidgetType {
       const headerCells = rows[0].getCells();
       for (let c = 0; c < headerCells.length; c++) {
         const th = document.createElement("th");
-        th.textContent = headerCells[c].content;
+        renderCellContent(th, headerCells[c].content);
         th.style.border = "1px solid var(--border-default)";
         th.style.padding = "4px 12px";
         th.style.fontWeight = "600";
@@ -425,7 +508,7 @@ class TableWidget extends WidgetType {
         const cells = rows[r].getCells();
         for (let c = 0; c < cells.length; c++) {
           const td = document.createElement("td");
-          td.textContent = cells[c].content;
+          renderCellContent(td, cells[c].content);
           td.style.border = "1px solid var(--border-default)";
           td.style.padding = "4px 12px";
           const align = alignments[c];
