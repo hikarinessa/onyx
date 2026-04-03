@@ -3060,10 +3060,10 @@
   }
 
   .editor-container.preview-mode .cm-scroller {
-    font-size: var(--editor-preview-font-size, var(--editor-font-size, 16px));
+    font-size: var(--editor-preview-font-size, var(--editor-font-size, 16px)) !important;
   }
   .editor-container.source-mode .cm-scroller {
-    font-size: var(--editor-source-font-size, var(--editor-font-size, 16px));
+    font-size: var(--editor-source-font-size, var(--editor-font-size, 16px)) !important;
     padding: 16px 24px;
   }
 
@@ -3128,12 +3128,12 @@
     display: none;
   }
 
-  /* Fenced code blocks in live preview */
+  /* Fenced code blocks in live preview — fence lines stay visible but dimmed */
   .cm-line.cm-codeblock-fence {
-    height: 0 !important;
-    overflow: hidden !important;
-    padding: 0 !important;
-    border: none !important;
+    color: var(--text-tertiary, #555) !important;
+    font-family: var(--font-mono) !important;
+    font-size: calc(var(--editor-font-size, 16px) * 0.85) !important;
+    opacity: 0.4;
   }
 
   .cm-line.cm-codeblock-line {
@@ -3151,18 +3151,22 @@
     font-size: inherit !important;
   }
 
-  /* Top border radius on the first visible code block line (line after opening fence) */
-  .cm-line.cm-codeblock-fence.cm-codeblock-start + .cm-line.cm-codeblock-line {
+  /* Opening fence gets background to connect visually with content */
+  .cm-line.cm-codeblock-fence.cm-codeblock-start {
+    background: var(--bg-elevated) !important;
+    border-left: 3px solid var(--border-default) !important;
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
-    padding-top: 6px !important;
+    padding: 4px 12px 0 12px !important;
   }
 
-  /* Bottom border radius on the last code block line (line before closing fence) */
-  .cm-line.cm-codeblock-line:has(+ .cm-line.cm-codeblock-fence.cm-codeblock-end) {
+  /* Closing fence */
+  .cm-line.cm-codeblock-fence.cm-codeblock-end {
+    background: var(--bg-elevated) !important;
+    border-left: 3px solid var(--border-default) !important;
     border-bottom-left-radius: 4px;
     border-bottom-right-radius: 4px;
-    padding-bottom: 6px !important;
+    padding: 0 12px 4px 12px !important;
   }
 
   /* Focused table: monospace so padded columns align */

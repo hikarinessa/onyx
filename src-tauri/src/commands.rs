@@ -1342,6 +1342,12 @@ pub fn check_spelling(_text: String) -> Vec<SpellingError> {
     Vec::new()
 }
 
+/// Trigger the native print dialog for the current webview.
+#[tauri::command]
+pub fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.print().map_err(|e| e.to_string())
+}
+
 /// Drain any files buffered from Finder "Open With" before frontend was ready.
 #[tauri::command]
 pub fn drain_pending_open_files(state: State<AppState>) -> Vec<String> {

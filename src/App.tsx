@@ -412,7 +412,7 @@ function registerCommands() {
     id: "file.print",
     label: "Print / Export PDF",
     category: "File",
-    execute: () => window.print(),
+    execute: () => invoke("print_page").catch(() => {}),
   });
 
   // Register keybindings for every command that has a shortcut
@@ -471,7 +471,7 @@ export default function App() {
           openTodayNote();
           break;
         case "print":
-          window.print();
+          invoke("print_page").catch(() => {});
           break;
       }
     });

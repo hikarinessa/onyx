@@ -275,6 +275,7 @@ pub fn run() {
             plugins::mac_rounded_corners::reposition_traffic_lights,
             commands::list_templates,
             commands::check_spelling,
+            commands::print_page,
             commands::drain_pending_open_files,
         ])
         .build(tauri::generate_context!())

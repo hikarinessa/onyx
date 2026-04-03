@@ -650,7 +650,8 @@ export function Sidebar() {
           }}
           title={`Sort by: ${SORT_LABELS[sortOrder] || "Name"}`}
         >
-          <Icon name={SORT_ICONS[sortOrder] || "arrow-down-a-z"} size={14} />
+          <Icon name={SORT_ICONS[sortOrder] || "arrow-down-a-z"} size={14} />{" "}
+          {SORT_LABELS[sortOrder] || "Name"}
         </button>
       </div>
       <div className="sidebar-directories">
