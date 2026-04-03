@@ -3453,3 +3453,149 @@
   .cm-preview-alt-cb.cb-down      { color: oklch(0.60 0.15  22); }  /* red    */
   .cm-preview-alt-cb.cb-pin       { color: oklch(0.60 0.13 295); }  /* purple */
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Print / PDF export styles
+   Unlayered — must compete with CM6 runtime styles.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media print {
+  /* Hide everything except the active editor content */
+  .titlebar,
+  .sidebar,
+  .context-panel,
+  .status-bar,
+  .tab-bar,
+  .pane-divider,
+  .quick-open-overlay,
+  .command-palette-overlay,
+  .settings-overlay,
+  .lint-panel,
+  .search-panel-wrap,
+  .bookmark-strip,
+  .sidebar-context-menu {
+    display: none !important;
+  }
+
+  /* Reset app shell layout for print */
+  .app {
+    height: auto !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+    background: white !important;
+  }
+
+  .main {
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .editor-column {
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .pane-column {
+    display: block !important;
+    overflow: visible !important;
+    border: none !important;
+  }
+
+  /* Only show the active pane */
+  .pane-column:not(:first-child) {
+    display: none !important;
+  }
+
+  /* Editor container */
+  .cm-editor {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  .cm-scroller {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .cm-content {
+    min-height: 0 !important;
+    padding: 0 !important;
+    white-space: pre-wrap !important;
+    color: black !important;
+  }
+
+  .cm-gutters,
+  .cm-foldGutter,
+  .cm-lineNumbers {
+    display: none !important;
+  }
+
+  .cm-cursor,
+  .cm-selectionBackground,
+  .cm-activeLine {
+    display: none !important;
+    background: none !important;
+  }
+
+  /* Inline title */
+  .cm-inline-title {
+    color: black !important;
+  }
+
+  /* Links */
+  .cm-preview-wikilink,
+  .cm-url-link {
+    color: #1a0dab !important;
+    text-decoration: underline !important;
+  }
+
+  /* Tags */
+  .cm-preview-tag-chip {
+    color: #333 !important;
+    background: #e8e8e8 !important;
+    border-color: #ccc !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Callouts */
+  .cm-callout-line {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Checkboxes */
+  .cm-boolean-toggle {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Code blocks */
+  .cm-line .ͼ1d,
+  .cm-line code {
+    background: #f5f5f5 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Page setup */
+  @page {
+    margin: 2cm;
+    size: A4;
+  }
+
+  /* Avoid breaks inside headings and list items */
+  .cm-line {
+    page-break-inside: avoid;
+    color: black !important;
+  }
+
+  /* Block hover button */
+  .cm-block-copy-btn {
+    display: none !important;
+  }
+}
+

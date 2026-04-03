@@ -407,6 +407,14 @@ function registerCommands() {
     },
   });
 
+  // ── Print / PDF export ──
+  registerCommand({
+    id: "file.print",
+    label: "Print / Export PDF",
+    category: "File",
+    execute: () => window.print(),
+  });
+
   // Register keybindings for every command that has a shortcut
   for (const cmd of getAllCommands()) {
     if (cmd.shortcut) {
@@ -461,6 +469,9 @@ export default function App() {
           break;
         case "today_note":
           openTodayNote();
+          break;
+        case "print":
+          window.print();
           break;
       }
     });

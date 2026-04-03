@@ -107,6 +107,8 @@ pub fn run() {
                 .item(&MenuItemBuilder::with_id("quick_open", "Quick Open").accelerator("CmdOrCtrl+O").build(app)?)
                 .separator()
                 .item(&MenuItemBuilder::with_id("close_tab", "Close Tab").accelerator("CmdOrCtrl+W").build(app)?)
+                .separator()
+                .item(&MenuItemBuilder::with_id("print", "Print…").accelerator("CmdOrCtrl+Shift+P").build(app)?)
                 .build()?;
 
             let edit_menu = SubmenuBuilder::new(app, "Edit")
