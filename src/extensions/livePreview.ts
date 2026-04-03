@@ -143,6 +143,7 @@ function getCalloutDef(type: string): CalloutDef {
 
 import { iconSvg } from "./inlineSvgIcons";
 import { headingFoldRange } from "./headingFold";
+import { wikilinkFollowRef } from "./wikilinks";
 
 class HeadingFoldWidget extends WidgetType {
   lineStart: number;
@@ -362,7 +363,7 @@ const tableParseOpts: Options = optionsWithDefaults({
  * Supports: bold, italic, bold+italic, strikethrough, highlight, inline code, wikilinks, tags.
  */
 function renderCellContent(el: HTMLElement, text: string): void {
-  const CELL_RE = /(`[^`]+`)|(\*{3}.+?\*{3})|(\*{2}.+?\*{2})|(\*[^*]+\*)|(\~\~.+?\~\~)|(==.+?==)|(?<!!)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
+  const CELL_RE = /(`[^`]+`)|(\*{3}.+?\*{3})|(\*{2}.+?\*{2})|(\*[^*]+\*)|(~~.+?~~)|(==.+?==)|(?<!!)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -375,18 +376,13 @@ function renderCellContent(el: HTMLElement, text: string): void {
     if (match[1]) {
       // Inline code
       const code = document.createElement("code");
+      code.className = "cm-preview-table-code";
       code.textContent = match[1].slice(1, -1);
-      code.style.fontFamily = "var(--font-mono)";
-      code.style.fontSize = "0.9em";
-      code.style.background = "var(--bg-elevated)";
-      code.style.borderRadius = "3px";
-      code.style.padding = "1px 4px";
       el.appendChild(code);
     } else if (match[2]) {
       // Bold+Italic ***text***
       const span = document.createElement("span");
-      span.style.fontWeight = "700";
-      span.style.fontStyle = "italic";
+      span.className = "cm-preview-table-bold-italic";
       span.textContent = match[2].slice(3, -3);
       el.appendChild(span);
     } else if (match[3]) {
@@ -402,15 +398,13 @@ function renderCellContent(el: HTMLElement, text: string): void {
     } else if (match[5]) {
       // Strikethrough ~~text~~
       const span = document.createElement("s");
-      span.style.opacity = "0.7";
+      span.className = "cm-preview-table-strikethrough";
       span.textContent = match[5].slice(2, -2);
       el.appendChild(span);
     } else if (match[6]) {
       // Highlight ==text==
       const span = document.createElement("mark");
-      span.style.background = "var(--syntax-highlight-bg, rgba(255, 204, 0, 0.3))";
-      span.style.borderRadius = "2px";
-      span.style.padding = "1px 0";
+      span.className = "cm-preview-table-highlight";
       span.textContent = match[6].slice(2, -2);
       el.appendChild(span);
     } else if (match[7]) {
@@ -522,10 +516,28 @@ class TableWidget extends WidgetType {
     }
 
     wrapper.appendChild(el);
+
+    // Handle wikilink clicks inside the table widget
+    wrapper.addEventListener("click", (e) => {
+      const target = e.target as HTMLElement;
+      const wikilink = target.closest<HTMLElement>(".cm-preview-wikilink[data-link]");
+      if (wikilink && wikilinkFollowRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        const link = wikilink.dataset.link!;
+        wikilinkFollowRef.current(link, e.metaKey, e.metaKey && e.shiftKey);
+      }
+    });
+
     return wrapper;
   }
 
-  ignoreEvent(): boolean {
+  ignoreEvent(event: Event): boolean {
+    // Let click events through so the wikilink handler can process them
+    if (event.type === "mousedown") {
+      const target = event.target as HTMLElement;
+      if (target.closest?.(".cm-preview-wikilink[data-link]")) return true;
+    }
     return false;
   }
 }
@@ -1376,12 +1388,29 @@ const previewTheme = EditorView.theme({
     fontSize: "0.88em",
   },
   ".cm-preview-table": {
-    whiteSpace: "nowrap",
+    overflowWrap: "normal",
   },
   ".cm-preview-table th, .cm-preview-table td": {
     maxWidth: "300px",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
+  },
+  ".cm-preview-table-code": {
+    fontFamily: "var(--font-mono)",
+    fontSize: "0.9em",
+    background: "var(--bg-elevated)",
+    borderRadius: "3px",
+    padding: "1px 4px",
+  },
+  ".cm-preview-table-bold-italic": {
+    fontWeight: "700",
+    fontStyle: "italic",
+  },
+  ".cm-preview-table-strikethrough": {
+    opacity: "0.7",
+  },
+  ".cm-preview-table-highlight": {
+    background: "var(--syntax-highlight-bg, rgba(255, 204, 0, 0.3))",
+    borderRadius: "2px",
+    padding: "1px 0",
   },
 });
 
