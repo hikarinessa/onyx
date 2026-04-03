@@ -112,7 +112,20 @@ fn default_types() -> Vec<ObjectType> {
     ]
 }
 
+/// Validate that no two types share the same name (case-insensitive).
+fn validate_no_duplicate_names(types: &[ObjectType]) -> Result<(), String> {
+    let mut seen = std::collections::HashSet::new();
+    for t in types {
+        let lower = t.name.trim().to_lowercase();
+        if !lower.is_empty() && !seen.insert(lower) {
+            return Err(format!("Duplicate object type name: \"{}\"", t.name.trim()));
+        }
+    }
+    Ok(())
+}
+
 pub fn save_object_types(types: &[ObjectType]) -> Result<(), String> {
+    validate_no_duplicate_names(types)?;
     let path = config_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)

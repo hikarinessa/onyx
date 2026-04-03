@@ -612,12 +612,28 @@ function AppearanceSection({
         />
       </SettingRow>
 
-      <SettingRow label="Editor font size" description={`${config.editor.font_size}px`}>
+      <SettingRow label="Editor font size" description={`Base: ${config.editor.font_size}px`}>
         <input type="range" className="settings-range" min={12} max={24} step={1}
           value={config.editor.font_size}
           onChange={(e) => updateConfig({ editor: { font_size: Number(e.target.value) } })}
         />
         <span className="settings-range-value">{config.editor.font_size}px</span>
+      </SettingRow>
+
+      <SettingRow label="Preview mode font size" description={`${config.editor.preview_font_size ?? config.editor.font_size}px`}>
+        <input type="range" className="settings-range" min={12} max={24} step={1}
+          value={config.editor.preview_font_size ?? config.editor.font_size}
+          onChange={(e) => updateConfig({ editor: { preview_font_size: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.editor.preview_font_size ?? config.editor.font_size}px</span>
+      </SettingRow>
+
+      <SettingRow label="Source mode font size" description={`${config.editor.source_font_size ?? config.editor.font_size}px`}>
+        <input type="range" className="settings-range" min={12} max={24} step={1}
+          value={config.editor.source_font_size ?? config.editor.font_size}
+          onChange={(e) => updateConfig({ editor: { source_font_size: Number(e.target.value) } })}
+        />
+        <span className="settings-range-value">{config.editor.source_font_size ?? config.editor.font_size}px</span>
       </SettingRow>
 
       <SettingRow label="Line height" description={`${config.editor.line_height.toFixed(1)}`}>
@@ -1127,12 +1143,23 @@ function ObjectsSection() {
   };
 
   const deleteType = (idx: number) => {
+    const typeName = types[idx]?.name || "this type";
+    if (!window.confirm(`Delete "${typeName}"? This cannot be undone.`)) return;
     const updated = types.filter((_, i) => i !== idx);
     saveTypes(updated);
     setSelectedIdx(Math.min(selectedIdx, Math.max(0, updated.length - 1)));
   };
 
+  const [nameError, setNameError] = useState<string | null>(null);
+
   const updateType = (idx: number, patch: Partial<ObjectType>) => {
+    // Validate duplicate names when name is being changed
+    if (patch.name !== undefined) {
+      const trimmed = patch.name.trim();
+      const duplicate = types.some((t, i) => i !== idx && t.name.trim().toLowerCase() === trimmed.toLowerCase());
+      setNameError(duplicate && trimmed ? `A type named "${trimmed}" already exists` : null);
+      if (duplicate && trimmed) return;
+    }
     const updated = types.map((t, i) => i === idx ? { ...t, ...patch } : t);
     saveTypes(updated);
   };
@@ -1178,7 +1205,7 @@ function ObjectsSection() {
           <div
             key={i}
             className={`settings-objects-item ${i === selectedIdx ? "active" : ""}`}
-            onClick={() => setSelectedIdx(i)}
+            onClick={() => { setSelectedIdx(i); setNameError(null); }}
           >
             <Icon name="box" size={14} />
             <span>{t.name || "Untitled"}</span>
@@ -1194,9 +1221,12 @@ function ObjectsSection() {
           <>
             <div className="settings-objects-detail-header">
               <input
-                className="settings-objects-name"
+                className={`settings-objects-name${nameError ? " settings-input-error" : ""}`}
                 value={selected.name}
-                onChange={(e) => updateType(selectedIdx, { name: e.target.value })}
+                onChange={(e) => {
+                  setNameError(null);
+                  updateType(selectedIdx, { name: e.target.value });
+                }}
                 placeholder="Type name"
               />
               <button
@@ -1207,6 +1237,7 @@ function ObjectsSection() {
                 <Icon name="trash-2" size={14} />
               </button>
             </div>
+            {nameError && <div className="settings-error-message">{nameError}</div>}
             <div className="settings-objects-props">
               {selected.properties.map((prop, pi) => (
                 <div key={pi} className="settings-objects-prop">

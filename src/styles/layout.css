@@ -2597,6 +2597,15 @@
     border-color: var(--accent);
     outline: none;
   }
+  .settings-objects-name.settings-input-error {
+    border-color: #e55;
+  }
+  .settings-error-message {
+    color: #e55;
+    font-size: 12px;
+    margin: -4px 0 8px 0;
+    padding: 0 2px;
+  }
 
   .settings-objects-delete {
     color: var(--text-tertiary);
@@ -2968,6 +2977,13 @@
     font-size: var(--editor-font-size, 16px);
     line-height: var(--editor-line-height, 1.7);
     padding: var(--editor-padding-y, 24px) var(--editor-padding-x, 48px);
+  }
+
+  .editor-container.preview-mode .cm-scroller {
+    font-size: var(--editor-preview-font-size, var(--editor-font-size, 16px));
+  }
+  .editor-container.source-mode .cm-scroller {
+    font-size: var(--editor-source-font-size, var(--editor-font-size, 16px));
   }
 
   .editor-container .cm-content {
