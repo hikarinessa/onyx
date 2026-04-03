@@ -180,16 +180,27 @@ pub fn list_directory(path: String, sort_order: Option<String>, state: State<App
         b.is_dir.cmp(&a.is_dir).then_with(|| {
             match sort {
                 "modified" => {
-                    // Newest first
                     let am = a.modified.unwrap_or(0.0);
                     let bm = b.modified.unwrap_or(0.0);
                     bm.partial_cmp(&am).unwrap_or(std::cmp::Ordering::Equal)
                 }
+                "modified-asc" => {
+                    let am = a.modified.unwrap_or(0.0);
+                    let bm = b.modified.unwrap_or(0.0);
+                    am.partial_cmp(&bm).unwrap_or(std::cmp::Ordering::Equal)
+                }
                 "created" => {
-                    // Newest first
                     let ac = a.created.unwrap_or(0.0);
                     let bc = b.created.unwrap_or(0.0);
                     bc.partial_cmp(&ac).unwrap_or(std::cmp::Ordering::Equal)
+                }
+                "created-asc" => {
+                    let ac = a.created.unwrap_or(0.0);
+                    let bc = b.created.unwrap_or(0.0);
+                    ac.partial_cmp(&bc).unwrap_or(std::cmp::Ordering::Equal)
+                }
+                "name-desc" => {
+                    b.name.to_lowercase().cmp(&a.name.to_lowercase())
                 }
                 _ => {
                     a.name.to_lowercase().cmp(&b.name.to_lowercase())

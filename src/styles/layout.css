@@ -690,6 +690,50 @@
     background: var(--bg-elevated);
   }
 
+  .sidebar-sort-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .sidebar-sort-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 100;
+    margin-top: 4px;
+    padding: 4px;
+    min-width: 170px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md, 6px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .sidebar-sort-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 5px 10px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-family: var(--font-ui);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .sidebar-sort-option:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .sidebar-sort-option.active {
+    color: var(--accent);
+  }
+
   /* File tree */
   .tree-item {
     display: flex;
@@ -3128,12 +3172,12 @@
     display: none;
   }
 
-  /* Fenced code blocks in live preview — fence lines stay visible but dimmed */
+  /* Fenced code blocks in live preview — fence lines same bg as content */
   .cm-line.cm-codeblock-fence {
-    color: var(--text-tertiary, #555) !important;
-    font-family: var(--font-mono) !important;
-    font-size: calc(var(--editor-font-size, 16px) * 0.85) !important;
-    opacity: 0.4;
+    background: var(--bg-elevated) !important;
+    border-left: 3px solid var(--border-default) !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
   }
 
   .cm-line.cm-codeblock-line {
@@ -3151,22 +3195,31 @@
     font-size: inherit !important;
   }
 
-  /* Opening fence gets background to connect visually with content */
+  /* Opening fence — top border radius, small top padding for language label */
   .cm-line.cm-codeblock-fence.cm-codeblock-start {
-    background: var(--bg-elevated) !important;
-    border-left: 3px solid var(--border-default) !important;
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
-    padding: 4px 12px 0 12px !important;
+    padding-top: 4px !important;
+    padding-bottom: 0 !important;
+    min-height: 0 !important;
   }
 
-  /* Closing fence */
+  /* Closing fence — collapse to just the bottom cap */
   .cm-line.cm-codeblock-fence.cm-codeblock-end {
-    background: var(--bg-elevated) !important;
-    border-left: 3px solid var(--border-default) !important;
     border-bottom-left-radius: 4px;
     border-bottom-right-radius: 4px;
-    padding: 0 12px 4px 12px !important;
+    padding-top: 0 !important;
+    padding-bottom: 4px !important;
+    min-height: 0 !important;
+  }
+
+  /* Language label inside opening fence */
+  .cm-codeblock-lang {
+    display: inline-block;
+    font-family: var(--font-mono) !important;
+    font-size: calc(var(--editor-font-size, 16px) * 0.75) !important;
+    color: var(--text-tertiary) !important;
+    user-select: none;
   }
 
   /* Focused table: monospace so padded columns align */
@@ -3398,6 +3451,38 @@
   }
 
   .cm-heading-fold:hover {
+    opacity: 1 !important;
+    color: var(--text-primary);
+  }
+
+  /* ── List fold chevron ── */
+
+  .cm-list-fold {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    cursor: pointer;
+    opacity: 0;
+    color: var(--text-tertiary);
+    transition: opacity var(--transition-fast), transform var(--transition-fast);
+    transform: rotate(90deg);
+    vertical-align: middle;
+  }
+
+  .cm-list-fold.folded {
+    transform: rotate(0deg);
+    opacity: 0.5;
+  }
+
+  .cm-list-fold svg {
+    display: block;
+  }
+
+  .cm-line:hover .cm-list-fold {
+    opacity: 0.5;
+  }
+
+  .cm-list-fold:hover {
     opacity: 1 !important;
     color: var(--text-primary);
   }

@@ -243,9 +243,14 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
   );
 }
 
-const SORT_CYCLE: Array<"name" | "modified" | "created"> = ["name", "modified", "created"];
-const SORT_LABELS: Record<string, string> = { name: "Name", modified: "Modified", created: "Created" };
-const SORT_ICONS: Record<string, string> = { name: "arrow-down-a-z", modified: "clock", created: "calendar-plus" };
+const SORT_OPTIONS: Array<{ key: string; label: string; icon: string }> = [
+  { key: "name", label: "Name (A–Z)", icon: "arrow-down-a-z" },
+  { key: "name-desc", label: "Name (Z–A)", icon: "arrow-up-z-a" },
+  { key: "modified", label: "Modified (newest)", icon: "clock" },
+  { key: "modified-asc", label: "Modified (oldest)", icon: "clock" },
+  { key: "created", label: "Created (newest)", icon: "calendar-plus" },
+  { key: "created-asc", label: "Created (oldest)", icon: "calendar-plus" },
+];
 
 export function Sidebar() {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
@@ -265,8 +270,22 @@ export function Sidebar() {
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [iconPickerDirId, setIconPickerDirId] = useState<string | null>(null);
   const [orphansCollapsed, setOrphansCollapsed] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
   const iconPickerDirIdRef = useRef(iconPickerDirId);
   iconPickerDirIdRef.current = iconPickerDirId;
+
+  // Close sort dropdown on outside click
+  useEffect(() => {
+    if (!sortMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setSortMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [sortMenuOpen]);
 
   const addDirectory = async () => {
     const selected = await open({ directory: true, multiple: false });
@@ -640,19 +659,33 @@ export function Sidebar() {
         >
           <Icon name="folder-plus" size={14} /> Add Folder
         </button>
-        <button
-          className="sidebar-sort-btn"
-          onClick={() => {
-            const idx = SORT_CYCLE.indexOf(sortOrder as "name" | "modified" | "created");
-            const next = SORT_CYCLE[(idx + 1) % SORT_CYCLE.length];
-            setSortOrder(next);
-            invoke("update_config", { json: JSON.stringify({ behavior: { sort_order: next } }) }).catch(() => {});
-          }}
-          title={`Sort by: ${SORT_LABELS[sortOrder] || "Name"}`}
-        >
-          <Icon name={SORT_ICONS[sortOrder] || "arrow-down-a-z"} size={14} />{" "}
-          {SORT_LABELS[sortOrder] || "Name"}
-        </button>
+        <div className="sidebar-sort-wrap" ref={sortMenuRef}>
+          <button
+            className="sidebar-sort-btn"
+            onClick={() => setSortMenuOpen((v) => !v)}
+            title="Sort files"
+          >
+            <Icon name={SORT_OPTIONS.find((o) => o.key === sortOrder)?.icon || "arrow-down-a-z"} size={14} />
+          </button>
+          {sortMenuOpen && (
+            <div className="sidebar-sort-menu">
+              {SORT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  className={`sidebar-sort-option${sortOrder === opt.key ? " active" : ""}`}
+                  onClick={() => {
+                    setSortOrder(opt.key);
+                    invoke("update_config", { json: JSON.stringify({ behavior: { sort_order: opt.key } }) }).catch(() => {});
+                    setSortMenuOpen(false);
+                  }}
+                >
+                  <Icon name={opt.icon} size={13} />
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <div className="sidebar-directories">
       {directories.length === 0 ? (

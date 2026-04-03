@@ -143,6 +143,7 @@ function getCalloutDef(type: string): CalloutDef {
 
 import { iconSvg } from "./inlineSvgIcons";
 import { headingFoldRange } from "./headingFold";
+import { listFoldRange } from "./outliner";
 import { wikilinkFollowRef } from "./wikilinks";
 
 class HeadingFoldWidget extends WidgetType {
@@ -179,6 +180,67 @@ class HeadingFoldWidget extends WidgetType {
 
   ignoreEvent(): boolean {
     return false;
+  }
+}
+
+class ListFoldWidget extends WidgetType {
+  lineStart: number;
+  folded: boolean;
+
+  constructor(lineStart: number, folded: boolean) {
+    super();
+    this.lineStart = lineStart;
+    this.folded = folded;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const span = document.createElement("span");
+    span.className = `cm-list-fold ${this.folded ? "folded" : ""}`;
+    span.innerHTML = iconSvg("chevron-right", 12);
+    span.title = this.folded ? "Unfold list" : "Fold list";
+    span.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const range = listFoldRange(view.state, this.lineStart, view.state.doc.lineAt(this.lineStart).to);
+      if (!range) return;
+      if (this.folded) {
+        view.dispatch({ effects: unfoldEffect.of({ from: range.from, to: range.to }) });
+      } else {
+        view.dispatch({ effects: foldEffect.of({ from: range.from, to: range.to }) });
+      }
+    });
+    return span;
+  }
+
+  eq(other: ListFoldWidget): boolean {
+    return this.lineStart === other.lineStart && this.folded === other.folded;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+class CodeFenceLabelWidget extends WidgetType {
+  lang: string;
+
+  constructor(lang: string) {
+    super();
+    this.lang = lang;
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "cm-codeblock-lang";
+    span.textContent = this.lang;
+    return span;
+  }
+
+  eq(other: CodeFenceLabelWidget): boolean {
+    return this.lang === other.lang;
+  }
+
+  ignoreEvent(): boolean {
+    return true;
   }
 }
 
@@ -815,15 +877,19 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         inCodeBlock = !inCodeBlock;
         activeCallout = null;
         if (i !== cursorLine) {
-          // Hide fence lines: opening (wasInCodeBlock=false) and closing (wasInCodeBlock=true)
-          builder.add(line.from, line.from, Decoration.line({ class: "cm-codeblock-fence" }));
-          // For opening fence, also add the start class for top border radius
           if (!wasInCodeBlock) {
-            builder.add(line.from, line.from, Decoration.line({ class: "cm-codeblock-start" }));
-          }
-          // For closing fence, also add the end class for bottom border radius
-          if (wasInCodeBlock) {
-            builder.add(line.from, line.from, Decoration.line({ class: "cm-codeblock-end" }));
+            // Opening fence — show language label, hide backticks
+            const lang = text.trimStart().slice(3).trim();
+            builder.add(line.from, line.from, Decoration.line({ class: "cm-codeblock-fence cm-codeblock-start" }));
+            if (lang) {
+              builder.add(line.from, line.to, Decoration.replace({ widget: new CodeFenceLabelWidget(lang) }));
+            } else {
+              builder.add(line.from, line.to, Decoration.replace({ widget: new CodeFenceLabelWidget("") }));
+            }
+          } else {
+            // Closing fence — fully collapse
+            builder.add(line.from, line.from, Decoration.line({ class: "cm-codeblock-fence cm-codeblock-end" }));
+            builder.add(line.from, line.to, Decoration.replace({ widget: new CodeFenceLabelWidget("") }));
           }
         }
         continue;
@@ -1025,6 +1091,23 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
           markerStart + 1,
           Decoration.replace({ widget: new BulletWidget() })
         );
+        // Fold chevron for list items with nested children
+        const listFold = listFoldRange(view.state, line.from, line.to);
+        if (listFold) {
+          let isListFolded = false;
+          const foldIter = foldedRanges(view.state).iter();
+          while (foldIter.value) {
+            if (foldIter.from === listFold.from && foldIter.to === listFold.to) {
+              isListFolded = true;
+              break;
+            }
+            foldIter.next();
+          }
+          builder.add(line.to, line.to, Decoration.widget({
+            widget: new ListFoldWidget(line.from, isListFolded),
+            side: 1,
+          }));
+        }
         // Process inline decorations on the rest of the line
         const afterBullet = text.slice(bulletMatch[0].length);
         if (afterBullet.length > 0) {
@@ -1043,6 +1126,23 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         builder.add(line.from, line.from, Decoration.line({
           attributes: { style: listLineStyle(hangPx, indentOl, unitLen, metrics.space) },
         }));
+        // Fold chevron for ordered list items with nested children
+        const olFold = listFoldRange(view.state, line.from, line.to);
+        if (olFold) {
+          let isOlFolded = false;
+          const olFoldIter = foldedRanges(view.state).iter();
+          while (olFoldIter.value) {
+            if (olFoldIter.from === olFold.from && olFoldIter.to === olFold.to) {
+              isOlFolded = true;
+              break;
+            }
+            olFoldIter.next();
+          }
+          builder.add(line.to, line.to, Decoration.widget({
+            widget: new ListFoldWidget(line.from, isOlFolded),
+            side: 1,
+          }));
+        }
         // Process inline decorations on the rest of the line
         const afterMarker = text.slice(orderedMatch[0].length);
         if (afterMarker.length > 0) {

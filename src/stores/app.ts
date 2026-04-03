@@ -168,8 +168,8 @@ interface AppState {
   setSidebarTab: (tab: "files" | "search") => void;
 
   // File tree sort order
-  sortOrder: "name" | "modified" | "created";
-  setSortOrder: (order: "name" | "modified" | "created") => void;
+  sortOrder: string;
+  setSortOrder: (order: string) => void;
 
   // Panel widths (resizable via drag)
   sidebarWidth: number;
