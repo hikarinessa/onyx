@@ -475,6 +475,7 @@ class TableWidget extends WidgetType {
     // Wrapper div — avoids margin collapsing issues with CM6 height measurement
     const wrapper = document.createElement("div");
     wrapper.style.padding = "4px 0";
+    wrapper.style.overflowX = "auto";
 
     const el = document.createElement("table");
     el.className = "cm-preview-table";
@@ -1373,6 +1374,14 @@ const previewTheme = EditorView.theme({
     borderRadius: "9px",
     padding: "1px 8px",
     fontSize: "0.88em",
+  },
+  ".cm-preview-table": {
+    whiteSpace: "nowrap",
+  },
+  ".cm-preview-table th, .cm-preview-table td": {
+    maxWidth: "300px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
 });
 
