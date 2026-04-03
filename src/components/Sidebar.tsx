@@ -244,12 +244,12 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
 }
 
 const SORT_OPTIONS: Array<{ key: string; label: string; icon: string }> = [
-  { key: "name", label: "Name (A–Z)", icon: "arrow-down-a-z" },
-  { key: "name-desc", label: "Name (Z–A)", icon: "arrow-up-z-a" },
+  { key: "name", label: "Name (A–Z)", icon: "arrow-down" },
+  { key: "name-desc", label: "Name (Z–A)", icon: "arrow-up" },
   { key: "modified", label: "Modified (newest)", icon: "clock" },
   { key: "modified-asc", label: "Modified (oldest)", icon: "clock" },
-  { key: "created", label: "Created (newest)", icon: "calendar-plus" },
-  { key: "created-asc", label: "Created (oldest)", icon: "calendar-plus" },
+  { key: "created", label: "Created (newest)", icon: "calendar" },
+  { key: "created-asc", label: "Created (oldest)", icon: "calendar" },
 ];
 
 export function Sidebar() {
@@ -665,7 +665,7 @@ export function Sidebar() {
             onClick={() => setSortMenuOpen((v) => !v)}
             title="Sort files"
           >
-            <Icon name={SORT_OPTIONS.find((o) => o.key === sortOrder)?.icon || "arrow-down-a-z"} size={14} />
+            <Icon name={SORT_OPTIONS.find((o) => o.key === sortOrder)?.icon || "arrow-down"} size={14} />
           </button>
           {sortMenuOpen && (
             <div className="sidebar-sort-menu">

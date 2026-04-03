@@ -458,6 +458,7 @@ const tableParseOpts: Options = optionsWithDefaults({
  * Supports: bold, italic, bold+italic, strikethrough, highlight, inline code, wikilinks, tags.
  */
 function renderCellContent(el: HTMLElement, text: string): void {
+  // Groups: 1=inline code, 2=bold+italic, 3=bold, 4=italic, 5=strikethrough, 6=highlight, 7=wikilink target, 8=wikilink alias, 9=tag
   const CELL_RE = /(`[^`]+`)|(\*{3}.+?\*{3})|(\*{2}.+?\*{2})|(\*[^*]+\*)|(~~.+?~~)|(==.+?==)|(?<!!)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -869,10 +870,19 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
   const cursorLine = doc.lineAt(view.state.selection.main.head).number;
   const collapsedLists = view.state.field(listFoldField);
 
+  // Cache list fold ranges to avoid double computation per list item
+  const listFoldCache = new Map<number, { from: number; to: number } | null>();
+  function getCachedListFold(lineFrom: number, lineTo: number) {
+    if (listFoldCache.has(lineFrom)) return listFoldCache.get(lineFrom)!;
+    const range = listFoldRange(view.state, lineFrom, lineTo);
+    listFoldCache.set(lineFrom, range);
+    return range;
+  }
+
   // Pre-compute which lines are hidden by collapsed list items
   const listHiddenLines = new Set<number>();
   for (const pos of collapsedLists) {
-    const range = listFoldRange(view.state, pos, doc.lineAt(pos).to);
+    const range = getCachedListFold(pos, doc.lineAt(pos).to);
     if (range) {
       // Hide all lines from the one after the parent to the last child
       const startHide = doc.lineAt(range.from + 1).number; // line after parent
@@ -1140,7 +1150,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
           attributes: { style: listLineStyle(hangPx, indent, unitLen, metrics.space) },
         }));
         // Fold chevron for list items with nested children — before bullet
-        const listFold = listFoldRange(view.state, line.from, line.to);
+        const listFold = getCachedListFold(line.from, line.to);
         if (listFold) {
           const isListFolded = collapsedLists.has(line.from);
           builder.add(markerStart, markerStart, Decoration.widget({
@@ -1173,7 +1183,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
           attributes: { style: listLineStyle(hangPx, indentOl, unitLen, metrics.space) },
         }));
         // Fold chevron for ordered list items with nested children — before number
-        const olFold = listFoldRange(view.state, line.from, line.to);
+        const olFold = getCachedListFold(line.from, line.to);
         if (olFold) {
           const isOlFolded = collapsedLists.has(line.from);
           const olMarkerStart = line.from + indentOl;
