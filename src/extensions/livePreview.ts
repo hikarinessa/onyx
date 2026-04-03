@@ -715,12 +715,29 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
 
       // Track code blocks (must run even on cursor line to keep state correct)
       if (text.trimStart().startsWith("```")) {
+        const wasInCodeBlock = inCodeBlock;
         inCodeBlock = !inCodeBlock;
         activeCallout = null;
-        if (i === cursorLine) continue;
+        if (i !== cursorLine) {
+          // Hide fence lines: opening (wasInCodeBlock=false) and closing (wasInCodeBlock=true)
+          builder.add(line.from, line.from, Decoration.line({ class: "cm-codeblock-fence" }));
+          // For opening fence, also add the start class for top border radius
+          if (!wasInCodeBlock) {
+            builder.add(line.from, line.from, Decoration.line({ class: "cm-codeblock-start" }));
+          }
+          // For closing fence, also add the end class for bottom border radius
+          if (wasInCodeBlock) {
+            builder.add(line.from, line.from, Decoration.line({ class: "cm-codeblock-end" }));
+          }
+        }
         continue;
       }
-      if (inCodeBlock) continue;
+      if (inCodeBlock) {
+        if (i !== cursorLine) {
+          builder.add(line.from, line.from, Decoration.line({ class: "cm-codeblock-line" }));
+        }
+        continue;
+      }
 
       // Track block comments (%% on its own line)
       if (text.trim() === "%%") {
