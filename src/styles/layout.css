@@ -2973,6 +2973,7 @@
   .editor-container .cm-content {
     max-width: var(--editor-max-width, 720px);
     margin: 0 auto;
+    padding-bottom: 40vh;
   }
 
   .editor-container .cm-content .cm-line + .cm-line {
