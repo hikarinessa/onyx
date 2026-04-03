@@ -3769,6 +3769,7 @@
     display: block !important;
     overflow: visible !important;
     border: none !important;
+    height: auto !important;
   }
 
   /* Only show the active pane */
@@ -3776,7 +3777,18 @@
     display: none !important;
   }
 
-  /* Editor container */
+  /* Hide tab bar in print */
+  .tabbar {
+    display: none !important;
+  }
+
+  /* Break all containers out of fixed-height flex layout */
+  .editor-container {
+    height: auto !important;
+    overflow: visible !important;
+    flex: none !important;
+  }
+
   .cm-editor {
     height: auto !important;
     max-height: none !important;
@@ -3793,7 +3805,9 @@
 
   .cm-content {
     min-height: 0 !important;
-    padding: 0 !important;
+    max-width: none !important;
+    padding: 0 2cm !important;
+    padding-bottom: 0 !important;
     white-space: pre-wrap !important;
     color: black !important;
   }
