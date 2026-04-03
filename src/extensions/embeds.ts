@@ -21,6 +21,10 @@ import { useAppStore, selectActiveTabPath } from "../stores/app";
 
 const EMBED_RE = /^!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]\s*$/;
 
+// Hide the raw embed text but keep the line in the DOM for cursor navigation
+const DECO_EMBED_HIDE = Decoration.replace({});
+const DECO_EMBED_LINE = Decoration.line({ class: "cm-embed-source-line" });
+
 // ── Embed cache ──
 
 interface CacheEntry {
@@ -468,20 +472,31 @@ function buildEmbedDecos(state: import("@codemirror/state").EditorState, view?: 
         if (view && !cached) {
           triggerFetch(view, link, contextPath, 0, new Set([contextPath]));
         }
-        builder.add(line.from, line.to, Decoration.replace({
+        // Collapse the source line visually, hide text
+        builder.add(line.from, line.from, DECO_EMBED_LINE);
+        builder.add(line.from, line.to, DECO_EMBED_HIDE);
+        // Show loading widget after the line
+        builder.add(line.to, line.to, Decoration.widget({
           widget: new EmbedLoadingWidget(link),
           block: true,
+          side: 1,
         }));
       } else if (cached.status === "error") {
-        builder.add(line.from, line.to, Decoration.replace({
+        builder.add(line.from, line.from, DECO_EMBED_LINE);
+        builder.add(line.from, line.to, DECO_EMBED_HIDE);
+        builder.add(line.to, line.to, Decoration.widget({
           widget: new EmbedErrorWidget(link, cached.error || "Error"),
           block: true,
+          side: 1,
         }));
       } else {
         const ancestors = new Set([contextPath]);
-        builder.add(line.from, line.to, Decoration.replace({
+        builder.add(line.from, line.from, DECO_EMBED_LINE);
+        builder.add(line.from, line.to, DECO_EMBED_HIDE);
+        builder.add(line.to, line.to, Decoration.widget({
           widget: new EmbedWidget(link, cached.content, 0, ancestors, contextPath),
           block: true,
+          side: 1,
         }));
       }
     }
@@ -536,6 +551,13 @@ const embedViewTracker = ViewPlugin.define((view) => {
 // ── Theme ──
 
 const embedTheme = EditorView.theme({
+  ".cm-embed-source-line": {
+    height: "0 !important",
+    overflow: "hidden !important",
+    padding: "0 !important",
+    margin: "0 !important",
+    lineHeight: "0 !important",
+  },
   ".cm-embed-block": {
     border: "1px solid var(--border-default, #333)",
     borderRadius: "6px",
