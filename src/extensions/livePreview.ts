@@ -55,6 +55,44 @@ export const previewModeField = StateField.define<boolean>({
   },
 });
 
+// ── List fold state ──
+
+/** Toggle a list item's collapsed state. Value is the doc position of the list item line start. */
+const toggleListFold = StateEffect.define<number>();
+
+/**
+ * Tracks which list items are collapsed, by document position (line start).
+ * Positions are remapped via mapPos on edits so they survive insertions/deletions.
+ */
+const listFoldField = StateField.define<Set<number>>({
+  create: () => new Set(),
+  update(collapsed, tr) {
+    let updated = collapsed;
+    for (const e of tr.effects) {
+      if (e.is(toggleListFold)) {
+        updated = new Set(updated);
+        if (updated.has(e.value)) {
+          updated.delete(e.value);
+        } else {
+          updated.add(e.value);
+        }
+      }
+    }
+    // Remap positions on doc changes
+    if (tr.docChanged && updated.size > 0) {
+      const remapped = new Set<number>();
+      for (const pos of updated) {
+        const newPos = tr.changes.mapPos(pos, 1);
+        if (newPos < tr.newDoc.length) {
+          remapped.add(newPos);
+        }
+      }
+      return remapped;
+    }
+    return updated;
+  },
+});
+
 // ── Callout fold state ──
 
 /** Toggle a callout's collapsed state. Value is the doc position of the callout header line start. */
@@ -200,13 +238,8 @@ class ListFoldWidget extends WidgetType {
     span.title = this.folded ? "Unfold list" : "Fold list";
     span.addEventListener("mousedown", (e) => {
       e.preventDefault();
-      const range = listFoldRange(view.state, this.lineStart, view.state.doc.lineAt(this.lineStart).to);
-      if (!range) return;
-      if (this.folded) {
-        view.dispatch({ effects: unfoldEffect.of({ from: range.from, to: range.to }) });
-      } else {
-        view.dispatch({ effects: foldEffect.of({ from: range.from, to: range.to }) });
-      }
+      e.stopPropagation();
+      view.dispatch({ effects: toggleListFold.of(this.lineStart) });
     });
     return span;
   }
@@ -834,6 +867,21 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
   const unitLen = view.state.facet(indentUnit).length;
 
   const cursorLine = doc.lineAt(view.state.selection.main.head).number;
+  const collapsedLists = view.state.field(listFoldField);
+
+  // Pre-compute which lines are hidden by collapsed list items
+  const listHiddenLines = new Set<number>();
+  for (const pos of collapsedLists) {
+    const range = listFoldRange(view.state, pos, doc.lineAt(pos).to);
+    if (range) {
+      // Hide all lines from the one after the parent to the last child
+      const startHide = doc.lineAt(range.from + 1).number; // line after parent
+      const endHide = doc.lineAt(range.to).number;
+      for (let ln = startHide; ln <= endHide; ln++) {
+        listHiddenLines.add(ln);
+      }
+    }
+  }
 
   for (const { from, to } of view.visibleRanges) {
     const startLine = doc.lineAt(from).number;
@@ -857,6 +905,12 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
 
       // Skip embed lines (handled by embedBlockField)
       if (/^!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]\s*$/.test(line.text)) continue;
+
+      // Hide lines collapsed by list fold (unless cursor is on them)
+      if (listHiddenLines.has(i) && i !== cursorLine) {
+        builder.add(line.from, line.from, Decoration.line({ class: "cm-list-fold-hidden" }));
+        continue;
+      }
 
       // Skip lines covered by table widgets
       if (tableSkipLines.has(i)) continue;
@@ -1088,15 +1142,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         // Fold chevron for list items with nested children — before bullet
         const listFold = listFoldRange(view.state, line.from, line.to);
         if (listFold) {
-          let isListFolded = false;
-          const foldIter = foldedRanges(view.state).iter();
-          while (foldIter.value) {
-            if (foldIter.from === listFold.from && foldIter.to === listFold.to) {
-              isListFolded = true;
-              break;
-            }
-            foldIter.next();
-          }
+          const isListFolded = collapsedLists.has(line.from);
           builder.add(markerStart, markerStart, Decoration.widget({
             widget: new ListFoldWidget(line.from, isListFolded),
             side: -1,
@@ -1129,15 +1175,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
         // Fold chevron for ordered list items with nested children — before number
         const olFold = listFoldRange(view.state, line.from, line.to);
         if (olFold) {
-          let isOlFolded = false;
-          const olFoldIter = foldedRanges(view.state).iter();
-          while (olFoldIter.value) {
-            if (olFoldIter.from === olFold.from && olFoldIter.to === olFold.to) {
-              isOlFolded = true;
-              break;
-            }
-            olFoldIter.next();
-          }
+          const isOlFolded = collapsedLists.has(line.from);
           const olMarkerStart = line.from + indentOl;
           builder.add(olMarkerStart, olMarkerStart, Decoration.widget({
             widget: new ListFoldWidget(line.from, isOlFolded),
@@ -1308,12 +1346,14 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         this.scan = preScanDocument(update.view);
       }
       const calloutFoldChanged = update.startState.field(calloutFoldField) !== update.state.field(calloutFoldField);
+      const listFoldChanged = update.startState.field(listFoldField) !== update.state.field(listFoldField);
       if (
         update.docChanged ||
         update.viewportChanged ||
         update.selectionSet ||
         update.startState.field(previewModeField) !== active ||
-        calloutFoldChanged
+        calloutFoldChanged ||
+        listFoldChanged
       ) {
         const td = detectTableRanges(update.view, this.scan.fmEnd);
         this.tableSkipLines = td.skipLines;
@@ -1518,5 +1558,5 @@ const previewTheme = EditorView.theme({
 // ── Export ──
 
 export function livePreviewExtension(): Extension[] {
-  return [previewModeField, calloutFoldField, livePreviewPlugin, tableBlockField, previewTheme];
+  return [previewModeField, calloutFoldField, listFoldField, livePreviewPlugin, tableBlockField, previewTheme];
 }

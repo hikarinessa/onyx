@@ -3489,6 +3489,14 @@
     color: var(--text-primary);
   }
 
+  .cm-line.cm-list-fold-hidden {
+    height: 0 !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: 0 !important;
+  }
+
   .cm-preview-blockquote {
     border-left: none !important;
     padding-left: 28px !important;
