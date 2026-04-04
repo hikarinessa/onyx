@@ -108,6 +108,9 @@ pub fn run() {
                 .separator()
                 .item(&MenuItemBuilder::with_id("close_tab", "Close Tab").accelerator("CmdOrCtrl+W").build(app)?)
                 .separator()
+                .item(&MenuItemBuilder::with_id("reveal_in_finder", "Reveal in Finder").accelerator("CmdOrCtrl+Shift+R").build(app)?)
+                .item(&MenuItemBuilder::with_id("copy_path", "Copy File Path").build(app)?)
+                .separator()
                 .item(&MenuItemBuilder::with_id("print", "Print…").accelerator("CmdOrCtrl+Shift+P").build(app)?)
                 .build()?;
 
@@ -122,16 +125,27 @@ pub fn run() {
                 .separator()
                 .item(&MenuItemBuilder::with_id("find", "Find").accelerator("CmdOrCtrl+F").build(app)?)
                 .item(&MenuItemBuilder::with_id("find_replace", "Find and Replace").accelerator("CmdOrCtrl+H").build(app)?)
+                .separator()
+                .item(&MenuItemBuilder::with_id("insert_wikilink", "Insert Wikilink").accelerator("CmdOrCtrl+K").build(app)?)
                 .build()?;
 
             let view_menu = SubmenuBuilder::new(app, "View")
                 .item(&MenuItemBuilder::with_id("toggle_sidebar", "Toggle Sidebar").accelerator("CmdOrCtrl+Alt+[").build(app)?)
                 .item(&MenuItemBuilder::with_id("toggle_context", "Toggle Context Panel").accelerator("CmdOrCtrl+Alt+]").build(app)?)
                 .separator()
+                .item(&MenuItemBuilder::with_id("toggle_preview", "Toggle Preview Mode").accelerator("CmdOrCtrl+/").build(app)?)
+                .separator()
+                .item(&MenuItemBuilder::with_id("split_editor", "Split Editor").accelerator("CmdOrCtrl+\\").build(app)?)
+                .item(&MenuItemBuilder::with_id("close_pane", "Close Pane").accelerator("CmdOrCtrl+Shift+W").build(app)?)
+                .separator()
+                .item(&MenuItemBuilder::with_id("search_files", "Search in Files").accelerator("CmdOrCtrl+Shift+F").build(app)?)
                 .item(&MenuItemBuilder::with_id("command_palette", "Command Palette").accelerator("CmdOrCtrl+P").build(app)?)
                 .build()?;
 
             let go_menu = SubmenuBuilder::new(app, "Go")
+                .item(&MenuItemBuilder::with_id("navigate_back", "Back").accelerator("CmdOrCtrl+[").build(app)?)
+                .item(&MenuItemBuilder::with_id("navigate_forward", "Forward").accelerator("CmdOrCtrl+]").build(app)?)
+                .separator()
                 .item(&MenuItemBuilder::with_id("today_note", "Today's Note").accelerator("CmdOrCtrl+Shift+D").build(app)?)
                 .build()?;
 
@@ -139,6 +153,8 @@ pub fn run() {
                 .item(&MenuItemBuilder::with_id("bold", "Bold").accelerator("CmdOrCtrl+B").build(app)?)
                 .item(&MenuItemBuilder::with_id("italic", "Italic").accelerator("CmdOrCtrl+I").build(app)?)
                 .item(&MenuItemBuilder::with_id("code", "Inline Code").accelerator("CmdOrCtrl+Shift+C").build(app)?)
+                .separator()
+                .item(&MenuItemBuilder::with_id("cycle_list_type", "Cycle List Type").accelerator("CmdOrCtrl+L").build(app)?)
                 .build()?;
 
             let window_menu = SubmenuBuilder::new(app, "Window")

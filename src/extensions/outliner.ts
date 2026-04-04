@@ -224,6 +224,74 @@ function backspaceOnEmptyItem(view: EditorView): boolean {
   return true;
 }
 
+const CHECKBOX_RE = /^(\s*)([-*+])\s\[[ x]\]\s/;
+
+/** Cycle list type: bullet → checkbox → ordered → bullet. Non-list lines become bullets. */
+function cycleListType(view: EditorView): boolean {
+  const { state } = view;
+  const changes: ChangeSpec[] = [];
+  const { from, to } = state.selection.main;
+  const startLine = state.doc.lineAt(from).number;
+  const endLine = state.doc.lineAt(to).number;
+
+  // Detect type of first list line to determine cycle target
+  let firstType: "bullet" | "ordered" | "checkbox" | "none" = "none";
+  for (let i = startLine; i <= endLine; i++) {
+    const text = state.doc.line(i).text;
+    if (CHECKBOX_RE.test(text)) { firstType = "checkbox"; break; }
+    const info = getListInfo(text);
+    if (info) {
+      firstType = isOrderedMarker(info.marker) ? "ordered" : "bullet";
+      break;
+    }
+  }
+
+  // Cycle: bullet → checkbox → ordered → bullet. Non-list → bullet.
+  const nextType = firstType === "bullet" ? "checkbox"
+    : firstType === "checkbox" ? "ordered"
+    : firstType === "ordered" ? "bullet"
+    : "bullet";
+
+  let orderedNum = 1;
+  for (let i = startLine; i <= endLine; i++) {
+    const line = state.doc.line(i);
+    const text = line.text;
+    const cbMatch = text.match(CHECKBOX_RE);
+    const info = getListInfo(text);
+
+    if (!cbMatch && !info) {
+      // Non-list line — convert to the target type
+      const indent = text.match(/^(\s*)/)?.[1] ?? "";
+      const content = text.slice(indent.length);
+      let newPrefix: string;
+      if (nextType === "bullet") newPrefix = `${indent}- `;
+      else if (nextType === "checkbox") newPrefix = `${indent}- [ ] `;
+      else newPrefix = `${indent}${orderedNum++}. `;
+      changes.push({ from: line.from, to: line.from + indent.length, insert: newPrefix });
+      continue;
+    }
+
+    // Determine current prefix to replace
+    const indent = cbMatch ? cbMatch[1] : info!.indent;
+    const prefixEnd = cbMatch ? line.from + cbMatch[0].length : line.from + info!.fullPrefix.length;
+
+    let newPrefix: string;
+    if (nextType === "bullet") {
+      newPrefix = `${indent}- `;
+    } else if (nextType === "checkbox") {
+      newPrefix = `${indent}- [ ] `;
+    } else {
+      newPrefix = `${indent}${orderedNum++}. `;
+    }
+
+    changes.push({ from: line.from, to: prefixEnd, insert: newPrefix });
+  }
+
+  if (changes.length === 0) return false;
+  view.dispatch({ changes });
+  return true;
+}
+
 export const outlinerKeymap = [
   { key: "Tab", run: indentListItem },
   { key: "Shift-Tab", run: outdentListItem },
@@ -231,6 +299,7 @@ export const outlinerKeymap = [
   { key: "Ctrl-Shift-ArrowDown", mac: "Alt-ArrowDown", run: moveListItemDown },
   { key: "Enter", run: newListItem },
   { key: "Backspace", run: backspaceOnEmptyItem },
+  { key: "Mod-l", run: cycleListType },
 ];
 
 /**
