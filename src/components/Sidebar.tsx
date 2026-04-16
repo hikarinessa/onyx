@@ -141,12 +141,15 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
   const [children, setChildren] = useState<DirEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  // Re-fetch children when fileTreeVersion bumps or sort order changes
+  // Re-fetch children when fileTreeVersion bumps or sort order changes.
+  // On error, keep prior children — a transient IPC failure (e.g. DB lock contention during
+  // a concurrent reconcile) would otherwise make the folder appear empty. If the folder was
+  // actually deleted, the parent's loadDirectories will drop it from the tree entirely.
   useEffect(() => {
     if (expanded && loaded && entry.is_dir) {
       invoke<DirEntry[]>("list_directory", { path: entry.path, sortOrder })
         .then(setChildren)
-        .catch(() => { setChildren([]); setLoaded(false); });
+        .catch((err) => console.error(`list_directory refetch failed for ${entry.path}:`, err));
     }
   }, [fileTreeVersion, sortOrder]); // eslint-disable-line -- only re-fetch on version/sort bump
 
@@ -337,20 +340,34 @@ export function Sidebar() {
       );
       setDirectories(dirs);
 
-      const entries = new Map<string, DirEntry[]>();
-      for (const dir of dirs) {
-        try {
-          const dirEntries = await invoke<DirEntry[]>("list_directory", {
-            path: dir.path,
-            sortOrder,
-          });
-          entries.set(dir.id, dirEntries);
-        } catch (err) {
-          console.error(`Failed to list ${dir.path}:`, err);
-          entries.set(dir.id, []);
+      const results = await Promise.all(
+        dirs.map(async (dir) => {
+          try {
+            const dirEntries = await invoke<DirEntry[]>("list_directory", {
+              path: dir.path,
+              sortOrder,
+            });
+            return { id: dir.id, entries: dirEntries, ok: true as const };
+          } catch (err) {
+            console.error(`Failed to list ${dir.path}:`, err);
+            return { id: dir.id, entries: null, ok: false as const };
+          }
+        })
+      );
+
+      // Preserve prior entries on transient IPC errors — a failed list_directory
+      // during a concurrent reconcile would otherwise blank the folder in the sidebar.
+      setRootEntries((prev) => {
+        const next = new Map<string, DirEntry[]>();
+        for (const r of results) {
+          if (r.ok) {
+            next.set(r.id, r.entries);
+          } else {
+            next.set(r.id, prev.get(r.id) ?? []);
+          }
         }
-      }
-      setRootEntries(entries);
+        return next;
+      });
     } catch (err) {
       console.error("Failed to load directories:", err);
     }

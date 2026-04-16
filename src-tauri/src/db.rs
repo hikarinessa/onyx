@@ -2,6 +2,12 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use std::path::Path;
 
+/// Escape LIKE metacharacters so literal `_` and `%` in paths don't act as wildcards.
+/// Query sites must include `ESCAPE '\\'`.
+fn escape_like_literal(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+}
+
 pub struct Database {
     conn: Connection,
 }
@@ -185,20 +191,23 @@ impl Database {
         let old_p = if old_prefix.ends_with('/') { old_prefix.to_string() } else { format!("{}/", old_prefix) };
         let new_p = if new_prefix.ends_with('/') { new_prefix.to_string() } else { format!("{}/", new_prefix) };
 
+        let old_pattern = format!("{}%", escape_like_literal(&old_p));
+        let new_pattern = format!("{}%", escape_like_literal(&new_p));
+
         let tx = self.conn.unchecked_transaction()
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
         let count = tx.execute(
-            "UPDATE files SET path = ?1 || substr(path, ?2), title = NULL WHERE path LIKE ?3",
-            params![new_p, old_p.len() as i64 + 1, format!("{}%", old_p)],
+            "UPDATE files SET path = ?1 || substr(path, ?2), title = NULL WHERE path LIKE ?3 ESCAPE '\\'",
+            params![new_p, old_p.len() as i64 + 1, old_pattern],
         ).map_err(|e| format!("Failed to rename directory prefix: {}", e))?;
 
         // Recalculate titles for affected files
         let mut stmt = tx.prepare(
-            "SELECT id, path FROM files WHERE path LIKE ?1"
+            "SELECT id, path FROM files WHERE path LIKE ?1 ESCAPE '\\'"
         ).map_err(|e| format!("Failed to prepare title update: {}", e))?;
 
-        let rows: Vec<(i64, String)> = stmt.query_map(params![format!("{}%", new_p)], |row| {
+        let rows: Vec<(i64, String)> = stmt.query_map(params![new_pattern], |row| {
             Ok((row.get(0)?, row.get(1)?))
         }).map_err(|e| format!("Failed to query files: {}", e))?
           .filter_map(|r| r.ok())
@@ -227,9 +236,10 @@ impl Database {
 
     /// Delete all files whose path starts with a given prefix (used for folder deletes).
     pub fn delete_by_prefix(&self, prefix: &str) -> Result<u32, String> {
-        let pattern = if prefix.ends_with('/') { format!("{}%", prefix) } else { format!("{}/%", prefix) };
+        let escaped = escape_like_literal(prefix);
+        let pattern = if escaped.ends_with('/') { format!("{}%", escaped) } else { format!("{}/%", escaped) };
         let count = self.conn.execute(
-            "DELETE FROM files WHERE path LIKE ?1",
+            "DELETE FROM files WHERE path LIKE ?1 ESCAPE '\\'",
             params![pattern],
         ).map_err(|e| format!("Failed to delete files by prefix: {}", e))?;
         Ok(count as u32)
@@ -592,9 +602,9 @@ impl Database {
 
     /// Get indexed file paths under a directory prefix (for scoped reconciliation).
     pub fn get_indexed_paths_by_prefix(&self, prefix: &str) -> Result<Vec<String>, String> {
-        let pattern = format!("{}%", prefix);
+        let pattern = format!("{}%", escape_like_literal(prefix));
         let mut stmt = self.conn.prepare(
-            "SELECT path FROM files WHERE path LIKE ?1"
+            "SELECT path FROM files WHERE path LIKE ?1 ESCAPE '\\'"
         ).map_err(|e| format!("Failed to prepare prefix paths query: {}", e))?;
 
         let rows = stmt.query_map(params![pattern], |row| {
@@ -610,14 +620,15 @@ impl Database {
 
     /// Check if any indexed .md file exists under the given directory path.
     pub fn has_files_under(&self, dir_path: &str) -> bool {
-        let pattern = if dir_path.ends_with('/') {
-            format!("{}%", dir_path)
+        let escaped = escape_like_literal(dir_path);
+        let pattern = if escaped.ends_with('/') {
+            format!("{}%", escaped)
         } else {
-            format!("{}/%", dir_path)
+            format!("{}/%", escaped)
         };
         self.conn
             .query_row(
-                "SELECT 1 FROM files WHERE path LIKE ?1 LIMIT 1",
+                "SELECT 1 FROM files WHERE path LIKE ?1 ESCAPE '\\' LIMIT 1",
                 params![pattern],
                 |_| Ok(()),
             )

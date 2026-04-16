@@ -4,6 +4,16 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.10.8] — 2026-04-16
+
+### Fixed
+- Folders intermittently disappearing from the sidebar tree (#103)
+  - `reconcile()` now reindexes before pruning stale entries, closing the empty-folder window during folder-rename-while-closed or bulk external renames
+  - `has_files_under`, `get_indexed_paths_by_prefix`, `delete_by_prefix`, and `rename_dir_prefix` now escape `%`/`_`/`\` in path prefixes and use `ESCAPE '\\'`; folders with these chars in their names no longer cause false-negative/over-matching LIKE queries
+  - Sidebar `loadDirectories` preserves prior entries on transient per-directory IPC errors instead of blanking them; `TreeNode` refetch no longer clears children on error
+
+---
+
 ## [0.10.5] — 2026-03-27
 
 ### Added

@@ -102,7 +102,25 @@ impl Indexer {
             }
         }
 
-        // 4. Execute
+        // 4. Execute — reindex BEFORE pruning stale entries.
+        // If all files in a folder were renamed (e.g. folder rename while Onyx was closed),
+        // old paths land in to_remove and new paths in to_index. Pruning first would create
+        // a window where has_files_under() reports the folder as empty, causing it to vanish
+        // from the sidebar when hide_empty_folders is on. Reindexing first keeps old rows
+        // alongside new ones until the prune completes — the folder never appears empty.
+        let total = to_index.len() as u32;
+        let mut indexed: u32 = 0;
+        for (path, dir_id) in &to_index {
+            let path_buf = PathBuf::from(path);
+            if let Err(e) = index_single_file(&path_buf, dir_id, db) {
+                log::error!("Failed to index {}: {}", path, e);
+            }
+            indexed += 1;
+            if indexed % 50 == 0 || indexed == total {
+                let _ = app_handle.emit("index:progress", IndexProgress { indexed, total });
+            }
+        }
+
         let stale_count = to_remove.len();
         if !to_remove.is_empty() {
             let db_lock = match db.lock() {
@@ -115,19 +133,6 @@ impl Indexer {
             };
             if let Err(e) = db_lock.delete_files_batch(&to_remove) {
                 log::error!("Failed to prune stale entries: {}", e);
-            }
-        }
-
-        let total = to_index.len() as u32;
-        let mut indexed: u32 = 0;
-        for (path, dir_id) in &to_index {
-            let path_buf = PathBuf::from(path);
-            if let Err(e) = index_single_file(&path_buf, dir_id, db) {
-                log::error!("Failed to index {}: {}", path, e);
-            }
-            indexed += 1;
-            if indexed % 50 == 0 || indexed == total {
-                let _ = app_handle.emit("index:progress", IndexProgress { indexed, total });
             }
         }
 
