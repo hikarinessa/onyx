@@ -262,7 +262,6 @@ function cycleListType(view: EditorView): boolean {
     if (!cbMatch && !info) {
       // Non-list line — convert to the target type
       const indent = text.match(/^(\s*)/)?.[1] ?? "";
-      const content = text.slice(indent.length);
       let newPrefix: string;
       if (nextType === "bullet") newPrefix = `${indent}- `;
       else if (nextType === "checkbox") newPrefix = `${indent}- [ ] `;
