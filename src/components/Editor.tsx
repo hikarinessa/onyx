@@ -248,9 +248,7 @@ function buildExtensions(): Extension[] {
       indentWithTab,
       ...defaultKeymap,
       ...historyKeymap,
-      // Filter out Cmd+Alt+[ and Cmd+Alt+] from foldKeymap — those are
-      // used for sidebar/context panel toggle at the app level.
-      ...foldKeymap.filter((b) => b.key !== "Mod-Alt-[" && b.key !== "Mod-Alt-]"),
+      ...foldKeymap.filter((b) => b.mac !== "Cmd-Alt-[" && b.mac !== "Cmd-Alt-]"),
       ...searchKeymap,
     ]),
     history(),

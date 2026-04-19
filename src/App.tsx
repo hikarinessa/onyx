@@ -219,6 +219,7 @@ function registerCommands() {
   registerCommand({
     id: "file.revealInFinder",
     label: "Reveal in Finder",
+    shortcut: "Cmd+Shift+R",
     category: "File",
     execute: async () => {
       const tab = selectActiveTab(store());
@@ -281,6 +282,7 @@ function registerCommands() {
   registerCommand({
     id: "view.closePane",
     label: "Close Pane",
+    shortcut: "Cmd+Shift+W",
     category: "View",
     execute: () => {
       const s = store();
@@ -407,6 +409,39 @@ function registerCommands() {
     },
   });
 
+  // ── Lint panel ──
+  registerCommand({
+    id: "view.toggleLintPanel",
+    label: "Toggle Lint Panel",
+    category: "View",
+    execute: () => store().toggleLintPanel(),
+  });
+
+  // ── Sidebar tab switching ──
+  registerCommand({
+    id: "view.showFileTree",
+    label: "Show File Tree",
+    category: "View",
+    execute: () => {
+      const s = store();
+      if (!s.sidebarVisible) s.toggleSidebar();
+      s.setSidebarTab("files");
+    },
+  });
+  registerCommand({
+    id: "view.showSearch",
+    label: "Show Search",
+    category: "View",
+    execute: () => {
+      const s = store();
+      if (!s.sidebarVisible) s.toggleSidebar();
+      s.setSidebarTab("search");
+      setTimeout(() => {
+        document.querySelector<HTMLInputElement>(".search-panel-input")?.focus();
+      }, 50);
+    },
+  });
+
   // ── Print / PDF export ──
   registerCommand({
     id: "file.print",
@@ -472,6 +507,54 @@ export default function App() {
           break;
         case "print":
           invoke("print_page").catch(() => {});
+          break;
+        case "navigate_back":
+          navigateHistory("back");
+          break;
+        case "navigate_forward":
+          navigateHistory("forward");
+          break;
+        case "search_files": {
+          const s2 = store();
+          if (!s2.sidebarVisible) s2.toggleSidebar();
+          s2.setSidebarTab("search");
+          setTimeout(() => {
+            document.querySelector<HTMLInputElement>(".search-panel-input")?.focus();
+          }, 50);
+          break;
+        }
+        case "toggle_preview":
+          (() => {
+            const s2 = store();
+            const tab = selectActiveTab(s2);
+            if (tab) s2.toggleEditorMode(tab.id);
+          })();
+          break;
+        case "split_editor":
+          store().splitPane();
+          break;
+        case "close_pane":
+          (() => {
+            const s2 = store();
+            if (s2.paneState.panes.length > 1) {
+              s2.closePane(s2.paneState.activePaneId);
+            }
+          })();
+          break;
+        case "insert_wikilink":
+          openQuickOpenForWikilink();
+          break;
+        case "reveal_in_finder":
+          (() => {
+            const tab = selectActiveTab(store());
+            if (tab) invoke("reveal_in_finder", { path: tab.path }).catch(() => {});
+          })();
+          break;
+        case "copy_path":
+          (() => {
+            const tab = selectActiveTab(store());
+            if (tab) navigator.clipboard.writeText(tab.path).catch(() => {});
+          })();
           break;
       }
     });
@@ -688,6 +771,22 @@ export default function App() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("mouseup", handleMouseNav);
     };
+  }, []);
+
+  // ── Auto-collapse panels at narrow widths ──
+  useEffect(() => {
+    const handleResize = () => {
+      const w = window.innerWidth;
+      const state = useAppStore.getState();
+      if (w < 800 && state.contextPanelVisible) {
+        useAppStore.setState({ contextPanelVisible: false });
+      }
+      if (w < 600 && state.sidebarVisible) {
+        useAppStore.setState({ sidebarVisible: false });
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   // ── Resize handles for sidebar and context panel ──

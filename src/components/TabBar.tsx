@@ -26,15 +26,14 @@ export function TabBar({ paneId }: { paneId?: string }) {
 
   // Overflow detection
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const checkOverflow = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const tolerance = 1;
-    setCanScrollLeft(el.scrollLeft > tolerance);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - tolerance);
+    setHasOverflow(el.scrollWidth > el.clientWidth + 1);
   }, []);
 
   useEffect(() => {
@@ -57,14 +56,28 @@ export function TabBar({ paneId }: { paneId?: string }) {
     const activeEl = el.querySelector('.tab.active');
     if (activeEl) {
       activeEl.scrollIntoView({ block: "nearest", inline: "nearest" });
-      // Re-check overflow after scroll
       requestAnimationFrame(checkOverflow);
     }
   }, [activeTabId, checkOverflow]);
 
-  const scrollBy = useCallback((delta: number) => {
-    scrollRef.current?.scrollBy({ left: delta, behavior: "smooth" });
-  }, []);
+  // Close menu on click outside or Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [menuOpen]);
 
   if (tabs.length === 0) return null;
 
@@ -98,22 +111,17 @@ export function TabBar({ paneId }: { paneId?: string }) {
     dragStartRef.current = null;
   };
 
-  const showArrows = canScrollLeft || canScrollRight;
+  const closeAllTabs = () => {
+    const ids = tabs.map((t) => t.id);
+    for (const id of ids) closeTab(id);
+    setMenuOpen(false);
+  };
 
   return (
     <div
       className={`tabbar ${isActivePane ? "" : "tabbar-inactive"}`}
       onPointerDown={() => { if (!isActivePane) setActivePane(pane.id); }}
     >
-      {showArrows && (
-        <button
-          className={`tabbar-scroll-btn tabbar-scroll-left ${canScrollLeft ? "" : "tabbar-scroll-btn-disabled"}`}
-          onClick={() => scrollBy(-120)}
-          tabIndex={-1}
-        >
-          <Icon name="chevron-left" size={14} />
-        </button>
-      )}
       <div className="tabbar-scroll" ref={scrollRef}>
         {tabs.map((tab, i) => (
           <div
@@ -153,14 +161,52 @@ export function TabBar({ paneId }: { paneId?: string }) {
           </div>
         ))}
       </div>
-      {showArrows && (
-        <button
-          className={`tabbar-scroll-btn tabbar-scroll-right ${canScrollRight ? "" : "tabbar-scroll-btn-disabled"}`}
-          onClick={() => scrollBy(120)}
-          tabIndex={-1}
-        >
-          <Icon name="chevron-right" size={14} />
-        </button>
+      {hasOverflow && (
+        <div className="tabbar-overflow" ref={menuRef}>
+          <button
+            className={`tabbar-overflow-btn ${menuOpen ? "active" : ""}`}
+            onClick={() => setMenuOpen(!menuOpen)}
+            tabIndex={-1}
+            title="All tabs"
+          >
+            <Icon name="chevron-down" size={14} />
+          </button>
+          {menuOpen && (
+            <div className="tabbar-overflow-menu">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  className={`tabbar-overflow-item ${tab.id === activeTabId ? "active" : ""}`}
+                  onClick={() => {
+                    if (!isActivePane) setActivePane(pane.id);
+                    setActiveTab(tab.id);
+                    setMenuOpen(false);
+                    // Scroll the tab into view
+                    requestAnimationFrame(() => {
+                      const el = scrollRef.current?.querySelector('.tab.active');
+                      el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+                    });
+                  }}
+                >
+                  <span className="tabbar-overflow-item-label">{tab.name}</span>
+                  <button
+                    className="tabbar-overflow-item-close"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(tab.id);
+                    }}
+                  >
+                    <Icon name="x" size={11} />
+                  </button>
+                </button>
+              ))}
+              <div className="tabbar-overflow-divider" />
+              <button className="tabbar-overflow-item tabbar-overflow-close-all" onClick={closeAllTabs}>
+                Close all
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

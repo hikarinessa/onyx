@@ -1,6 +1,6 @@
 [package]
 name = "onyx"
-version = "0.10.8"
+version = "0.10.9"
 description = "A lightweight markdown note-taking app"
 authors = ["hikarinessa"]
 license = "MIT"
