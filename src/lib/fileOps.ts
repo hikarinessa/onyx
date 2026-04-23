@@ -21,17 +21,19 @@ function getAllTabs(): Tab[] {
 export async function createNote(dirPath: string): Promise<string> {
   const { path, name } = await findAvailablePath(dirPath);
   let content = "";
+  let cursorOffset: number | null = null;
   try {
     const resolved = await invoke<{ content: string; cursor_offset: number | null }>(
       "resolve_new_file_content",
       { path },
     );
     content = resolved.content;
+    cursorOffset = resolved.cursor_offset;
   } catch (e) {
     console.warn("Folder-rule resolution failed; creating empty file:", e);
   }
   await invoke("write_file", { path, content });
-  loadFileIntoCache(path, content);
+  loadFileIntoCache(path, content, cursorOffset);
   useAppStore.getState().openFile(path, name);
   useAppStore.getState().bumpFileTreeVersion();
   return path;

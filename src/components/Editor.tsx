@@ -313,17 +313,21 @@ function buildExtensions(): Extension[] {
 let sharedExtensions: Extension[] | null = null;
 export const sharedExtensionsRef = { get: () => sharedExtensions };
 
-/** Create an EditorState with the shared extensions */
-export function createStateWithExtensions(doc: string): EditorState {
+/** Create an EditorState with the shared extensions.
+ * Optional cursorOffset sets the initial selection (clamped to doc length). */
+export function createStateWithExtensions(doc: string, cursorOffset?: number | null): EditorState {
+  const selection = typeof cursorOffset === "number"
+    ? { anchor: Math.max(0, Math.min(cursorOffset, doc.length)) }
+    : undefined;
   if (!sharedExtensions) {
-    return EditorState.create({ doc });
+    return EditorState.create({ doc, selection });
   }
-  return EditorState.create({ doc, extensions: sharedExtensions });
+  return EditorState.create({ doc, extensions: sharedExtensions, selection });
 }
 
 /** Seed content into the editor cache before opening a tab */
-export function loadFileIntoCache(id: string, content: string) {
-  editorStateCache.set(id, createStateWithExtensions(content));
+export function loadFileIntoCache(id: string, content: string, cursorOffset?: number | null) {
+  editorStateCache.set(id, createStateWithExtensions(content, cursorOffset));
   lastSavedContent.set(id, content);
 }
 

@@ -24,7 +24,7 @@ export async function createOrOpenPeriodicNote(
 
   if (result.created) {
     const content = await invoke<string>("read_file", { path: result.path });
-    loadFileIntoCache(result.path, content);
+    loadFileIntoCache(result.path, content, result.cursor_offset);
     if (replaceActive && selectActiveTab(useAppStore.getState())) {
       useAppStore.getState().replaceActiveTab(result.path, name);
     } else {
