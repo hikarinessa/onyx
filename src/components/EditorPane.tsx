@@ -53,11 +53,13 @@ export function EditorPane({ pane }: { pane: Pane }) {
       try {
         const hasKeymap = state.facet(keymap).length > 0;
         if (!hasKeymap) {
-          state = createStateWithExtensions(state.doc.toString());
+          const cursor = state.selection.main.head;
+          state = createStateWithExtensions(state.doc.toString(), cursor);
           editorStateCache.set(activeTab.id, state);
         }
       } catch {
-        state = createStateWithExtensions(state.doc.toString());
+        const cursor = state.selection.main.head;
+        state = createStateWithExtensions(state.doc.toString(), cursor);
         editorStateCache.set(activeTab.id, state);
       }
     } else {

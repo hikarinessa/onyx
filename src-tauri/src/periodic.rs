@@ -7,6 +7,9 @@ use std::sync::LazyLock;
 static DATE_FORMAT_RE: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\{\{date:([^}]+)\}\}").unwrap());
 
+static CURSOR_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\{\{\s*cursor\s*\}\}").unwrap());
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeriodicConfig {
     pub daily: Option<PeriodConfig>,
@@ -280,9 +283,9 @@ pub fn render_template(
         format_date(date, fmt)
     }).to_string();
 
-    // Replace {{cursor}} with a placeholder before minijinja processes it
+    // Replace `{{ cursor }}` (whitespace-tolerant) with a placeholder before minijinja processes it
     let cursor_placeholder = "\x00CURSOR\x00";
-    let preprocessed = preprocessed.replace("{{cursor}}", cursor_placeholder);
+    let preprocessed = CURSOR_RE.replace_all(&preprocessed, cursor_placeholder).to_string();
 
     // Set up minijinja
     let mut env = minijinja::Environment::new();
