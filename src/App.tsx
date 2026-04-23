@@ -459,6 +459,49 @@ function registerCommands() {
   }
 }
 
+/**
+ * Fetch user scripts from ~/.onyx/scripts/ and register those with `palette: true`
+ * as command-palette entries. Re-running this replaces previously registered entries
+ * (register is a Map.set by id).
+ */
+async function registerPaletteScripts() {
+  try {
+    const scripts = await invoke<Array<{ name: string; display_name: string; palette: boolean }>>(
+      "list_scripts",
+    );
+    for (const s of scripts) {
+      if (!s.palette) continue;
+      registerCommand({
+        id: `script.${s.name}`,
+        label: s.display_name || s.name,
+        category: "Scripts",
+        execute: async () => {
+          const tab = selectActiveTab(useAppStore.getState());
+          const view = getEditorView();
+          if (!view) return;
+          try {
+            const result = await invoke<{ stdout: string }>("run_script", {
+              name: s.name,
+              args: [],
+              filePath: tab?.path ?? null,
+            });
+            const { from, to } = view.state.selection.main;
+            view.dispatch({
+              changes: { from, to, insert: result.stdout },
+              selection: { anchor: from + result.stdout.length },
+            });
+            view.focus();
+          } catch (err) {
+            console.error(`Script '${s.name}' failed:`, err);
+          }
+        },
+      });
+    }
+  } catch (err) {
+    console.error("Failed to load scripts:", err);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // App component
 // ---------------------------------------------------------------------------
@@ -469,6 +512,7 @@ export default function App() {
   // Register commands, restore theme, listen for native menu events
   useEffect(() => {
     registerCommands();
+    registerPaletteScripts();
     restoreTheme();
     loadAndApplyConfig();
 

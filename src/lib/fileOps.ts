@@ -20,8 +20,18 @@ function getAllTabs(): Tab[] {
 /** Create a new note in a directory, open it, and return its path */
 export async function createNote(dirPath: string): Promise<string> {
   const { path, name } = await findAvailablePath(dirPath);
-  await invoke("write_file", { path, content: "" });
-  loadFileIntoCache(path, "");
+  let content = "";
+  try {
+    const resolved = await invoke<{ content: string; cursor_offset: number | null }>(
+      "resolve_new_file_content",
+      { path },
+    );
+    content = resolved.content;
+  } catch (e) {
+    console.warn("Folder-rule resolution failed; creating empty file:", e);
+  }
+  await invoke("write_file", { path, content });
+  loadFileIntoCache(path, content);
   useAppStore.getState().openFile(path, name);
   useAppStore.getState().bumpFileTreeVersion();
   return path;

@@ -131,7 +131,7 @@ pub fn list_directory(path: String, sort_order: Option<String>, state: State<App
                 return None;
             }
 
-            if name.starts_with('.') {
+            if name.starts_with('.') && name != ".claude" {
                 return None;
             }
 
@@ -1026,7 +1026,7 @@ pub fn create_periodic_note(
         if template_full_path.exists() {
             let template_content = std::fs::read_to_string(&template_full_path)
                 .map_err(|e| format!("Failed to read template: {}", e))?;
-            periodic::render_template(&template_content, parsed_date, &title)?
+            periodic::render_template(&template_content, parsed_date, &title, &full_path)?
         } else {
             // Template doesn't exist — create with minimal default
             (format!("# {}\n\n", title), None)
@@ -1364,4 +1364,129 @@ pub fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
 pub fn drain_pending_open_files(state: State<AppState>) -> Vec<String> {
     let mut pending = state.pending_open_files.lock().unwrap();
     pending.drain(..).collect()
+}
+
+// ── Folder rules ──
+
+#[tauri::command]
+pub fn get_folder_rules() -> Result<crate::folder_rules::FolderRulesConfig, String> {
+    crate::folder_rules::load_config()
+}
+
+#[tauri::command]
+pub fn save_folder_rules(config: crate::folder_rules::FolderRulesConfig) -> Result<(), String> {
+    crate::folder_rules::save_config(&config)
+}
+
+// ── Scripts ──
+
+#[tauri::command]
+pub fn list_scripts() -> Result<Vec<crate::scripts::ScriptInfo>, String> {
+    crate::scripts::list_scripts()
+}
+
+#[derive(serde::Serialize)]
+pub struct ScriptRunResult {
+    pub stdout: String,
+}
+
+#[tauri::command]
+pub fn run_script(
+    name: String,
+    args: Vec<String>,
+    file_path: Option<String>,
+) -> Result<ScriptRunResult, String> {
+    let info = crate::scripts::find_script(&name)?;
+
+    let mut env = std::collections::HashMap::new();
+    if let Some(ref p) = file_path {
+        env.insert("ONYX_NOTE_PATH".to_string(), p.clone());
+        let path = std::path::Path::new(p);
+        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+            env.insert("ONYX_NOTE_TITLE".to_string(), stem.to_string());
+        }
+        if let Some(parent) = path.parent().and_then(|s| s.to_str()) {
+            env.insert("ONYX_NOTE_DIR".to_string(), parent.to_string());
+        }
+    }
+    let today = chrono::Local::now().date_naive();
+    env.insert(
+        "ONYX_NOTE_DATE".to_string(),
+        today.format("%Y-%m-%d").to_string(),
+    );
+
+    let stdout = crate::scripts::run_script(&info, &args, &env)?;
+    Ok(ScriptRunResult { stdout })
+}
+
+// ── File creation with folder-rule resolution ──
+
+#[derive(serde::Serialize)]
+pub struct NewFileContent {
+    pub content: String,
+    pub cursor_offset: Option<usize>,
+}
+
+/// Resolve the initial content for a newly created file by consulting folder rules.
+/// Returns empty content + None cursor if no rule matches.
+#[tauri::command]
+pub fn resolve_new_file_content(
+    path: String,
+    state: State<AppState>,
+) -> Result<NewFileContent, String> {
+    let file_path = PathBuf::from(&path);
+    validate_path(&file_path, &state).ok(); // advisory only — creating files goes through write_file later
+
+    let config = crate::folder_rules::load_config()?;
+    let rule = match crate::folder_rules::match_rule_for_file(&config, &file_path) {
+        Some(r) => r,
+        None => {
+            return Ok(NewFileContent {
+                content: String::new(),
+                cursor_offset: None,
+            })
+        }
+    };
+
+    match rule.kind {
+        crate::folder_rules::FolderRuleKind::Template => {
+            let tmpl_path = PathBuf::from(&rule.target);
+            if !tmpl_path.exists() {
+                return Err(format!("Folder-rule template not found: {}", rule.target));
+            }
+            let tmpl = std::fs::read_to_string(&tmpl_path)
+                .map_err(|e| format!("Failed to read template: {}", e))?;
+            let (content, cursor_offset) = periodic::render_template_for_path(&tmpl, &file_path)?;
+            Ok(NewFileContent {
+                content,
+                cursor_offset,
+            })
+        }
+        crate::folder_rules::FolderRuleKind::Script => {
+            let info = crate::scripts::find_script(&rule.target)?;
+            let today = chrono::Local::now().date_naive();
+            let title = file_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Untitled")
+                .to_string();
+            let env = periodic::build_script_env(today, &title, &file_path);
+            let stdout = crate::scripts::run_script(&info, &[], &env)?;
+            Ok(NewFileContent {
+                content: stdout,
+                cursor_offset: None,
+            })
+        }
+    }
+}
+
+/// Format a date with moment-style tokens. Used by the Settings UI for live path previews.
+#[tauri::command]
+pub fn format_date_preview(format: String, date: Option<String>) -> Result<String, String> {
+    let d = match date {
+        Some(s) => chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
+            .map_err(|e| format!("Invalid date '{}': {}", s, e))?,
+        None => chrono::Local::now().date_naive(),
+    };
+    Ok(periodic::format_date(d, &format))
 }

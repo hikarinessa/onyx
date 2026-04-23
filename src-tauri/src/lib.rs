@@ -3,11 +3,13 @@ mod commands;
 mod config;
 mod db;
 mod dirs;
+mod folder_rules;
 mod indexer;
 mod object_types;
 mod paths;
 mod periodic;
 mod plugins;
+mod scripts;
 mod watcher;
 
 use std::sync::{Arc, Mutex};
@@ -293,6 +295,12 @@ pub fn run() {
             commands::check_spelling,
             commands::print_page,
             commands::drain_pending_open_files,
+            commands::get_folder_rules,
+            commands::save_folder_rules,
+            commands::list_scripts,
+            commands::run_script,
+            commands::resolve_new_file_content,
+            commands::format_date_preview,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

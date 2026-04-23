@@ -2506,6 +2506,224 @@
     color: var(--text-primary);
   }
 
+  .settings-btn-compact {
+    padding: 4px 8px;
+  }
+
+  /* Periodic notes section */
+
+  .settings-period-card {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .settings-period-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .settings-period-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .settings-period-card-body {
+    padding: 4px 14px 14px 14px;
+  }
+
+  .settings-period-card-body .settings-row:last-of-type {
+    border-bottom: none;
+  }
+
+  .settings-template-picker {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .settings-template-picker .settings-text-input {
+    width: 220px;
+  }
+
+  .settings-format-preview-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0 8px 0;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .settings-format-preview-arrow {
+    opacity: 0.6;
+  }
+
+  /* Format token help popover */
+
+  .settings-format-help-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .settings-format-help-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 4px;
+  }
+
+  .settings-format-help-btn:hover {
+    color: var(--text-secondary);
+  }
+
+  .settings-format-help-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 10;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    min-width: 200px;
+  }
+
+  .settings-format-help-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+
+  .settings-format-help-table {
+    font-size: 11px;
+    color: var(--text-secondary);
+    border-collapse: collapse;
+  }
+
+  .settings-format-help-table td {
+    padding: 2px 8px 2px 0;
+    vertical-align: top;
+  }
+
+  .settings-format-help-table code {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+
+  /* Folder rules */
+
+  .settings-subsection-spacer {
+    height: 18px;
+  }
+
+  .settings-folder-rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .settings-folder-rule {
+    position: relative;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    padding: 10px 30px 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .settings-folder-rule-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .settings-folder-rule-label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    width: 64px;
+    flex-shrink: 0;
+  }
+
+  .settings-folder-rule-row .settings-text-input {
+    flex: 1;
+    width: auto;
+  }
+
+  .settings-folder-rule-row .settings-select {
+    width: 140px;
+  }
+
+  .settings-folder-rule-remove {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+  }
+
+  .settings-folder-rule-remove:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  /* Scripts list (inside Templates section) */
+
+  .settings-scripts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .settings-script-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+  }
+
+  .settings-script-name {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+
+  .settings-script-meta {
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+
   /* Custom CSS textarea (Style section) */
 
   .settings-custom-css {

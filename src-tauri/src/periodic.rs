@@ -1,6 +1,7 @@
 use chrono::{Datelike, NaiveDate};
+use minijinja::value::Rest;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 static DATE_FORMAT_RE: LazyLock<regex::Regex> =
@@ -264,11 +265,14 @@ fn weekday_name_min(wd: chrono::Weekday) -> &'static str {
 
 /// Render a template with periodic note variables.
 /// Pre-processes `{{date:FORMAT}}` before passing to minijinja.
+/// Registers a `script(name, ...args)` function that invokes a user script
+/// from `~/.onyx/scripts/` with context supplied via env vars.
 /// Returns (rendered content, optional cursor byte offset).
 pub fn render_template(
     template_content: &str,
     date: NaiveDate,
     title: &str,
+    file_path: &Path,
 ) -> Result<(String, Option<usize>), String> {
     // Pre-process {{date:FORMAT}} patterns (before minijinja sees them)
     let preprocessed = DATE_FORMAT_RE.replace_all(template_content, |caps: &regex::Captures| {
@@ -283,6 +287,24 @@ pub fn render_template(
     // Set up minijinja
     let mut env = minijinja::Environment::new();
     env.set_undefined_behavior(minijinja::UndefinedBehavior::Chainable);
+
+    // Script execution context — captured by the `script` function
+    let script_env = build_script_env(date, title, file_path);
+    env.add_function("script", move |args: Rest<minijinja::Value>| -> Result<String, minijinja::Error> {
+        let mut it = args.iter();
+        let name = it.next()
+            .and_then(|v| v.as_str().map(String::from))
+            .ok_or_else(|| minijinja::Error::new(
+                minijinja::ErrorKind::InvalidOperation,
+                "script() requires at least a name argument",
+            ))?;
+        let rest: Vec<String> = it.map(|v| v.to_string()).collect();
+        let info = crate::scripts::find_script(&name)
+            .map_err(|e| minijinja::Error::new(minijinja::ErrorKind::InvalidOperation, e))?;
+        crate::scripts::run_script(&info, &rest, &script_env)
+            .map_err(|e| minijinja::Error::new(minijinja::ErrorKind::InvalidOperation, e))
+    });
+
     env.add_template("note", &preprocessed)
         .map_err(|e| format!("Failed to parse template: {}", e))?;
 
@@ -326,6 +348,37 @@ pub fn generate_note_path(format: &str, date: NaiveDate) -> (String, String) {
     let relative = format_date(date, format);
     let title = relative.rsplit('/').next().unwrap_or(&relative).to_string();
     (format!("{}.md", relative), title)
+}
+
+/// Build the environment variables a script receives when invoked during template rendering.
+pub fn build_script_env(
+    date: NaiveDate,
+    title: &str,
+    file_path: &Path,
+) -> std::collections::HashMap<String, String> {
+    let mut env = std::collections::HashMap::new();
+    env.insert("ONYX_NOTE_PATH".to_string(), file_path.to_string_lossy().to_string());
+    env.insert("ONYX_NOTE_DATE".to_string(), format_date(date, "YYYY-MM-DD"));
+    env.insert("ONYX_NOTE_TITLE".to_string(), title.to_string());
+    if let Some(parent) = file_path.parent() {
+        env.insert("ONYX_NOTE_DIR".to_string(), parent.to_string_lossy().to_string());
+    }
+    env
+}
+
+/// Convenience: render a template for a newly created file whose date isn't known from a period config.
+/// Uses today's date and the filename stem as title.
+pub fn render_template_for_path(
+    template_content: &str,
+    file_path: &Path,
+) -> Result<(String, Option<usize>), String> {
+    let date = chrono::Local::now().date_naive();
+    let title = file_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Untitled")
+        .to_string();
+    render_template(template_content, date, &title, file_path)
 }
 
 #[cfg(test)]
@@ -397,7 +450,7 @@ mod tests {
     fn test_render_template_basic() {
         let d = NaiveDate::from_ymd_opt(2026, 3, 12).unwrap();
         let tmpl = "# {{ title }}\nDate: {{ date }}\n";
-        let (rendered, cursor) = render_template(tmpl, d, "2026-03-12").unwrap();
+        let (rendered, cursor) = render_template(tmpl, d, "2026-03-12", Path::new("/tmp/test.md")).unwrap();
         assert!(rendered.contains("# 2026-03-12"));
         assert!(rendered.contains("Date: 2026-03-12"));
         assert!(cursor.is_none());
@@ -407,7 +460,7 @@ mod tests {
     fn test_render_template_wikilinks() {
         let d = NaiveDate::from_ymd_opt(2026, 3, 12).unwrap();
         let tmpl = "Yesterday: {{ yesterday }}\nTomorrow: {{ tomorrow }}";
-        let (rendered, _) = render_template(tmpl, d, "2026-03-12").unwrap();
+        let (rendered, _) = render_template(tmpl, d, "2026-03-12", Path::new("/tmp/test.md")).unwrap();
         assert!(rendered.contains("[[2026-03-11]]"));
         assert!(rendered.contains("[[2026-03-13]]"));
     }
@@ -416,7 +469,7 @@ mod tests {
     fn test_render_template_year_boundary_links() {
         let d = NaiveDate::from_ymd_opt(2026, 12, 31).unwrap();
         let tmpl = "Tomorrow: {{ tomorrow }}";
-        let (rendered, _) = render_template(tmpl, d, "2026-12-31").unwrap();
+        let (rendered, _) = render_template(tmpl, d, "2026-12-31", Path::new("/tmp/test.md")).unwrap();
         assert!(rendered.contains("[[2027-01-01]]"));
     }
 
@@ -424,7 +477,7 @@ mod tests {
     fn test_render_template_cursor() {
         let d = NaiveDate::from_ymd_opt(2026, 3, 12).unwrap();
         let tmpl = "# Title\n{{cursor}}";
-        let (rendered, cursor) = render_template(tmpl, d, "test").unwrap();
+        let (rendered, cursor) = render_template(tmpl, d, "test", Path::new("/tmp/test.md")).unwrap();
         assert!(!rendered.contains("{{cursor}}"));
         assert!(cursor.is_some());
         assert_eq!(cursor.unwrap(), 8); // "# Title\n" = 8 bytes
@@ -434,7 +487,7 @@ mod tests {
     fn test_render_template_date_format() {
         let d = NaiveDate::from_ymd_opt(2026, 3, 12).unwrap();
         let tmpl = "Today is {{date:dddd, MMMM DD, YYYY}}";
-        let (rendered, _) = render_template(tmpl, d, "test").unwrap();
+        let (rendered, _) = render_template(tmpl, d, "test", Path::new("/tmp/test.md")).unwrap();
         assert_eq!(rendered, "Today is Thursday, March 12, 2026");
     }
 
@@ -442,7 +495,7 @@ mod tests {
     fn test_render_template_no_variables() {
         let d = NaiveDate::from_ymd_opt(2026, 3, 12).unwrap();
         let tmpl = "Just plain text with no variables.";
-        let (rendered, _) = render_template(tmpl, d, "test").unwrap();
+        let (rendered, _) = render_template(tmpl, d, "test", Path::new("/tmp/test.md")).unwrap();
         assert_eq!(rendered, tmpl);
     }
 }

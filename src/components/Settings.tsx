@@ -18,12 +18,13 @@ import type { AppConfig, ThemeColorOverrides, HeadingStyle } from "../lib/config
 import { Icon } from "./Icon";
 import { open } from "@tauri-apps/plugin-dialog";
 
-type Section = "general" | "editor" | "appearance" | "templates" | "objects" | "keybindings" | "about";
+type Section = "general" | "editor" | "appearance" | "periodic" | "templates" | "objects" | "keybindings" | "about";
 
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "general", label: "General", icon: "settings" },
   { id: "editor", label: "Editor", icon: "type" },
   { id: "appearance", label: "Appearance", icon: "palette" },
+  { id: "periodic", label: "Periodic notes", icon: "calendar" },
   { id: "templates", label: "Templates", icon: "file-text" },
   { id: "objects", label: "Objects", icon: "box" },
   { id: "keybindings", label: "Keybindings", icon: "keyboard" },
@@ -151,6 +152,7 @@ export function Settings() {
           {section === "appearance" && (
             <AppearanceSection config={config} updateConfig={updateConfig} />
           )}
+          {section === "periodic" && <PeriodicNotesSection />}
           {section === "templates" && (
             <TemplatesSection config={config} updateConfig={updateConfig} />
           )}
@@ -176,7 +178,7 @@ function SettingRow({
   children,
 }: {
   label: string;
-  description?: string;
+  description?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -1118,6 +1120,9 @@ function TemplatesSection({
         <Icon name="folder-plus" size={14} />
         Add directory
       </button>
+
+      <div className="settings-subsection-spacer" />
+      <FolderRulesSubsection />
     </div>
   );
 }
@@ -1598,6 +1603,456 @@ function AboutSection() {
           <a href="https://github.com/tgrosinger/md-advanced-tables" target="_blank" rel="noreferrer">md-advanced-tables</a>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Section: Periodic notes ──
+
+type PeriodKind = "daily" | "weekly" | "monthly";
+
+interface PeriodConfig {
+  enabled: boolean;
+  directory_id: string;
+  format: string;
+  template: string | null;
+}
+
+interface PeriodicConfig {
+  daily: PeriodConfig | null;
+  weekly: PeriodConfig | null;
+  monthly: PeriodConfig | null;
+}
+
+interface RegisteredDir {
+  id: string;
+  path: string;
+  label: string;
+}
+
+const DEFAULT_FORMATS: Record<PeriodKind, string> = {
+  daily: "Calendar/YYYY/YYYY-MM/YYYY-MM-DD",
+  weekly: "Calendar/YYYY/Weeklies/YYYY-Www",
+  monthly: "Calendar/YYYY/Monthlies/YYYY-MM",
+};
+
+function PeriodicNotesSection() {
+  const [config, setConfig] = useState<PeriodicConfig | null>(null);
+  const [dirs, setDirs] = useState<RegisteredDir[]>([]);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    invoke<PeriodicConfig>("get_periodic_config").then(setConfig).catch(console.error);
+    invoke<RegisteredDir[]>("get_registered_directories").then(setDirs).catch(console.error);
+  }, []);
+
+  const saveLater = useCallback((next: PeriodicConfig) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      invoke("save_periodic_config", { config: next }).catch(console.error);
+    }, 300);
+  }, []);
+
+  const updatePeriod = useCallback(
+    (kind: PeriodKind, patch: Partial<PeriodConfig>) => {
+      setConfig((prev) => {
+        if (!prev) return prev;
+        const existing: PeriodConfig = prev[kind] ?? {
+          enabled: false,
+          directory_id: "",
+          format: DEFAULT_FORMATS[kind],
+          template: null,
+        };
+        const next = { ...prev, [kind]: { ...existing, ...patch } };
+        saveLater(next);
+        return next;
+      });
+    },
+    [saveLater],
+  );
+
+  if (!config) return null;
+
+  return (
+    <div className="settings-section">
+      <h2 className="settings-section-title">Periodic notes</h2>
+      <p className="settings-section-description">
+        Create daily, weekly, and monthly notes from the calendar. Each period has its own
+        directory, path format, and template. Available tokens: YYYY, MM, DD, Www, dddd, MMMM.
+      </p>
+
+      <PeriodCard
+        kind="daily"
+        label="Daily"
+        period={config.daily}
+        dirs={dirs}
+        onChange={(patch) => updatePeriod("daily", patch)}
+      />
+      <PeriodCard
+        kind="weekly"
+        label="Weekly"
+        period={config.weekly}
+        dirs={dirs}
+        onChange={(patch) => updatePeriod("weekly", patch)}
+      />
+      <PeriodCard
+        kind="monthly"
+        label="Monthly"
+        period={config.monthly}
+        dirs={dirs}
+        onChange={(patch) => updatePeriod("monthly", patch)}
+      />
+    </div>
+  );
+}
+
+function PeriodCard({
+  kind,
+  label,
+  period,
+  dirs,
+  onChange,
+}: {
+  kind: PeriodKind;
+  label: string;
+  period: PeriodConfig | null;
+  dirs: RegisteredDir[];
+  onChange: (patch: Partial<PeriodConfig>) => void;
+}) {
+  const p: PeriodConfig = period ?? {
+    enabled: false,
+    directory_id: "",
+    format: DEFAULT_FORMATS[kind],
+    template: null,
+  };
+  const selectedDir = dirs.find((d) => d.id === p.directory_id);
+
+  const pickTemplate = async () => {
+    const defaultPath = selectedDir?.path;
+    const picked = await open({
+      directory: false,
+      multiple: false,
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+      defaultPath,
+    });
+    if (!picked) return;
+    const pickedPath = typeof picked === "string" ? picked : picked[0];
+    if (!pickedPath) return;
+    // Store relative to the selected directory if possible
+    const rel = selectedDir && pickedPath.startsWith(selectedDir.path + "/")
+      ? pickedPath.slice(selectedDir.path.length + 1)
+      : pickedPath;
+    onChange({ template: rel });
+  };
+
+  return (
+    <div className="settings-period-card">
+      <div className="settings-period-card-header">
+        <span className="settings-period-card-title">{label}</span>
+        <Toggle checked={p.enabled} onChange={(enabled) => onChange({ enabled })} />
+      </div>
+      <div className="settings-period-card-body">
+        <SettingRow label="Directory">
+          <select
+            className="settings-select"
+            value={p.directory_id}
+            onChange={(e) => onChange({ directory_id: e.target.value })}
+          >
+            <option value="">— Select a directory —</option>
+            {dirs.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label || d.path}
+              </option>
+            ))}
+          </select>
+        </SettingRow>
+
+        <SettingRow label="Path format" description={<FormatTokenHelp />}>
+          <input
+            type="text"
+            className="settings-text-input"
+            value={p.format}
+            onChange={(e) => onChange({ format: e.target.value })}
+            placeholder={DEFAULT_FORMATS[kind]}
+          />
+        </SettingRow>
+        <FormatPreviewRow format={p.format} />
+
+        <SettingRow label="Template" description="Relative to the selected directory">
+          <div className="settings-template-picker">
+            <input
+              type="text"
+              className="settings-text-input"
+              value={p.template ?? ""}
+              onChange={(e) => onChange({ template: e.target.value || null })}
+              placeholder="Meta/Templates/Daily.md"
+            />
+            <button
+              className="settings-btn settings-btn-compact"
+              onClick={pickTemplate}
+              disabled={!selectedDir}
+              title={selectedDir ? "Browse for template" : "Select a directory first"}
+            >
+              <Icon name="folder-open" size={14} />
+            </button>
+          </div>
+        </SettingRow>
+      </div>
+    </div>
+  );
+}
+
+function FormatPreviewRow({ format }: { format: string }) {
+  const [preview, setPreview] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      invoke<string>("format_date_preview", { format, date: null })
+        .then((s) => setPreview(s))
+        .catch(() => setPreview(""));
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [format]);
+  return (
+    <div className="settings-format-preview-row">
+      <span className="settings-format-preview-arrow">→</span>
+      <span className="settings-format-preview-value">{preview}.md</span>
+    </div>
+  );
+}
+
+function FormatTokenHelp() {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="settings-format-help-wrapper">
+      <button
+        type="button"
+        className="settings-format-help-btn"
+        onClick={() => setOpen((v) => !v)}
+        title="Format tokens"
+      >
+        <Icon name="info" size={12} />
+      </button>
+      {open && (
+        <div className="settings-format-help-popover" onMouseLeave={() => setOpen(false)}>
+          <div className="settings-format-help-title">Date tokens</div>
+          <table className="settings-format-help-table">
+            <tbody>
+              <tr><td><code>YYYY</code></td><td>Full year (2026)</td></tr>
+              <tr><td><code>YY</code></td><td>2-digit year (26)</td></tr>
+              <tr><td><code>MMMM</code></td><td>Month name (March)</td></tr>
+              <tr><td><code>MMM</code></td><td>Short month (Mar)</td></tr>
+              <tr><td><code>MM</code></td><td>Padded month (03)</td></tr>
+              <tr><td><code>M</code></td><td>Month (3)</td></tr>
+              <tr><td><code>DD</code></td><td>Padded day (07)</td></tr>
+              <tr><td><code>D</code></td><td>Day (7)</td></tr>
+              <tr><td><code>dddd</code></td><td>Weekday (Monday)</td></tr>
+              <tr><td><code>ddd</code></td><td>Short weekday (Mon)</td></tr>
+              <tr><td><code>dd</code></td><td>Min weekday (Mo)</td></tr>
+              <tr><td><code>Www</code></td><td>ISO week (W14)</td></tr>
+              <tr><td><code>WW</code></td><td>Padded ISO week (14)</td></tr>
+              <tr><td><code>W</code></td><td>ISO week (14)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </span>
+  );
+}
+
+// ── Folder rules (inside Templates section) ──
+
+type FolderRuleKind = "template" | "script";
+
+interface FolderRule {
+  folder: string;
+  kind: FolderRuleKind;
+  target: string;
+}
+
+interface FolderRulesConfig {
+  rules: FolderRule[];
+}
+
+interface ScriptInfo {
+  name: string;
+  path: string;
+  display_name: string;
+  palette: boolean;
+  timeout_ms: number;
+}
+
+function FolderRulesSubsection() {
+  const [rules, setRules] = useState<FolderRule[]>([]);
+  const [scripts, setScripts] = useState<ScriptInfo[]>([]);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    invoke<FolderRulesConfig>("get_folder_rules")
+      .then((c) => setRules(c.rules ?? []))
+      .catch(console.error);
+    invoke<ScriptInfo[]>("list_scripts").then(setScripts).catch(console.error);
+  }, []);
+
+  const saveLater = useCallback((next: FolderRule[]) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      invoke("save_folder_rules", { config: { rules: next } }).catch(console.error);
+    }, 300);
+  }, []);
+
+  const updateRule = (idx: number, patch: Partial<FolderRule>) => {
+    const next = rules.map((r, i) => (i === idx ? { ...r, ...patch } : r));
+    setRules(next);
+    saveLater(next);
+  };
+
+  const addRule = () => {
+    const next = [...rules, { folder: "", kind: "template" as FolderRuleKind, target: "" }];
+    setRules(next);
+    saveLater(next);
+  };
+
+  const removeRule = (idx: number) => {
+    const next = rules.filter((_, i) => i !== idx);
+    setRules(next);
+    saveLater(next);
+  };
+
+  const pickFolder = async (idx: number) => {
+    const picked = await open({ directory: true, multiple: false });
+    if (!picked) return;
+    const path = typeof picked === "string" ? picked : picked[0];
+    if (path) updateRule(idx, { folder: path });
+  };
+
+  const pickTemplate = async (idx: number) => {
+    const picked = await open({
+      directory: false,
+      multiple: false,
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    });
+    if (!picked) return;
+    const path = typeof picked === "string" ? picked : picked[0];
+    if (path) updateRule(idx, { target: path });
+  };
+
+  return (
+    <div className="settings-folder-rules">
+      <SubSection title="Folder rules" />
+      <p className="settings-section-description">
+        Auto-apply a template or run a script when a new note is created in a specific folder.
+        Exact folder match — does not descend into subfolders.
+      </p>
+      {rules.length === 0 ? (
+        <div className="template-dirs-empty">No folder rules defined</div>
+      ) : (
+        <div className="settings-folder-rules-list">
+          {rules.map((rule, i) => (
+            <div key={i} className="settings-folder-rule">
+              <div className="settings-folder-rule-row">
+                <label className="settings-folder-rule-label">Folder</label>
+                <div className="settings-template-picker">
+                  <input
+                    type="text"
+                    className="settings-text-input"
+                    value={rule.folder}
+                    onChange={(e) => updateRule(i, { folder: e.target.value })}
+                    placeholder="/absolute/path/to/folder"
+                  />
+                  <button
+                    className="settings-btn settings-btn-compact"
+                    onClick={() => pickFolder(i)}
+                    title="Browse"
+                  >
+                    <Icon name="folder-open" size={14} />
+                  </button>
+                </div>
+              </div>
+              <div className="settings-folder-rule-row">
+                <label className="settings-folder-rule-label">Kind</label>
+                <select
+                  className="settings-select"
+                  value={rule.kind}
+                  onChange={(e) =>
+                    updateRule(i, { kind: e.target.value as FolderRuleKind, target: "" })
+                  }
+                >
+                  <option value="template">Template</option>
+                  <option value="script">Script</option>
+                </select>
+              </div>
+              <div className="settings-folder-rule-row">
+                <label className="settings-folder-rule-label">
+                  {rule.kind === "template" ? "Template" : "Script"}
+                </label>
+                {rule.kind === "template" ? (
+                  <div className="settings-template-picker">
+                    <input
+                      type="text"
+                      className="settings-text-input"
+                      value={rule.target}
+                      onChange={(e) => updateRule(i, { target: e.target.value })}
+                      placeholder="/absolute/path/to/template.md"
+                    />
+                    <button
+                      className="settings-btn settings-btn-compact"
+                      onClick={() => pickTemplate(i)}
+                      title="Browse"
+                    >
+                      <Icon name="folder-open" size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    className="settings-select"
+                    value={rule.target}
+                    onChange={(e) => updateRule(i, { target: e.target.value })}
+                  >
+                    <option value="">— Select a script —</option>
+                    {scripts.map((s) => (
+                      <option key={s.name} value={s.name}>
+                        {s.display_name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <button
+                className="settings-folder-rule-remove"
+                onClick={() => removeRule(i)}
+                title="Remove rule"
+              >
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button className="settings-btn" onClick={addRule}>
+        <Icon name="plus" size={14} />
+        Add folder rule
+      </button>
+
+      {scripts.length > 0 && (
+        <>
+          <div className="settings-subsection-spacer" />
+          <SubSection title="Scripts" />
+          <p className="settings-section-description">
+            Scripts discovered in <code>~/.onyx/scripts/</code>. Use from templates as{" "}
+            <code>{'{{ script("name", ...args) }}'}</code>.
+          </p>
+          <div className="settings-scripts-list">
+            {scripts.map((s) => (
+              <div key={s.name} className="settings-script-item">
+                <span className="settings-script-name">{s.name}</span>
+                <span className="settings-script-meta">
+                  {s.palette ? "palette" : "template-only"} · {s.timeout_ms}ms
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
