@@ -26,6 +26,8 @@ Consolidated from CLAUDE.md and ARCHITECTURE.md. Items are grouped by area, not 
 - **Inline formatting inside wikilinks.** `livePreview.ts` — Bold/italic regexes match inside `[[some *emphasized* link]]`, producing overlapping decorations. Cosmetic.
 - **Frontmatter auto-fold rAF race.** `frontmatter.ts:98` — `requestAnimationFrame` captures `view` from constructor. On rapid tab switch, the rAF fires after `setState()` loaded a different document, potentially folding the wrong range.
 - **Module-level mutable refs not cleared on HMR.** (#18) `activeTabIdBox`, `_liveViewRef`, `editorStateCache`, `scrollCache`, `lastSavedContent` in Editor.tsx persist across React hot-reloads. Not a problem in production.
+- **Sort task list: cursor not preserved.** `sortTaskList.ts` — `view.dispatch({ changes })` replaces the whole list block range without a `selection` clause, so the cursor lands at CM6's default-mapped position rather than next to the item the user was on. Fix: track which item contained the cursor pre-sort, find its new position post-sort, restore in-item offset via `selection: { anchor: ... }`.
+- **Sort task list: blank-line ownership shifts in loose lists.** `sortTaskList.ts` — Trailing blank lines belonging to one item are reattached to whichever item moved into that position after sort. Cosmetic in rendered output; visible in raw markdown. Fix would require deciding whether to normalise spacing between items or preserve original blank-line patterns.
 
 ## Open — Tables
 
