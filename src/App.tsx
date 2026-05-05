@@ -16,6 +16,7 @@ import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
 import { registerCommand, getAllCommands } from "./lib/commands";
 import { makeTableCommands } from "./extensions/tableEditor";
 import { copyBlock, deleteBlock, getCurrentBlock } from "./extensions/blocks";
+import { sortTaskListAtCursor } from "./extensions/sortTaskList";
 import { getEditorView, getAllPaneViews } from "./components/Editor";
 import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
 import {
@@ -407,6 +408,13 @@ function registerCommands() {
       await invoke("reindex_file", { path: notePath });
       store().bumpFileTreeVersion();
     },
+  });
+
+  registerCommand({
+    id: "block.sortTaskList",
+    label: "Block: Sort Task List by Status",
+    category: "Block",
+    execute: () => { const v = getEditorView(); if (v) sortTaskListAtCursor(v); },
   });
 
   // ── Lint panel ──
