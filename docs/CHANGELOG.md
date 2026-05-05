@@ -4,6 +4,25 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.10.9] — 2026-05-05
+
+### Added
+- **Periodic notes settings UI** — per-period cards (daily/weekly/monthly) covering enable toggle, directory dropdown, path format, template picker, and live path preview. Format-token help popover (#49)
+- **Folder rules** — `~/.onyx/folder-rules.json` maps folders to a template or a script for new-note initial content; periodic-note paths take precedence
+- **User scripts** — `~/.onyx/scripts/` discovered on startup with optional `<name>.json` sidecar (display name, palette visibility, timeout). New `{{ script("name", ...args) }}` minijinja function exposes context via env vars (`ONYX_NOTE_PATH`/`DATE`/`TITLE`/`DIR`); palette-visible scripts insert stdout at the cursor
+- **Block: Sort Task List by Status** command — sorts the bullet list at cursor by checkbox state (plain → `[!]` → `[ ]` → `[/]` → `[<]` → `[>]` → `[x]` → `[-]` → extras), subtree-preserving, stable within tiers. Refuses ordered lists and lists without checkboxes
+
+### Fixed
+- `{{ cursor }}` (with whitespace) in templates not applying — `periodic.rs` now matches `\{\{\s*cursor\s*\}\}`; `EditorPane` rebuilds cached state with the cursor selection threaded through
+- Template cursor offset not reaching the editor on newly created notes — `createStateWithExtensions` accepts an optional cursor position seeded into the `EditorState`'s selection; `loadFileIntoCache`, `fileOps.createNote`, and `periodicNotes.createOrOpenPeriodicNote` updated
+  - Caveat: Rust offsets are byte-based, CM6 positions are UTF-16 code units; ASCII templates match, non-ASCII before the cursor will drift
+
+### Known limitations
+- Sort Task List: cursor lands at CM6's default-mapped position rather than next to the original item (tracked in `docs/DEBT.md`)
+- Sort Task List: blank-line ownership shifts in loose lists after sort — cosmetic in rendered output, visible in raw markdown (tracked in `docs/DEBT.md`)
+
+---
+
 ## [0.10.8] — 2026-04-16
 
 ### Fixed

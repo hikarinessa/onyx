@@ -25,7 +25,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 10 (Split Panes):** Complete
 - **Phase 11 (Tier 2 Features):** In progress (slash commands, callouts, tag chips, 13 new themes, theme preview)
 
-**Current version:** 0.10.5
+**Current version:** 0.10.9
 
 ## Project Structure
 
@@ -71,6 +71,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── linting.ts            #  441 lines — CM6: markdown lint rules (10 autofix + 4 warning) + autofix on save
 │   ├── spellcheck.ts         #  188 lines — CM6: macOS native spellcheck integration
 │   ├── blocks.ts             #  382 lines — CM6: block detection, hover copy button (right margin), move/delete/extract
+│   ├── sortTaskList.ts       #  117 lines — Sort the bullet list at cursor by checkbox status (subtree-preserving, stable)
 │   ├── tableAdapter.ts       #  243 lines — CM6: md-advanced-tables adapter (0-indexed↔1-indexed)
 │   └── tableEditor.ts        #  175 lines — CM6: table keymap (Tab/Enter) + TSV paste + command palette
 ├── lib/
