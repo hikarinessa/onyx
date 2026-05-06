@@ -1,16 +1,22 @@
 # Issue Tracking
 
 Issues are tracked on GitHub: https://github.com/hikarinessa/onyx/issues
+Project board: https://github.com/users/hikarinessa/projects/2
+
+Status is managed by GitHub's open/closed state and the project board's Status field.
+
+## Priority
+
+Priority is managed via the **GitHub Project** Priority field (not labels):
+
+| Priority | Meaning |
+|----------|---------|
+| P0 | Critical / urgent — blocks daily use |
+| P1 | Standard priority — planned work |
+| P2 | Nice-to-have — backlog |
+| *(none)* | Unprioritized |
 
 ## Labels
-
-### Priority (required — default: P3-Medium)
-| Label | Color | Description |
-|-------|-------|-------------|
-| P1-Urgent | #b60205 | Priority 1: Urgent |
-| P2-High | #d93f0b | Priority 2: High |
-| P3-Medium | #fbca04 | Priority 3: Medium |
-| P4-Low | #0e8a16 | Priority 4: Low |
 
 ### Type (required — default: Task)
 | Label | Color | Description |
@@ -18,29 +24,21 @@ Issues are tracked on GitHub: https://github.com/hikarinessa/onyx/issues
 | Bug | #d73a4a | Something isn't working |
 | Task | #1d76db | General tasks |
 
-### Status (required — default: Backlog)
+### Other
 | Label | Color | Description |
 |-------|-------|-------------|
-| Backlog | #6b7280 | Status: Backlog |
-| To-Do | #2563eb | Status: To-Do |
-| In Progress | #f59e0b | Status: In progress |
-| In Review | #0ea5e9 | Status: In Review |
-| Done | #22c55e | Status: Done |
-| Cancelled | #ef4444 | Status: Cancelled |
+| Triaged | #a2eeef | Issue has been investigated and triaged |
 
 ## Defaults
 
-Every new issue gets these labels unless specified otherwise:
-- **Priority:** P3-Medium
-- **Type:** Task
-- **Status:** Backlog
+Every new issue gets a **Type** label (default: Task). Priority is set in the project board.
 
 ## Creating Issues
 
 ```bash
-# Minimal (uses defaults)
-gh issue create --title "Title" --body "" --label "P3-Medium,Task,Backlog"
+# Task (default)
+gh issue create --title "Title" --body "" --label "Task"
 
-# Bug with high priority
-gh issue create --title "Title" --body "Description" --label "P2-High,Bug,Backlog"
+# Bug
+gh issue create --title "Title" --body "Description" --label "Bug"
 ```

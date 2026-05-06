@@ -4,18 +4,24 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
-## [0.10.9] — 2026-05-05
+## [0.10.9] — 2026-05-06
 
 ### Added
 - **Periodic notes settings UI** — per-period cards (daily/weekly/monthly) covering enable toggle, directory dropdown, path format, template picker, and live path preview. Format-token help popover (#49)
 - **Folder rules** — `~/.onyx/folder-rules.json` maps folders to a template or a script for new-note initial content; periodic-note paths take precedence
 - **User scripts** — `~/.onyx/scripts/` discovered on startup with optional `<name>.json` sidecar (display name, palette visibility, timeout). New `{{ script("name", ...args) }}` minijinja function exposes context via env vars (`ONYX_NOTE_PATH`/`DATE`/`TITLE`/`DIR`); palette-visible scripts insert stdout at the cursor
 - **Block: Sort Task List by Status** command — sorts the bullet list at cursor by checkbox state (plain → `[!]` → `[ ]` → `[/]` → `[<]` → `[>]` → `[x]` → `[-]` → extras), subtree-preserving, stable within tiers. Refuses ordered lists and lists without checkboxes
+- **Light-dim styling for scheduled/delegated tasks** — `[<]` and `[>]` checkbox items now render at 0.7 opacity (vs. 0.5 for done/cancelled) in live preview
+- **Release-build logging** — `tauri-plugin-log` is now active in release builds at Warn level (previously dev-only)
 
 ### Fixed
 - `{{ cursor }}` (with whitespace) in templates not applying — `periodic.rs` now matches `\{\{\s*cursor\s*\}\}`; `EditorPane` rebuilds cached state with the cursor selection threaded through
 - Template cursor offset not reaching the editor on newly created notes — `createStateWithExtensions` accepts an optional cursor position seeded into the `EditorState`'s selection; `loadFileIntoCache`, `fileOps.createNote`, and `periodicNotes.createOrOpenPeriodicNote` updated
   - Caveat: Rust offsets are byte-based, CM6 positions are UTF-16 code units; ASCII templates match, non-ASCII before the cursor will drift
+- **Indexer churn under `.claude` directories** — skip Claude Code's high-churn data subdirs (`file-history`, `telemetry`, `todos`, `agent-state`, `session-env`, `paste-cache`, `backups`, `shell-snapshots`, `tasks`, `statsig`, `sessions`, `ide`, `debug`, `cache`) when nested under any `.claude` ancestor. Markdown content under `.claude/` is still indexed.
+
+### Docs
+- Update issue tracking docs to reflect new label scheme — Type-only labels (Bug/Task), Priority/Status managed via the GitHub Project board
 
 ### Known limitations
 - Sort Task List: cursor lands at CM6's default-mapped position rather than next to the original item (tracked in `docs/DEBT.md`)

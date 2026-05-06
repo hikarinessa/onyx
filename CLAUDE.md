@@ -144,7 +144,7 @@ npx tsc --noEmit         # TypeScript type check
 
 ## GitHub Issues
 
-Every issue must have exactly one label from each category: **Priority**, **Type**, **Status**. Defaults: `P3-Medium`, `Task`, `Backlog`. See `docs/ISSUES.md` for full label list and creation commands.
+Every issue must have a **Type** label (Bug or Task, default: Task). **Priority** is managed via the GitHub Project board field (P0/P1/P2), not labels. Status is tracked by GitHub open/closed state and the project board. See `docs/ISSUES.md` for details.
 
 ## Gotchas
 

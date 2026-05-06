@@ -188,13 +188,16 @@ pub fn run() {
             app.on_menu_event(|app_handle, event| {
                 let _ = app_handle.emit("menu:action", event.id().0.as_str());
             });
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            let log_level = if cfg!(debug_assertions) {
+                log::LevelFilter::Info
+            } else {
+                log::LevelFilter::Warn
+            };
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log_level)
+                    .build(),
+            )?;
 
             // Start file watcher for registered directories
             let handle = app.handle().clone();

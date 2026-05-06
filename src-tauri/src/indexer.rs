@@ -42,7 +42,7 @@ impl Indexer {
         for (dir_id, dir_path) in dirs {
             for entry in WalkDir::new(dir_path)
                 .into_iter()
-                .filter_entry(|e| !is_ignored(e.file_name()))
+                .filter_entry(|e| !is_ignored(e))
                 .filter_map(|e| e.ok())
             {
                 let path = entry.path().to_path_buf();
@@ -153,7 +153,7 @@ impl Indexer {
         let mut disk_files: std::collections::HashSet<String> = std::collections::HashSet::new();
         for entry in WalkDir::new(dir_path)
             .into_iter()
-            .filter_entry(|e| !is_ignored(e.file_name()))
+            .filter_entry(|e| !is_ignored(e))
             .filter_map(|e| e.ok())
         {
             let path = entry.path().to_path_buf();
@@ -188,8 +188,39 @@ impl Indexer {
     }
 }
 
-fn is_ignored(name: &std::ffi::OsStr) -> bool {
-    let name = name.to_string_lossy();
+fn is_ignored(entry: &walkdir::DirEntry) -> bool {
+    let name = entry.file_name().to_string_lossy();
+    if name == ".claude" {
+        return false;
+    }
+
+    // Claude Code high-churn data subdirs: skip when nested under a `.claude`
+    // ancestor. No markdown content, hammered by FSEvents during active sessions.
+    if matches!(
+        name.as_ref(),
+        "file-history"
+            | "telemetry"
+            | "todos"
+            | "agent-state"
+            | "session-env"
+            | "paste-cache"
+            | "backups"
+            | "shell-snapshots"
+            | "tasks"
+            | "statsig"
+            | "sessions"
+            | "ide"
+            | "debug"
+            | "cache"
+    ) && entry
+        .path()
+        .ancestors()
+        .skip(1)
+        .any(|p| p.file_name().map_or(false, |n| n == ".claude"))
+    {
+        return true;
+    }
+
     matches!(
         name.as_ref(),
         ".obsidian" | ".git" | "node_modules" | ".DS_Store" | ".trash"

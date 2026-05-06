@@ -691,6 +691,7 @@ const DECO_HIGHLIGHT = Decoration.mark({ class: "cm-preview-highlight" });
 const DECO_WIKILINK = Decoration.mark({ class: "cm-preview-wikilink" });
 const DECO_CHECKED = Decoration.mark({ class: "cm-preview-checked" });
 const DECO_DIMMED = Decoration.mark({ class: "cm-preview-dimmed" });
+const DECO_DIMMED_LIGHT = Decoration.mark({ class: "cm-preview-dimmed-light" });
 const DECO_CODE_NOOP = Decoration.mark({ class: "cm-preview-code" });
 const DECO_URL = Decoration.mark({ class: "cm-preview-url" });
 class MdLinkWidget extends WidgetType {
@@ -1122,7 +1123,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
             widget: new CheckboxWidget(marker, bracketStart),
           })
         );
-        // Canceled: strikethrough + dim. Done: dim only.
+        // Canceled: strikethrough + dim. Done: dim only. Scheduled/delegated: light dim.
         if (marker === "-" || marker === "x") {
           builder.add(
             bracketStart + 4,
@@ -1130,6 +1131,9 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
             marker === "-" ? DECO_CHECKED : DECO_DIMMED
           );
         } else {
+          if (marker === "<" || marker === ">") {
+            builder.add(bracketStart + 4, line.to, DECO_DIMMED_LIGHT);
+          }
           // Process inline decorations on text after the checkbox marker
           const afterCb = text.slice(cbMatch[0].length);
           if (afterCb.length > 0) {
@@ -1515,6 +1519,9 @@ const previewTheme = EditorView.theme({
   },
   ".cm-preview-dimmed": {
     opacity: "0.5",
+  },
+  ".cm-preview-dimmed-light": {
+    opacity: "0.7",
   },
   ".cm-preview-comment": {
     display: "none",
