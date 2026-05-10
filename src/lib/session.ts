@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, type AccordionState, type EditorMode } from "../stores/app";
 import { openFileInEditor } from "./openFile";
 import { getActiveThemeId, applyTheme } from "./themes";
+import { editorStateCache, scrollCache, snapshotEditor } from "../components/Editor";
+import { setCursorPosition, flushCursorPositions, loadCursorPositions } from "./cursorPositions";
 
 const SAVE_INTERVAL_MS = 10_000;
 const SESSION_BACKUP_KEY = "onyx-session-backup";
@@ -97,6 +99,10 @@ function parseSession(raw: string): SessionData | null {
 
 /** Restore session — picks the newest between file and localStorage backup */
 export async function restoreSession(): Promise<void> {
+  // Cursor positions must be loaded before any tab opens so openFileInEditor
+  // can restore caret + scroll on the first read.
+  await loadCursorPositions();
+
   let fileData: SessionData | null = null;
   let backupData: SessionData | null = null;
 
@@ -266,6 +272,24 @@ export async function restoreSession(): Promise<void> {
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
+/** Capture cursor + scroll for every open tab into the persistent store.
+ * Active tabs need a fresh snapshot (live view state); inactive tabs are
+ * already current in the cache (saved on last switch-away).
+ * The actual disk write is debounced — call flushCursorPositions() to force. */
+function captureAllOpenTabsCursorPositions(): void {
+  const { paneState } = useAppStore.getState();
+  for (const pane of paneState.panes) {
+    if (pane.activeTabId) snapshotEditor(pane.activeTabId);
+    for (const tab of pane.tabs) {
+      const state = editorStateCache.get(tab.id);
+      if (!state) continue;
+      const sel = state.selection.main;
+      const scroll = scrollCache.get(tab.id) ?? 0;
+      setCursorPosition(tab.path, sel.head, sel.anchor, scroll);
+    }
+  }
+}
+
 /** Start periodic session saving + beforeunload handler */
 export function initSessionPersistence(): () => void {
   // Save periodically (async, reliable)
@@ -273,6 +297,8 @@ export function initSessionPersistence(): () => void {
 
   // Save on unload (sync backup — async IPC may not complete before exit)
   const handleBeforeUnload = () => {
+    captureAllOpenTabsCursorPositions();
+    void flushCursorPositions();
     saveSession();     // best-effort async
     saveSessionSync(); // guaranteed sync backup
   };

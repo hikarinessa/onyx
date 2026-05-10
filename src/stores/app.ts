@@ -50,6 +50,14 @@ export function setSnapshotEditorHook(fn: (id: string) => void) {
   snapshotEditorHook = fn;
 }
 
+// Injected by Editor.tsx — captures cursor + scroll for a closing tab
+// into the persistent cursor-positions store. Must be called AFTER
+// snapshotEditorHook so the caches it reads from are current.
+let captureCursorHook: ((id: string, path: string) => void) | null = null;
+export function setCaptureCursorHook(fn: (id: string, path: string) => void) {
+  captureCursorHook = fn;
+}
+
 // ── Helper: find pane containing a tab ──
 
 function findPaneWithTab(panes: Pane[], tabId: string): Pane | undefined {
@@ -383,6 +391,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { paneState } = get();
     const pane = findPaneWithTab(paneState.panes, id);
     if (!pane) return;
+
+    if (captureCursorHook) {
+      const tab = pane.tabs.find((t) => t.id === id);
+      if (tab) captureCursorHook(id, tab.path);
+    }
 
     const idx = pane.tabs.findIndex((t) => t.id === id);
     const newTabs = pane.tabs.filter((t) => t.id !== id);

@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, selectActiveTab } from "../stores/app";
-import { loadFileIntoCache } from "../components/Editor";
+import { loadFileIntoCache, scrollCache } from "../components/Editor";
 import { recordRecentDoc } from "./recentDocs";
+import { getCursorPosition } from "./cursorPositions";
 
 /** Check if a file path is under any registered directory */
 async function isUnderRegisteredDir(filePath: string): Promise<boolean> {
@@ -50,7 +51,9 @@ export async function openFileInEditor(
   }
 
   const content = await invoke<string>("read_file", { path });
-  loadFileIntoCache(path, content);
+  const saved = getCursorPosition(path);
+  loadFileIntoCache(path, content, saved ? { head: saved.head, anchor: saved.anchor } : null);
+  if (saved) scrollCache.set(path, saved.scrollTop);
 
   // Read fresh state after await
   const fresh = useAppStore.getState();

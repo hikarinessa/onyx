@@ -362,6 +362,29 @@ impl Database {
         Ok(results)
     }
 
+    /// For a given target file id, return every (source file path, link target string)
+    /// pair where a wikilink resolves to that file. Excludes self-references.
+    /// Used by `rename_file` to know which files reference the renamed file and
+    /// what literal target text to substitute in each one.
+    pub fn get_link_targets_to(&self, target_id: i64) -> Result<Vec<(String, String)>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT f.path, l.target
+             FROM links l
+             JOIN files f ON f.id = l.source_id
+             WHERE l.target_id = ?1 AND f.id != ?1"
+        ).map_err(|e| format!("Failed to prepare link-targets query: {}", e))?;
+
+        let rows = stmt.query_map(params![target_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }).map_err(|e| format!("Failed to execute link-targets query: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read row: {}", e))?);
+        }
+        Ok(results)
+    }
+
     pub fn get_file_id(&self, path: &str) -> Result<Option<i64>, String> {
         let result = self.conn.query_row(
             "SELECT id FROM files WHERE path = ?1",

@@ -1,13 +1,21 @@
 use crate::AppState;
 use crate::watcher::FileChangeEvent;
 use chrono::{Datelike, NaiveDate};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{Emitter, State};
 
 use crate::object_types::{self, ObjectType};
 use crate::periodic;
+
+/// Matches `[[anything not containing brackets]]`. Embeds (`![[ ]]`) are
+/// matched too because the leading `!` sits outside the captured brackets.
+static RE_WIKILINK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\[\[([^\[\]]+)\]\]").unwrap());
 
 const IGNORED_NAMES: &[&str] = &[".obsidian", ".git", "node_modules", ".DS_Store", ".trash"];
 
@@ -707,6 +715,107 @@ pub fn create_folder(path: String, state: State<AppState>) -> Result<(), String>
         .map_err(|e| format!("Failed to create folder: {}", e))
 }
 
+/// Substitute the basename inside a single wikilink target string, preserving any
+/// directory prefix and `.md` extension. `[[A/Untitled.md]]` with old="Untitled"
+/// new="MyNote" becomes `A/MyNote.md`. Returns None if the basename doesn't match.
+fn transform_link_target(old_target: &str, old_basename: &str, new_basename: &str) -> Option<String> {
+    let (parent, last) = match old_target.rfind('/') {
+        Some(i) => (&old_target[..=i], &old_target[i + 1..]),
+        None => ("", old_target),
+    };
+    let (stem, ext) = match last.strip_suffix(".md") {
+        Some(s) => (s, ".md"),
+        None => (last, ""),
+    };
+    if stem != old_basename {
+        return None;
+    }
+    Some(format!("{}{}{}", parent, new_basename, ext))
+}
+
+/// Rewrite every wikilink in `content` whose target is in `targets_to_rewrite` so
+/// that its basename portion becomes `new_basename`. Preserves `#heading` and
+/// `|alias` suffixes and any leading `!` (embeds).
+fn rewrite_wikilinks(
+    content: &str,
+    old_basename: &str,
+    new_basename: &str,
+    targets_to_rewrite: &HashSet<String>,
+) -> String {
+    RE_WIKILINK
+        .replace_all(content, |caps: &regex::Captures| {
+            let inner = &caps[1];
+            let (target_alias, alias_suffix) = match inner.find('|') {
+                Some(i) => (&inner[..i], &inner[i..]),
+                None => (inner, ""),
+            };
+            let (target_only, heading_suffix) = match target_alias.find('#') {
+                Some(i) => (&target_alias[..i], &target_alias[i..]),
+                None => (target_alias, ""),
+            };
+            let target_trim = target_only.trim();
+            if !targets_to_rewrite.contains(target_trim) {
+                return caps[0].to_string();
+            }
+            match transform_link_target(target_trim, old_basename, new_basename) {
+                Some(new_target) => format!("[[{}{}{}]]", new_target, heading_suffix, alias_suffix),
+                None => caps[0].to_string(),
+            }
+        })
+        .into_owned()
+}
+
+/// Rewrite every wikilink across the project that resolved to `renamed_file_id`
+/// so it points at `new_basename` instead of `old_basename`. Files are rewritten
+/// in-place via `commit_file` (atomic + reindex + self-write mark) and a
+/// `fs:change modify` event is emitted for each so any open tab reloads.
+fn propagate_rename_to_wikilinks(
+    renamed_file_id: i64,
+    old_basename: &str,
+    new_basename: &str,
+    state: &State<AppState>,
+    app: &tauri::AppHandle,
+) -> Result<u32, String> {
+    let pairs = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        db.get_link_targets_to(renamed_file_id)?
+    };
+
+    let mut by_source: HashMap<String, HashSet<String>> = HashMap::new();
+    for (source_path, target) in pairs {
+        by_source.entry(source_path).or_default().insert(target);
+    }
+
+    let mut rewritten = 0u32;
+    for (source_path, targets) in by_source {
+        let path = PathBuf::from(&source_path);
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("Skipping wikilink rewrite for {}: {}", source_path, e);
+                continue;
+            }
+        };
+        let new_content = rewrite_wikilinks(&content, old_basename, new_basename, &targets);
+        if new_content == content {
+            continue;
+        }
+        if let Err(e) = commit_file(&path, &new_content, state) {
+            log::warn!("Failed to write wikilink rewrite to {}: {}", source_path, e);
+            continue;
+        }
+        rewritten += 1;
+        let _ = app.emit("fs:change", &FileChangeEvent {
+            kind: "modify".to_string(),
+            path: source_path,
+            old_path: None,
+            is_dir: false,
+        });
+    }
+
+    Ok(rewritten)
+}
+
 #[tauri::command]
 pub fn rename_file(
     old_path: String,
@@ -738,13 +847,16 @@ pub fn rename_file(
         .map_err(|e| format!("Failed to rename: {}", e))?;
 
     // Update the index
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    if is_dir {
-        db.rename_dir_prefix(&old_path, &new_path)?;
-    } else {
-        db.rename_file(&old_path, &new_path)?;
-    }
-    drop(db);
+    let renamed_file_id: Option<i64> = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        if is_dir {
+            db.rename_dir_prefix(&old_path, &new_path)?;
+            None
+        } else {
+            db.rename_file(&old_path, &new_path)?;
+            db.get_file_id(&new_path)?
+        }
+    };
 
     // Update bookmark paths
     if let Ok(mut bm) = state.bookmarks.lock() {
@@ -752,6 +864,24 @@ pub fn rename_file(
             let _ = bm.rename_prefix(&old_path, &new_path);
         } else {
             let _ = bm.rename_path(&old_path, &new_path);
+        }
+    }
+
+    // Rewrite wikilinks in every file that resolved to the renamed note.
+    // Folder rename is intentionally out of scope for v1 — links inside a
+    // renamed folder still resolve by basename, and the link rewrite for
+    // `[[A/file]]`-style absolute targets needs separate handling.
+    if !is_dir {
+        if let Some(id) = renamed_file_id {
+            let old_basename = std::path::Path::new(&old_path)
+                .file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let new_basename = new.file_stem()
+                .map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            if !old_basename.is_empty() && !new_basename.is_empty() && old_basename != new_basename {
+                if let Err(e) = propagate_rename_to_wikilinks(id, &old_basename, &new_basename, &state, &app) {
+                    log::warn!("Wikilink propagation failed for {} -> {}: {}", old_path, new_path, e);
+                }
+            }
         }
     }
 
@@ -868,6 +998,42 @@ pub fn write_session(json: String) -> Result<(), String> {
         .map_err(|e| {
             let _ = std::fs::remove_file(&temp_path);
             format!("Failed to rename session temp file: {}", e)
+        })
+}
+
+// ── Cursor Positions ──
+
+#[tauri::command]
+pub fn read_cursor_positions() -> Result<Option<String>, String> {
+    let path = crate::paths::onyx_dir()?.join("cursor-positions.json");
+
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    std::fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|e| format!("Failed to read cursor-positions.json: {}", e))
+}
+
+#[tauri::command]
+pub fn write_cursor_positions(json: String) -> Result<(), String> {
+    let dir = crate::paths::onyx_dir()?;
+
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create ~/.onyx: {}", e))?;
+
+    let path = dir.join("cursor-positions.json");
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_path = dir.join(format!(".cursor-positions-tmp-{}-{}", std::process::id(), counter));
+
+    std::fs::write(&temp_path, &json)
+        .map_err(|e| format!("Failed to write cursor-positions temp file: {}", e))?;
+
+    std::fs::rename(&temp_path, &path)
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            format!("Failed to rename cursor-positions temp file: {}", e)
         })
 }
 
@@ -1489,4 +1655,78 @@ pub fn format_date_preview(format: String, date: Option<String>) -> Result<Strin
         None => chrono::Local::now().date_naive(),
     };
     Ok(periodic::format_date(d, &format))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn targets(items: &[&str]) -> HashSet<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn transform_link_target_basename_only() {
+        assert_eq!(
+            transform_link_target("Untitled", "Untitled", "MyNote"),
+            Some("MyNote".to_string())
+        );
+    }
+
+    #[test]
+    fn transform_link_target_with_dir_prefix() {
+        assert_eq!(
+            transform_link_target("A/Untitled", "Untitled", "MyNote"),
+            Some("A/MyNote".to_string())
+        );
+    }
+
+    #[test]
+    fn transform_link_target_with_md_extension() {
+        assert_eq!(
+            transform_link_target("A/Untitled.md", "Untitled", "MyNote"),
+            Some("A/MyNote.md".to_string())
+        );
+    }
+
+    #[test]
+    fn transform_link_target_basename_mismatch_returns_none() {
+        assert_eq!(transform_link_target("OtherNote", "Untitled", "MyNote"), None);
+    }
+
+    #[test]
+    fn rewrite_preserves_alias_and_heading() {
+        let content = "See [[Untitled#section|My Alias]] and [[Untitled]] and ![[Untitled]].";
+        let out = rewrite_wikilinks(content, "Untitled", "MyNote", &targets(&["Untitled"]));
+        assert_eq!(
+            out,
+            "See [[MyNote#section|My Alias]] and [[MyNote]] and ![[MyNote]]."
+        );
+    }
+
+    #[test]
+    fn rewrite_skips_unmatched_targets() {
+        let content = "[[Untitled]] and [[Other]] and [[Untitleds]]";
+        let out = rewrite_wikilinks(content, "Untitled", "MyNote", &targets(&["Untitled"]));
+        assert_eq!(out, "[[MyNote]] and [[Other]] and [[Untitleds]]");
+    }
+
+    #[test]
+    fn rewrite_handles_dir_prefixed_target() {
+        let content = "[[A/Untitled]] and [[A/Untitled.md]]";
+        let out = rewrite_wikilinks(
+            content,
+            "Untitled",
+            "MyNote",
+            &targets(&["A/Untitled", "A/Untitled.md"]),
+        );
+        assert_eq!(out, "[[A/MyNote]] and [[A/MyNote.md]]");
+    }
+
+    #[test]
+    fn rewrite_no_change_when_target_set_empty() {
+        let content = "[[Untitled]]";
+        let out = rewrite_wikilinks(content, "Untitled", "MyNote", &HashSet::new());
+        assert_eq!(out, content);
+    }
 }

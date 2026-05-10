@@ -276,6 +276,8 @@ pub fn run() {
             commands::reveal_in_finder,
             commands::read_session,
             commands::write_session,
+            commands::read_cursor_positions,
+            commands::write_cursor_positions,
             commands::get_periodic_config,
             commands::save_periodic_config,
             commands::create_periodic_note,

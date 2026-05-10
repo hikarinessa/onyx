@@ -386,16 +386,25 @@ export function Sidebar() {
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>;
     let cancelled = false;
-    const unlisten = listen("fs:change", () => {
+    const unlistenFs = listen("fs:change", () => {
       if (cancelled) return;
       clearTimeout(timeout);
       timeout = setTimeout(loadDirectories, 1000);
+    });
+    // hide_empty_folders uses the SQLite index; a Finder-created folder
+    // stays hidden until the indexer catches up. fs:change fires too early
+    // (index hasn't run yet) so we also refresh once the indexer reports done.
+    const unlistenIndex = listen("index:complete", () => {
+      if (cancelled) return;
+      clearTimeout(timeout);
+      timeout = setTimeout(loadDirectories, 0);
     });
 
     return () => {
       cancelled = true;
       clearTimeout(timeout);
-      unlisten.then((fn) => fn());
+      unlistenFs.then((fn) => fn());
+      unlistenIndex.then((fn) => fn());
     };
   }, [loadDirectories]);
 

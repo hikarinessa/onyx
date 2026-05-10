@@ -17,7 +17,8 @@ import {
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, setFlushSaveHook, setSnapshotEditorHook, selectActivePane, selectActiveTab } from "../stores/app";
+import { useAppStore, setFlushSaveHook, setSnapshotEditorHook, setCaptureCursorHook, selectActivePane, selectActiveTab } from "../stores/app";
+import { setCursorPosition } from "../lib/cursorPositions";
 import { frontmatterExtension, clearAutoFoldForTab, toggleFrontmatterFoldCommand } from "../extensions/frontmatter";
 import { headingFoldExtension } from "../extensions/headingFold";
 import { wikilinkExtension, wikilinkFollowRef } from "../extensions/wikilinks";
@@ -314,11 +315,20 @@ let sharedExtensions: Extension[] | null = null;
 export const sharedExtensionsRef = { get: () => sharedExtensions };
 
 /** Create an EditorState with the shared extensions.
- * Optional cursorOffset sets the initial selection (clamped to doc length). */
-export function createStateWithExtensions(doc: string, cursorOffset?: number | null): EditorState {
-  const selection = typeof cursorOffset === "number"
-    ? { anchor: Math.max(0, Math.min(cursorOffset, doc.length)) }
-    : undefined;
+ * `cursor` may be a single offset (caret) or `{head, anchor}` for a selection.
+ * Both are clamped to doc length. */
+export function createStateWithExtensions(
+  doc: string,
+  cursor?: number | { head: number; anchor: number } | null,
+): EditorState {
+  let selection: { anchor: number; head?: number } | undefined;
+  if (typeof cursor === "number") {
+    selection = { anchor: Math.max(0, Math.min(cursor, doc.length)) };
+  } else if (cursor && typeof cursor === "object") {
+    const anchor = Math.max(0, Math.min(cursor.anchor, doc.length));
+    const head = Math.max(0, Math.min(cursor.head, doc.length));
+    selection = { anchor, head };
+  }
   if (!sharedExtensions) {
     return EditorState.create({ doc, selection });
   }
@@ -326,8 +336,12 @@ export function createStateWithExtensions(doc: string, cursorOffset?: number | n
 }
 
 /** Seed content into the editor cache before opening a tab */
-export function loadFileIntoCache(id: string, content: string, cursorOffset?: number | null) {
-  editorStateCache.set(id, createStateWithExtensions(content, cursorOffset));
+export function loadFileIntoCache(
+  id: string,
+  content: string,
+  cursor?: number | { head: number; anchor: number } | null,
+) {
+  editorStateCache.set(id, createStateWithExtensions(content, cursor));
   lastSavedContent.set(id, content);
 }
 
@@ -363,6 +377,26 @@ export function replaceTabContent(tabId: string, newContent: string) {
   }
 
   useAppStore.getState().setModified(tabId, false);
+}
+
+/**
+ * Snapshot the live EditorView state for a tab into the cache.
+ * The cache is otherwise only synced on tab switch / unmount, so anything
+ * that re-keys the cache (rename) must snapshot first or the migration
+ * carries stale (often empty) state.
+ */
+export function snapshotEditor(id: string) {
+  const state = useAppStore.getState();
+  for (const pane of state.paneState.panes) {
+    if (pane.activeTabId === id) {
+      const view = paneViews.get(pane.id);
+      if (view) {
+        editorStateCache.set(id, view.state);
+        scrollCache.set(id, view.scrollDOM.scrollTop);
+      }
+      break;
+    }
+  }
 }
 
 /** Migrate editor caches from one path key to another (used by rename) */
@@ -496,19 +530,13 @@ export function Editor() {
 
   // Register hooks
   useEffect(() => {
-    setSnapshotEditorHook((id: string) => {
-      // Find which pane has this tab and snapshot from its view
-      const state = useAppStore.getState();
-      for (const pane of state.paneState.panes) {
-        if (pane.activeTabId === id) {
-          const view = paneViews.get(pane.id);
-          if (view) {
-            editorStateCache.set(id, view.state);
-            scrollCache.set(id, view.scrollDOM.scrollTop);
-          }
-          break;
-        }
-      }
+    setSnapshotEditorHook(snapshotEditor);
+    setCaptureCursorHook((id: string, path: string) => {
+      const state = editorStateCache.get(id);
+      if (!state) return;
+      const sel = state.selection.main;
+      const scroll = scrollCache.get(id) ?? 0;
+      setCursorPosition(path, sel.head, sel.anchor, scroll);
     });
     setFlushSaveHook(flushSaveForTab);
     setRemeasureHook(() => {
@@ -549,6 +577,7 @@ export function Editor() {
 
     return () => {
       setSnapshotEditorHook(() => {});
+      setCaptureCursorHook(() => {});
       setFlushSaveHook(async () => {});
       wikilinkFollowRef.current = null;
     };

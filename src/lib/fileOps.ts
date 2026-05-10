@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, selectAllTabs, type Tab } from "../stores/app";
-import { loadFileIntoCache, migrateEditorCache, clearEditorCache } from "../components/Editor";
+import { loadFileIntoCache, migrateEditorCache, clearEditorCache, snapshotEditor } from "../components/Editor";
 
 /** Get all tabs across all panes */
 function getAllTabs(): Tab[] {
@@ -51,6 +51,7 @@ export async function renameFile(oldPath: string, newPath: string): Promise<void
   const allTabs = getAllTabs();
   const openTab = allTabs.find((t) => t.path === oldPath);
   if (openTab) {
+    snapshotEditor(openTab.id);
     store.updateTabPath(openTab.id, newPath, newName);
     migrateEditorCache(oldPath, newPath);
   }
@@ -71,6 +72,7 @@ export async function renameFolder(oldPath: string, newPath: string): Promise<vo
     if (tab.path.startsWith(oldPrefix)) {
       const migratedPath = newPath + tab.path.slice(oldPath.length);
       const migratedName = migratedPath.split("/").pop() || migratedPath;
+      snapshotEditor(tab.id);
       store.updateTabPath(tab.id, migratedPath, migratedName);
       migrateEditorCache(tab.path, migratedPath);
     }
