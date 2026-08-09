@@ -9,6 +9,9 @@ src-tauri/target/
 .vscode/
 .idea/
 
+# AI agent workspace (worktrees can be huge)
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -767,6 +767,55 @@ Build incrementally as desired. Includes original Tier 2 items plus medium-prior
 
 ---
 
+## Phase 12 — Hardening & Quality (from 2026-06 audit)
+
+Source: `docs/AUDIT-2026-06-10.md` (full findings, evidence, and implementation sketches — task numbers below reference its plan). Theme: the codebase is healthy but nothing *enforces* its quality; the save pipeline has known integrity holes; complexity is pooling in five god-files with no test net.
+
+### Quick wins (complete, 2026-06-10)
+
+- ✅ CI skeleton — `.github/workflows/ci.yml`: tsc + eslint (non-blocking) + cargo check/test (audit 0.1)
+- ✅ `.claude/` gitignored, 2.2 GB stale worktrees deleted, lockfile refreshed (0.5)
+- ✅ Block-extract routed through fileOps via new `createNoteWithContent()` (1.5)
+- ✅ Unused deps removed: `@codemirror/theme-one-dark`, `tauri-plugin-fs` (JS + Rust + capability) (3.1)
+- ✅ `npm run bump` version-sync script (3.3)
+- ✅ CLAUDE.md structure section regenerated (2.5)
+
+### 12.1 Safety net (do before any 12.2/12.3 refactoring)
+
+- 12.1.1 Pay down eslint debt (379 errors) to zero; flip CI lint step to blocking (`--max-warnings 0`) — audit 0.2
+- 12.1.2 Vitest harness + characterization tests: `fileOps.ts`, pane/tab store ops, `session.ts` restore — audit 0.3
+- 12.1.3 Rust tests: `validate_path`/`allow_path`/`canonical_path` (traversal, symlinks), `db.rs` `rename_dir_prefix` (UTF-8 dir names — exposes DEBT #15) + reconcile queries — audit 0.4
+
+### 12.2 Correctness & security (critical fixes)
+
+- 12.2.1 Toast/notification primitive — unblocks DEBT #12 and all silent-failure fixes — audit 1.1
+- 12.2.2 Replace all 12 empty `.catch(() => {})` with notify-or-comment; eslint rule banning empty catch — audit 1.2
+- 12.2.3 External-edit conflict guard — **first reconcile docs**: Phase 10 claims this shipped (conflict prompt for dirty tabs) but DEBT #3 lists it open; test actual behavior, then fix or close — audit 1.3 (sketch in audit §5)
+- 12.2.4 Flush/retarget debounced auto-save on rename (ghost-file window, `Editor.tsx:142`) — audit 1.4
+- 12.2.5 Remove `.lock().unwrap()` mutex-poisoning panics in watcher.rs/lib.rs (or move to `parking_lot`) — a poisoned lock currently kills indexing silently — audit 1.6
+- 12.2.6 Security model: document threat model + script execution in ARCHITECTURE.md; first-run per-script consent; extend `allow_path` blocklist (`~/Library`, `.netrc`, `.env*`) — audit 1.7
+
+### 12.3 Structure (high-leverage refactors)
+
+- 12.3.1 Split `commands.rs` (1,732 lines) into `commands/{files,search,bookmarks,frontmatter,periodic,scripts,config,session}.rs` — moves only, re-export from mod.rs to keep `generate_handler!` intact — audit 2.1 (sketch in audit §5)
+- 12.3.2 Split `Settings.tsx` (2,058 lines) into per-tab components — audit 2.2
+- 12.3.3 Extract shared wikilink/URL regexes to `src/lib/patterns.ts` (currently duplicated in wikilinks.ts:31, livePreview.ts:678, embeds.ts) — audit 2.3
+- 12.3.4 Remove broken Zustand compat getters (`store.tabs`/`store.activeTabId`); fix double-`getState()` in `fileOps.ts` `createNewNote` — audit 2.4
+- 12.3.5 Characterization tests for livePreview decoration builders (cover the crash-history cases) before further preview features — audit 2.6
+
+### 12.4 Polish (medium/low)
+
+- 12.4.1 DEBT quick fixes: `unregister_directory` watcher stop, orphan rename allow_path, dirs.rs atomic write, frontmatter double-block guard — audit 3.2
+- 12.4.2 Indexer line-length guard (skip >1 MB lines) — audit 3.4
+- 12.4.3 ipcCache max-size; prettier + rustfmt in CI — audit 3.5
+- 12.4.4 Triage ~60 `react-hooks/set-state-in-effect` lint sites (fix or annotate) — audit 3.6
+
+### Explicitly deferred (per audit §4 trade-offs)
+
+FTS5/search perf (until >5k-file vaults or public release), typed Rust errors (fold into 12.3.1 opportunistically), objc2 migration (until breakage), accessibility backlog (until public release), layout.css decomposition.
+
+---
+
 ## Dev Principles
 
 - **Don't build ahead.** Each phase should work fully before moving on.
