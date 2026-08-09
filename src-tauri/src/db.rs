@@ -127,6 +127,7 @@ impl Database {
 
             CREATE INDEX IF NOT EXISTS idx_files_dir ON files(dir_id);
             CREATE INDEX IF NOT EXISTS idx_files_title ON files(title);
+            CREATE INDEX IF NOT EXISTS idx_files_title_nocase ON files(title COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS idx_links_target ON links(target);
             CREATE INDEX IF NOT EXISTS idx_links_target_id ON links(target_id);
             CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_id);
@@ -259,17 +260,27 @@ impl Database {
             .map_err(|e| format!("Failed to delete old links: {}", e))?;
 
         for link in links {
-            // Try to resolve target_id by matching the link target against file paths/titles
-            // Escape LIKE metacharacters so _ and % are treated as literals
-            let escaped_target = link.target
-                .replace('\\', "\\\\")
-                .replace('%', "\\%")
-                .replace('_', "\\_");
-            let target_id: Option<i64> = tx.query_row(
-                "SELECT id FROM files WHERE path LIKE '%/' || ?1 || '.md' ESCAPE '\\' OR path LIKE '%/' || ?1 ESCAPE '\\' OR title = ?2 LIMIT 1",
-                params![escaped_target, link.target],
+            // Fast path: most wikilink targets are note titles (file stems), so an
+            // indexed NOCASE point lookup resolves them. NOCASE uses the same ASCII
+            // case folding as LIKE, preserving case-insensitive resolution.
+            let mut target_id: Option<i64> = tx.query_row(
+                "SELECT id FROM files WHERE title = ?1 COLLATE NOCASE LIMIT 1",
+                params![link.target],
                 |row| row.get(0),
             ).optional().map_err(|e| format!("Failed to resolve link target: {}", e))?;
+
+            // Slow path: targets with a subpath ([[folder/note]]) or explicit
+            // extension ([[note.md]]) can only resolve by path suffix.
+            if target_id.is_none()
+                && (link.target.contains('/') || link.target.to_ascii_lowercase().ends_with(".md"))
+            {
+                let escaped_target = escape_like_literal(&link.target);
+                target_id = tx.query_row(
+                    "SELECT id FROM files WHERE path LIKE '%/' || ?1 || '.md' ESCAPE '\\' OR path LIKE '%/' || ?1 ESCAPE '\\' LIMIT 1",
+                    params![escaped_target],
+                    |row| row.get(0),
+                ).optional().map_err(|e| format!("Failed to resolve link target: {}", e))?;
+            }
 
             tx.execute(
                 "INSERT INTO links (source_id, target, target_id, line_number, context)
@@ -623,15 +634,16 @@ impl Database {
         Ok(results)
     }
 
-    /// Get indexed file paths under a directory prefix (for scoped reconciliation).
-    pub fn get_indexed_paths_by_prefix(&self, prefix: &str) -> Result<Vec<String>, String> {
+    /// Get indexed file paths with their indexed_at timestamps under a directory
+    /// prefix (for scoped reconciliation).
+    pub fn get_indexed_paths_by_prefix(&self, prefix: &str) -> Result<Vec<(String, Option<i64>)>, String> {
         let pattern = format!("{}%", escape_like_literal(prefix));
         let mut stmt = self.conn.prepare(
-            "SELECT path FROM files WHERE path LIKE ?1 ESCAPE '\\'"
+            "SELECT path, indexed_at FROM files WHERE path LIKE ?1 ESCAPE '\\'"
         ).map_err(|e| format!("Failed to prepare prefix paths query: {}", e))?;
 
         let rows = stmt.query_map(params![pattern], |row| {
-            row.get::<_, String>(0)
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
         }).map_err(|e| format!("Failed to query prefix paths: {}", e))?;
 
         let mut results = Vec::new();

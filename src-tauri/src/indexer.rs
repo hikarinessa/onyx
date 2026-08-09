@@ -149,8 +149,19 @@ impl Indexer {
         dir_id: &str,
         db: &Mutex<Database>,
     ) -> Result<(), String> {
-        // Walk the directory
+        // Fetch indexed state for this directory up front (one short DB lock).
+        // A Rescan event invalidates the watcher's event history, not the index —
+        // stored indexed_at timestamps are still trustworthy for diffing.
+        let dir_prefix = format!("{}/", dir_path.to_string_lossy());
+        let indexed_map: std::collections::HashMap<String, Option<i64>> = {
+            let db_lock = db.lock().map_err(|e| e.to_string())?;
+            db_lock.get_indexed_paths_by_prefix(&dir_prefix).unwrap_or_default()
+                .into_iter().collect()
+        };
+
+        // Walk the directory; reindex only new or modified files
         let mut disk_files: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut reindexed: u32 = 0;
         for entry in WalkDir::new(dir_path)
             .into_iter()
             .filter_entry(|e| !is_ignored(e))
@@ -159,30 +170,44 @@ impl Indexer {
             let path = entry.path().to_path_buf();
             if path.is_file() && path.extension().map_or(false, |e| e == "md") {
                 let path_str = path.to_string_lossy().to_string();
-                disk_files.insert(path_str.clone());
-                // Reindex every file found (Rescan means we can't trust event history)
-                if let Err(e) = index_single_file(&path, dir_id, db) {
-                    log::error!("Rescan reindex failed for {}: {}", path.display(), e);
+                let changed = match indexed_map.get(&path_str) {
+                    None => true,
+                    Some(indexed_at) => {
+                        let disk_mtime = path.metadata().ok()
+                            .and_then(|m| m.modified().ok())
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64);
+                        // Same semantics as startup reconcile(): only reindex when
+                        // both timestamps exist and the file is newer than its index entry
+                        matches!((disk_mtime, indexed_at), (Some(mt), Some(ia)) if mt > *ia)
+                    }
+                };
+                disk_files.insert(path_str);
+                if changed {
+                    if let Err(e) = index_single_file(&path, dir_id, db) {
+                        log::error!("Rescan reindex failed for {}: {}", path.display(), e);
+                    }
+                    reindexed += 1;
                 }
             }
         }
 
         // Prune DB entries under this directory that are no longer on disk
-        let dir_prefix = format!("{}/", dir_path.to_string_lossy());
-        let indexed_paths = {
-            let db_lock = db.lock().map_err(|e| e.to_string())?;
-            db_lock.get_indexed_paths_by_prefix(&dir_prefix).unwrap_or_default()
-        };
-
-        let stale: Vec<String> = indexed_paths.into_iter()
-            .filter(|p| !disk_files.contains(p))
+        let stale: Vec<String> = indexed_map.keys()
+            .filter(|p| !disk_files.contains(*p))
+            .cloned()
             .collect();
 
         if !stale.is_empty() {
             let db_lock = db.lock().map_err(|e| e.to_string())?;
             db_lock.delete_files_batch(&stale)?;
-            log::info!("Rescan pruned {} stale entries from {}", stale.len(), dir_path.display());
         }
+
+        log::info!(
+            "Rescan reconcile for {}: {} reindexed, {} pruned, {} unchanged",
+            dir_path.display(), reindexed, stale.len(),
+            disk_files.len().saturating_sub(reindexed as usize)
+        );
 
         Ok(())
     }
