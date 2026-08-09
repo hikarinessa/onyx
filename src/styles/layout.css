@@ -1300,37 +1300,48 @@
   .prop-multiselect {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
-  }
-
-  .prop-multiselect-option {
-    display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .prop-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     font-size: 11px;
     color: var(--text-secondary);
-    cursor: pointer;
-    padding: 2px 8px 2px 4px;
+    padding: 2px 4px 2px 8px;
     border-radius: 10px;
     background: var(--bg-elevated);
-    transition: background var(--transition-fast);
-  }
-
-  .prop-multiselect-option:hover {
-    background: var(--bg-active);
-  }
-
-  .prop-multiselect-option input {
-    width: 12px;
-    height: 12px;
-    accent-color: var(--accent);
-    cursor: pointer;
-  }
-
-  .prop-multiselect-option span {
+    max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .prop-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    border-radius: 50%;
+    transition: color var(--transition-fast), background var(--transition-fast);
+  }
+
+  .prop-chip-remove:hover {
+    color: var(--text-primary);
+    background: var(--bg-active);
+  }
+
+  .prop-chip-add {
+    width: auto;
+    min-width: 52px;
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--text-tertiary);
   }
 
   /* Context menu */
@@ -3395,6 +3406,7 @@
     font-size: var(--editor-font-size, 16px);
     line-height: var(--editor-line-height, 1.7);
     padding: var(--editor-padding-y, 24px) var(--editor-padding-x, 48px);
+    padding-bottom: 40vh;
   }
 
   .editor-container.preview-mode .cm-scroller {
@@ -3403,12 +3415,12 @@
   .editor-container.source-mode .cm-scroller {
     font-size: var(--editor-source-font-size, var(--editor-font-size, 16px)) !important;
     padding: 16px 24px;
+    padding-bottom: 40vh;
   }
 
   .editor-container .cm-content {
     max-width: var(--editor-max-width, 720px);
     margin: 0 auto;
-    padding-bottom: 40vh;
   }
 
 @media (max-width: 600px) {
@@ -3688,9 +3700,15 @@
     display: none !important;
   }
 
+  /* Hide lint point widgets in preview mode WITHOUT removing them from layout.
+   * Using `display: none` here makes `coordsAtPos(doc.length)` return null when
+   * a diagnostic (e.g. "missing trailing newline") sits at the end of the doc,
+   * which corrupts drawSelection() geometry on the last visual line (selection
+   * rect height blows up to ~5e8 px). visibility:hidden keeps the zero-width
+   * widget measurable while painting nothing. */
   .editor-container.preview-mode .cm-lintPoint-error,
   .editor-container.preview-mode .cm-lintPoint-warning {
-    display: none !important;
+    visibility: hidden !important;
   }
 
   .cm-gutter-lint {

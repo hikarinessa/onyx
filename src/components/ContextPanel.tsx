@@ -138,27 +138,43 @@ function PropertyField({
       );
 
     case "multiselect": {
-      const selected = Array.isArray(value) ? value : [];
+      const selected = Array.isArray(value) ? value.map(String) : [];
+      const remaining = (def.options || []).filter((opt) => !selected.includes(opt));
       return (
         <div className="prop-multiselect">
-          {(def.options || []).map((opt) => {
-            const checked = selected.includes(opt);
-            return (
-              <label key={opt} className="prop-multiselect-option">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => {
-                    const next = checked
-                      ? selected.filter((s) => s !== opt)
-                      : [...selected, opt];
-                    onChange(next.length > 0 ? next : null);
-                  }}
-                />
-                <span>{opt}</span>
-              </label>
-            );
-          })}
+          {selected.map((v) => (
+            <span key={v} className="prop-chip">
+              {v}
+              <button
+                className="prop-chip-remove"
+                title="Remove"
+                onClick={() => {
+                  const next = selected.filter((s) => s !== v);
+                  onChange(next.length > 0 ? next : null);
+                }}
+              >
+                <Icon name="x" size={10} />
+              </button>
+            </span>
+          ))}
+          {remaining.length > 0 && (
+            <select
+              className="prop-input prop-select prop-chip-add"
+              value=""
+              onChange={(e) => {
+                if (e.target.value) onChange([...selected, e.target.value]);
+              }}
+            >
+              <option value="" disabled>
+                Add…
+              </option>
+              {remaining.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       );
     }
