@@ -383,9 +383,9 @@ pub fn reorder_directories(
 }
 
 #[tauri::command]
-pub fn search_files(
+pub async fn search_files(
     query: String,
-    state: State<AppState>,
+    state: State<'_, AppState>,
 ) -> Result<Vec<crate::db::SearchResult>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.search_files(&query)
@@ -409,9 +409,9 @@ pub struct ContentSearchResult {
 }
 
 #[tauri::command]
-pub fn search_content(
+pub async fn search_content(
     query: String,
-    state: State<AppState>,
+    state: State<'_, AppState>,
 ) -> Result<Vec<ContentSearchResult>, String> {
     if query.trim().is_empty() {
         return Ok(Vec::new());
@@ -431,6 +431,19 @@ pub fn search_content(
         allowed.iter().cloned().collect()
     };
 
+    // The walk reads every candidate file — keep it off the async workers too
+    tauri::async_runtime::spawn_blocking(move || {
+        search_content_blocking(query_lower, dir_roots, orphan_paths)
+    })
+    .await
+    .map_err(|e| format!("Search task failed: {}", e))
+}
+
+fn search_content_blocking(
+    query_lower: String,
+    dir_roots: Vec<PathBuf>,
+    orphan_paths: Vec<String>,
+) -> Vec<ContentSearchResult> {
     let mut results: Vec<ContentSearchResult> = Vec::new();
     let mut seen_paths = std::collections::HashSet::new();
 
@@ -479,7 +492,7 @@ pub fn search_content(
     });
 
     results.truncate(500);
-    Ok(results)
+    results
 }
 
 fn search_file(
