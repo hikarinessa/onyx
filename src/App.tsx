@@ -25,7 +25,7 @@ import {
   normaliseCombo,
   getGlobalKeyMap,
 } from "./lib/keybindings";
-import { createNewNote } from "./lib/fileOps";
+import { createNewNote, createNoteWithContent } from "./lib/fileOps";
 import { navigateHistory, openFileInEditor } from "./lib/openFile";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -392,21 +392,13 @@ function registerCommands() {
       const dir = tab.path.substring(0, tab.path.lastIndexOf("/"));
       const firstLine = block.text.split("\n")[0].replace(/^#+\s*/, "").trim();
       const baseName = (firstLine.substring(0, 40) || "Extracted Note").replace(/[/:\0]/g, "");
-      let notePath = `${dir}/${baseName}.md`;
-      let counter = 1;
-      while (await invoke<boolean>("path_exists", { path: notePath })) {
-        notePath = `${dir}/${baseName} ${counter}.md`;
-        counter++;
-      }
-      // Create the new note (invoke is fine for new files — same as fileOps.createNote)
-      await invoke("write_file", { path: notePath, content: block.text + "\n" });
+      // All file mutations go through fileOps (see docs/GUIDELINES.md)
+      const notePath = await createNoteWithContent(dir, baseName, block.text + "\n");
       // Replace the block with a wikilink to the new note
       const linkName = notePath.split("/").pop()!.replace(".md", "");
       v.dispatch({
         changes: { from: block.from, to: block.to, insert: `[[${linkName}]]` },
       });
-      await invoke("reindex_file", { path: notePath });
-      store().bumpFileTreeVersion();
     },
   });
 

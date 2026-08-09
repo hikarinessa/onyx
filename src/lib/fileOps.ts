@@ -39,6 +39,28 @@ export async function createNote(dirPath: string): Promise<string> {
   return path;
 }
 
+/**
+ * Create a note with the given content at the first available path derived
+ * from `baseName` in `dirPath`. Does not open the note in a tab.
+ * Used by block-extract. Returns the created path.
+ */
+export async function createNoteWithContent(
+  dirPath: string,
+  baseName: string,
+  content: string,
+): Promise<string> {
+  let path = `${dirPath}/${baseName}.md`;
+  let counter = 1;
+  while (await invoke<boolean>("path_exists", { path })) {
+    path = `${dirPath}/${baseName} ${counter}.md`;
+    counter++;
+  }
+  await invoke("write_file", { path, content });
+  await invoke("reindex_file", { path });
+  useAppStore.getState().bumpFileTreeVersion();
+  return path;
+}
+
 /** Rename a file (not a folder), updating tabs and caches synchronously */
 export async function renameFile(oldPath: string, newPath: string): Promise<void> {
   const newName = newPath.split("/").pop() || newPath;
