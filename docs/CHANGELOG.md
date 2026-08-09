@@ -4,6 +4,26 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.10.10] — 2026-08-09
+
+### Added
+- **Cursor persistence** (#105) — caret, selection, and scroll position persist per file across tab close and app restart (`~/.onyx/cursor-positions.json`, LRU-capped at 500)
+- **Wikilink rewrite on rename** (#101) — renaming a note rewrites every wikilink that resolved to it, preserving `#heading`/`|alias` suffixes and covering embeds and dir-prefixed targets. Folder renames out of scope for v1
+- **Properties panel: multiselect as chips** — removable chips plus an Add… dropdown replace the checkbox list
+- **CI skeleton** (`.github/workflows/ci.yml`) and `npm run bump` version script
+
+### Fixed
+- **App hang when left idle** (#108) — FSEvents rescan reconciliation re-read and re-indexed all ~19.5k indexed files unconditionally, and each wikilink was resolved with a full-table LIKE scan, all while holding the DB mutex the UI waits on. Reconciliation now mtime-diffs against `indexed_at` and only reindexes changed files; link resolution uses a new indexed NOCASE title lookup with the path-suffix LIKE kept as fallback for `[[a/b]]`/`[[note.md]]` targets. Also fixes the excessive-disk-writes churn macOS flagged
+- **App freeze during full-text search** (#107) — `search_files`/`search_content` were sync commands running on the main thread; a search read every indexed `.md` file while the UI waited (captured in a macOS hang report blocking on an iCloud dataless-file materialization). Both are now async, with the content walk in `spawn_blocking`
+- Sidebar now refreshes when the indexer catches up (`index:complete` listener) — newly created Finder folders no longer stay hidden with `hide_empty_folders` on
+- Inline title rename no longer blanks the editor — `fileOps.renameFile`/`renameFolder` snapshot the live view before cache migration
+- Block extract now creates notes through `fileOps` (`createNoteWithContent`) instead of raw `invoke()`, keeping tabs, caches, and sidebar in sync
+
+### Removed
+- Unused dependencies: `tauri-plugin-fs` (Rust + npm + capability) and `@codemirror/theme-one-dark`
+
+---
+
 ## [0.10.9] — 2026-05-06
 
 ### Added
