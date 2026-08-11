@@ -27,7 +27,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 11 (Tier 2 Features):** In progress (slash commands, callouts, tag chips, 13 new themes, theme preview)
 - **Phase 12 (Hardening & Quality):** Planned — from the 2026-06 audit; quick wins done (CI skeleton, unused deps, fileOps bypass fix). Safety-net tasks (12.1) must precede the refactors (12.3).
 
-**Current version:** 0.10.10
+**Current version:** 0.10.11
 
 ## Project Structure
 

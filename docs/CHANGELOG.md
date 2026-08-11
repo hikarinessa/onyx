@@ -4,6 +4,13 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.10.11] — 2026-08-11
+
+### Added
+- **Frontend error trap** — uncaught webview exceptions, unhandled promise rejections, and `console.error` output (including CodeMirror's internally-caught extension crashes) are forwarded to the Rust log at `~/Library/Logs/app.onyx.notes/Onyx.log`, capped at 50 reports per session. Release builds previously swallowed all JS errors silently. Motivated by an unreproduced editor freeze (blank viewport on scroll in a checkbox-heavy file in preview mode) whose exception was unobservable
+
+---
+
 ## [0.10.10] — 2026-08-09
 
 ### Added
