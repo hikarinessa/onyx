@@ -257,6 +257,7 @@ pub fn run() {
             commands::reorder_directories,
             commands::search_files,
             commands::search_content,
+            commands::log_js_error,
             commands::get_backlinks,
             commands::get_index_stats,
             commands::resolve_wikilink,

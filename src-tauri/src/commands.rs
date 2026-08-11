@@ -382,6 +382,13 @@ pub fn reorder_directories(
     dirs.reorder(&ordered_ids)
 }
 
+/// Sink for the frontend's global error trap (main.tsx). Webview exceptions
+/// are otherwise invisible in release builds — no devtools, no console.
+#[tauri::command]
+pub fn log_js_error(message: String) {
+    log::error!("[JS] {}", message);
+}
+
 #[tauri::command]
 pub async fn search_files(
     query: String,
