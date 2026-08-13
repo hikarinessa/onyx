@@ -128,12 +128,15 @@ function buildDecorations(state: EditorState, review: ReviewState): DecorationSe
         if (anchored) {
           out.push(HIDE.range(token.from, s.original.from));
           push(out, HIGHLIGHT, s.original);
-          // Everything after the highlighted text — `==}{>>body<<}` — becomes the marker.
+          // A bare highlight has nothing to say, so it gets no marker to say it with —
+          // the highlight itself already carries the whole meaning.
           out.push(
-            Decoration.replace({
-              widget: new CommentMarkerWidget(s.id, body),
-              inclusiveEnd: false,
-            }).range(s.original.to, token.to),
+            body
+              ? Decoration.replace({
+                  widget: new CommentMarkerWidget(s.id, body),
+                  inclusiveEnd: false,
+                }).range(s.original.to, token.to)
+              : HIDE.range(s.original.to, token.to),
           );
         } else {
           out.push(
@@ -169,7 +172,7 @@ export const criticMarkupField = StateField.define<ReviewState>({
   },
 });
 
-const criticDecorations = StateField.define<DecorationSet>({
+export const criticDecorationField = StateField.define<DecorationSet>({
   create(state) {
     return buildDecorations(state, state.field(criticMarkupField));
   },
@@ -196,5 +199,5 @@ export const getClaimedRanges = (state: EditorState): Span[] =>
 setClaimedRangesHook(getClaimedRanges);
 
 export function criticMarkupExtension(): Extension[] {
-  return [criticMarkupField, criticDecorations];
+  return [criticMarkupField, criticDecorationField];
 }
