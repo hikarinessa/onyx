@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "fs";
@@ -27,6 +28,11 @@ export default defineConfig({
     },
   },
   envPrefix: ["VITE_", "TAURI_"],
+  test: {
+    // Pure-logic suites only so far — no DOM, so no jsdom dependency.
+    environment: "node",
+    include: ["src/**/*.test.ts"],
+  },
   build: {
     target: "safari16",
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
