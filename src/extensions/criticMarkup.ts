@@ -8,14 +8,25 @@
  * parsed suggestions from, which is how livePreview learns to keep its hands off them.
  */
 
-import { StateField, type EditorState, type Extension, type Range } from "@codemirror/state";
-import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
 import {
+  Prec,
+  StateEffect,
+  StateField,
+  type EditorState,
+  type Extension,
+  type Range,
+} from "@codemirror/state";
+import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from "@codemirror/view";
+import {
+  acceptChange,
   parseCriticMarkup,
+  rejectChange,
+  type DocChange,
   type ParseWarning,
   type Span,
   type Suggestion,
 } from "../lib/criticMarkup";
+import { useAppStore } from "../stores/app";
 import { previewModeField, setClaimedRangesHook } from "./livePreview";
 
 // A document with no markup at all is the common case — skip the scan entirely rather
@@ -66,13 +77,53 @@ const DEL = Decoration.mark({ class: "cm-critic-del" });
 const INS = Decoration.mark({ class: "cm-critic-ins" });
 const HIGHLIGHT = Decoration.mark({ class: "cm-critic-highlight" });
 
+/** Review mode: the proposals are laid over the document and can be decided. */
+export const toggleReviewEffect = StateEffect.define<boolean>();
+
+export const reviewModeField = StateField.define<boolean>({
+  create: () => false,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(toggleReviewEffect)) return e.value;
+    return value;
+  },
+});
+
 /** A span the parser produced can be empty; CM6 rejects a zero-length mark. */
 const push = (out: Range<Decoration>[], deco: Decoration, s: Span) => {
   if (s.to > s.from) out.push(deco.range(s.from, s.to));
 };
 
+/**
+ * Preview shows the document as it stands: the original text with every proposal taken
+ * out of sight. Deletions and substitutions keep the text they would change, additions
+ * and comments disappear entirely — the document you would have if you decided nothing.
+ * As suggestions get decided in Review, this converges on the finished note.
+ */
+function buildPreviewProjection(review: ReviewState): Range<Decoration>[] {
+  const out: Range<Decoration>[] = [];
+  for (const s of review.suggestions) {
+    const { token, original } = s;
+    if (original.to > original.from) {
+      // Keep the original text, hide the markup on either side of it.
+      out.push(HIDE.range(token.from, original.from));
+      out.push(HIDE.range(original.to, token.to));
+    } else {
+      out.push(HIDE.range(token.from, token.to));
+    }
+  }
+  return out;
+}
+
 function buildDecorations(state: EditorState, review: ReviewState): DecorationSet {
   if (!state.field(previewModeField)) return Decoration.none;
+  if (!review.suggestions.length) return Decoration.none;
+
+  if (!state.field(reviewModeField)) {
+    const projected = buildPreviewProjection(review);
+    projected.sort((a, b) => a.from - b.from || a.to - b.to);
+    return Decoration.set(projected, true);
+  }
+
   const doc = state.doc.toString();
   const out: Range<Decoration>[] = [];
 
@@ -162,12 +213,22 @@ export const criticDecorationField = StateField.define<DecorationSet>({
   },
   update(value, tr) {
     const review = tr.state.field(criticMarkupField);
-    const previewChanged =
-      tr.startState.field(previewModeField) !== tr.state.field(previewModeField);
-    if (!tr.docChanged && !previewChanged) return value.map(tr.changes);
+    const modeChanged =
+      tr.startState.field(previewModeField) !== tr.state.field(previewModeField) ||
+      tr.startState.field(reviewModeField) !== tr.state.field(reviewModeField);
+    if (!tr.docChanged && !modeChanged) return value.map(tr.changes);
     return buildDecorations(tr.state, review);
   },
   provide: (f) => EditorView.decorations.from(f),
+});
+
+/**
+ * Mirrors the suggestion count into the store so the status bar and the mode cycle can
+ * see it without reaching into editor state. Same shape as the lint diagnostics bridge.
+ */
+const countPublisher = EditorView.updateListener.of((update) => {
+  const n = update.state.field(criticMarkupField, false)?.suggestions.length ?? 0;
+  useAppStore.getState().setSuggestionCount(n);
 });
 
 /** Suggestions in the document, in document order. Empty when there are none. */
@@ -182,6 +243,119 @@ export const getClaimedRanges = (state: EditorState): Span[] =>
 // keeps the import one-directional.
 setClaimedRangesHook(getClaimedRanges);
 
+// ---------------------------------------------------------------------------
+// Deciding
+// ---------------------------------------------------------------------------
+
+/**
+ * The suggestion the keyboard is pointing at. Held as a document offset rather than an
+ * id: ids are positional and every decision renumbers them, so an id would dangle the
+ * moment you accepted anything. An offset survives, and the nearest suggestion at or
+ * after it is a sensible place to land.
+ */
+export const setCursorAt = StateEffect.define<number | null>();
+
+const reviewCursorField = StateField.define<number | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(setCursorAt)) return e.value;
+    if (value === null) return null;
+    return tr.changes.mapPos(value, 1);
+  },
+});
+
+/** The suggestion the cursor points at, or the first one if it points nowhere yet. */
+export function currentSuggestion(state: EditorState): Suggestion | null {
+  const list = getSuggestions(state);
+  if (!list.length) return null;
+  const at = state.field(reviewCursorField, false) ?? null;
+  if (at === null) return list[0];
+  return list.find((s) => s.token.to > at) ?? list[list.length - 1];
+}
+
+export function step(state: EditorState, delta: 1 | -1): Suggestion | null {
+  const list = getSuggestions(state);
+  if (!list.length) return null;
+  const cur = currentSuggestion(state);
+  const idx = cur ? list.indexOf(cur) : -1;
+  const next = Math.min(Math.max(idx + delta, 0), list.length - 1);
+  return list[next];
+}
+
+const moveTo = (view: EditorView, s: Suggestion | null): boolean => {
+  if (!s) return false;
+  view.dispatch({
+    effects: [setCursorAt.of(s.token.from), EditorView.scrollIntoView(s.token.from, { y: "center" })],
+  });
+  return true;
+};
+
+/** Apply a decision and leave the cursor where the suggestion was, ready for the next one. */
+function decide(view: EditorView, make: (doc: string, s: Suggestion) => DocChange): boolean {
+  const s = currentSuggestion(view.state);
+  if (!s) return false;
+  const doc = view.state.doc.toString();
+  const change = make(doc, s);
+  view.dispatch({ changes: change, effects: setCursorAt.of(change.from) });
+  return true;
+}
+
+export const acceptCurrent = (view: EditorView) => decide(view, acceptChange);
+export const rejectCurrent = (view: EditorView) => decide(view, (d, s) => rejectChange(d, s));
+export const nextSuggestion = (view: EditorView) => moveTo(view, step(view.state, 1));
+export const prevSuggestion = (view: EditorView) => moveTo(view, step(view.state, -1));
+
+/** Decide every remaining suggestion in one transaction. */
+export function decideAll(view: EditorView, accept: boolean): boolean {
+  const list = getSuggestions(view.state);
+  if (!list.length) return false;
+  const doc = view.state.doc.toString();
+  const changes = list.map((s) => (accept ? acceptChange(doc, s) : rejectChange(doc, s)));
+  view.dispatch({ changes, effects: setCursorAt.of(null) });
+  return true;
+}
+
+/**
+ * re-view's review keys. Only live in Review mode — in Preview or Source these are
+ * ordinary characters, and stealing `a` from someone typing would be unforgivable.
+ */
+const reviewKeymap = keymap.of([
+  { key: "j", run: (v) => v.state.field(reviewModeField) && nextSuggestion(v) },
+  { key: "k", run: (v) => v.state.field(reviewModeField) && prevSuggestion(v) },
+  { key: "a", run: (v) => v.state.field(reviewModeField) && acceptCurrent(v) },
+  { key: "x", run: (v) => v.state.field(reviewModeField) && rejectCurrent(v) },
+  {
+    key: "Escape",
+    run: (v) => {
+      if (!v.state.field(reviewModeField)) return false;
+      v.dispatch({ effects: setCursorAt.of(null) });
+      return true;
+    },
+  },
+]);
+
+/** Ring around whichever suggestion the keyboard is on, so `a`/`x` are never a guess. */
+const cursorHighlight = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(_value, tr) {
+    if (!tr.state.field(reviewModeField)) return Decoration.none;
+    const s = currentSuggestion(tr.state);
+    if (!s) return Decoration.none;
+    return Decoration.set([
+      Decoration.mark({ class: "cm-critic-current" }).range(s.token.from, s.token.to),
+    ]);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 export function criticMarkupExtension(): Extension[] {
-  return [criticMarkupField, criticDecorationField];
+  return [
+    criticMarkupField,
+    reviewModeField,
+    reviewCursorField,
+    criticDecorationField,
+    cursorHighlight,
+    countPublisher,
+    Prec.high(reviewKeymap),
+  ];
 }

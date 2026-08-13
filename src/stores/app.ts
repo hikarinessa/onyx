@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { type Pane, type PaneState, MAX_PANES, createPane, defaultPaneState } from "./panes";
 import { getDefaultEditorMode } from "../lib/configBridge";
 
-export type EditorMode = "source" | "preview";
+export type EditorMode = "source" | "preview" | "review";
 
 export interface LintIssue {
   id: string;
@@ -98,7 +98,9 @@ interface AppState {
   setActiveTab: (id: string) => void;
   setModified: (id: string, modified: boolean) => void;
   updateTabPath: (id: string, newPath: string, newName: string) => void;
-  toggleEditorMode: (id: string) => void;
+  /** Cycles source → preview → review; `canReview` false skips review. */
+  toggleEditorMode: (id: string, canReview?: boolean) => void;
+  setEditorMode: (id: string, mode: EditorMode) => void;
   pushNav: (tabId: string, entry: NavEntry) => void;
   navigateBack: (tabId: string) => NavEntry | null;
   navigateForward: (tabId: string) => NavEntry | null;
@@ -188,10 +190,13 @@ interface AppState {
   // Lint
   lintErrors: number;
   lintWarnings: number;
+  /** Pending CriticMarkup suggestions in the active editor. Drives the mode cycle and status bar. */
+  suggestionCount: number;
   lintDiagnostics: LintIssue[];
   lintPanelVisible: boolean;
   setLintCounts: (errors: number, warnings: number) => void;
   setLintDiagnostics: (diagnostics: LintIssue[]) => void;
+  setSuggestionCount: (n: number) => void;
   toggleLintPanel: () => void;
 }
 
@@ -522,18 +527,34 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  toggleEditorMode: (id) => {
+  toggleEditorMode: (id, canReview = false) => {
+    const { paneState } = get();
+    // source → preview → review → source. Review is skipped when the document has no
+    // suggestions, so the cycle never parks on a mode with nothing to show.
+    const next = (mode: EditorMode): EditorMode => {
+      if (mode === "source") return "preview";
+      if (mode === "preview") return canReview ? "review" : "source";
+      return "source";
+    };
+    set({
+      paneState: {
+        ...paneState,
+        panes: paneState.panes.map((pane) => ({
+          ...pane,
+          tabs: pane.tabs.map((t) => (t.id === id ? { ...t, editorMode: next(t.editorMode) } : t)),
+        })),
+      },
+    });
+  },
+
+  setEditorMode: (id, mode) => {
     const { paneState } = get();
     set({
       paneState: {
         ...paneState,
         panes: paneState.panes.map((pane) => ({
           ...pane,
-          tabs: pane.tabs.map((t) =>
-            t.id === id
-              ? { ...t, editorMode: t.editorMode === "source" ? "preview" : "source" }
-              : t
-          ),
+          tabs: pane.tabs.map((t) => (t.id === id ? { ...t, editorMode: mode } : t)),
         })),
       },
     });
@@ -719,10 +740,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   lintErrors: 0,
   lintWarnings: 0,
+  suggestionCount: 0,
   lintDiagnostics: [],
   lintPanelVisible: false,
   setLintCounts: (errors, warnings) => set({ lintErrors: errors, lintWarnings: warnings }),
   setLintDiagnostics: (diagnostics) => set({ lintDiagnostics: diagnostics }),
+
+  setSuggestionCount: (n) => {
+    if (get().suggestionCount !== n) set({ suggestionCount: n });
+  },
   toggleLintPanel: () => set((s) => ({ lintPanelVisible: !s.lintPanelVisible })),
 }));
 

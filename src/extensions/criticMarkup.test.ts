@@ -3,8 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   criticDecorationField,
   criticMarkupExtension,
+  currentSuggestion,
   getClaimedRanges,
   getSuggestions,
+  setCursorAt,
+  step,
+  toggleReviewEffect,
 } from "./criticMarkup";
 import { previewModeField, togglePreviewEffect } from "./livePreview";
 
@@ -13,12 +17,17 @@ import { previewModeField, togglePreviewEffect } from "./livePreview";
  * only touches `document` when it renders. This is the difference between "the extension
  * typechecks" and "the extension puts decorations at the right offsets".
  */
-function stateFor(doc: string, preview = true): EditorState {
+type Mode = "source" | "preview" | "review";
+
+function stateFor(doc: string, mode: Mode = "review"): EditorState {
   const state = EditorState.create({
     doc,
     extensions: [previewModeField, criticMarkupExtension()],
   });
-  return preview ? state.update({ effects: togglePreviewEffect.of(true) }).state : state;
+  if (mode === "source") return state;
+  return state.update({
+    effects: [togglePreviewEffect.of(true), toggleReviewEffect.of(mode === "review")],
+  }).state;
 }
 
 interface Deco {
@@ -28,8 +37,8 @@ interface Deco {
   widget: boolean;
 }
 
-function decorations(doc: string, preview = true): Deco[] {
-  const set = stateFor(doc, preview).field(criticDecorationField);
+function decorations(doc: string, mode: Mode = "review"): Deco[] {
+  const set = stateFor(doc, mode).field(criticDecorationField);
   const out: Deco[] = [];
   const iter = set.iter();
   while (iter.value) {
@@ -159,13 +168,99 @@ describe("decorations", () => {
   });
 
   it("produces nothing in source mode", () => {
-    expect(decorations("a {--bad --}day", false)).toEqual([]);
+    expect(decorations("a {--bad --}day", "source")).toEqual([]);
   });
 
-  it("rebuilds when preview mode is toggled on", () => {
-    const source = stateFor("a {--bad --}day", false);
+  it("rebuilds when review mode is toggled on", () => {
+    const source = stateFor("a {--bad --}day", "source");
     expect(source.field(criticDecorationField).size).toBe(0);
-    const preview = source.update({ effects: togglePreviewEffect.of(true) }).state;
-    expect(preview.field(criticDecorationField).size).toBeGreaterThan(0);
+    const review = source.update({
+      effects: [togglePreviewEffect.of(true), toggleReviewEffect.of(true)],
+    }).state;
+    expect(review.field(criticDecorationField).size).toBeGreaterThan(0);
+  });
+});
+
+describe("review cursor", () => {
+  const doc = "{--a--} mid {++b++} end {~~c~>d~~}";
+
+  it("starts on the first suggestion", () => {
+    expect(currentSuggestion(stateFor(doc))!.type).toBe("deletion");
+  });
+
+  it("walks forward and back, clamping at both ends", () => {
+    let state = stateFor(doc);
+    const to = (s: EditorState, d: 1 | -1) =>
+      s.update({ effects: setCursorAt.of(step(s, d)!.token.from) }).state;
+
+    state = to(state, 1);
+    expect(currentSuggestion(state)!.type).toBe("addition");
+    state = to(state, 1);
+    expect(currentSuggestion(state)!.type).toBe("substitution");
+    state = to(state, 1);
+    expect(currentSuggestion(state)!.type).toBe("substitution"); // clamped at the end
+    state = to(state, -1);
+    expect(currentSuggestion(state)!.type).toBe("addition");
+  });
+
+  it("survives a decision rather than dangling on a renumbered id", () => {
+    // Ids are positional, so every decision renumbers them. Holding an offset means the
+    // cursor lands on the next real suggestion instead of pointing at nothing.
+    let state = stateFor(doc);
+    const first = currentSuggestion(state)!;
+    state = state
+      .update({ changes: { from: first.token.from, to: first.token.to, insert: "a" } })
+      .state;
+    expect(getSuggestions(state)).toHaveLength(2);
+    expect(currentSuggestion(state)!.type).toBe("addition");
+  });
+
+  it("has no current suggestion once every one is decided", () => {
+    const state = stateFor("{--a--}").update({ changes: { from: 0, to: 7, insert: "a" } }).state;
+    expect(currentSuggestion(state)).toBeNull();
+  });
+});
+
+/**
+ * Preview is the document as it stands — the text you would have if you decided nothing.
+ * Anything proposed is out of sight; anything already there survives.
+ */
+describe("preview projection", () => {
+  const visible = (doc: string) => {
+    const hidden = decorations(doc, "preview").filter((d) => d.cls === null);
+    let out = "";
+    let cursor = 0;
+    for (const h of hidden.sort((a, b) => a.from - b.from)) {
+      out += doc.slice(cursor, h.from);
+      cursor = h.to;
+    }
+    return out + doc.slice(cursor);
+  };
+
+  it("keeps text a deletion proposes to remove", () => {
+    expect(visible("a {--bad --}day")).toBe("a bad day");
+  });
+
+  it("hides text an addition proposes to add", () => {
+    expect(visible("a day{++ indeed++}")).toBe("a day");
+  });
+
+  it("keeps the old half of a substitution and hides the new", () => {
+    expect(visible("we {~~ship~>release~~} it")).toBe("we ship it");
+  });
+
+  it("keeps highlighted text and hides its comment", () => {
+    expect(visible("the {==metrics==}{>>@llm: which?<<} agree")).toBe("the metrics agree");
+  });
+
+  it("hides a point comment entirely", () => {
+    expect(visible("done{>>@llm: really?<<}")).toBe("done");
+  });
+
+  it("matches what rejecting everything would write to disk", () => {
+    // The invariant that makes Preview honest: what it shows is what the file becomes
+    // if you walk away. Only whole-line collapsing differs, and only on its own lines.
+    const doc = "we {~~ship~>release~~} it, {--maybe --}soon{>>@llm: hm<<}";
+    expect(visible(doc)).toBe("we ship it, maybe soon");
   });
 });
