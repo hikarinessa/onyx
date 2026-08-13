@@ -6,10 +6,31 @@
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { EditorView, keymap } from "@codemirror/view";
-import { useAppStore } from "../stores/app";
+import { useAppStore, type EditorMode } from "../stores/app";
 import type { Pane } from "../stores/panes";
 import { togglePreviewEffect, previewModeField } from "../extensions/livePreview";
 import { reviewModeField, toggleReviewEffect } from "../extensions/criticMarkup";
+
+/**
+ * Drive both mode fields from the single `editorMode` value.
+ *
+ * Two effects used to do this independently — one on tab switch, one on mode change —
+ * and only the first knew Review existed. The second read `mode === "preview"` as "is
+ * preview on", which switched live preview *off* in Review mode and left review
+ * decorations stranded on top of Preview. One writer, so they cannot disagree again.
+ */
+function syncEditorMode(view: EditorView, mode: EditorMode): void {
+  const wantPreview = mode !== "source"; // Review renders on top of preview
+  const wantReview = mode === "review";
+  const effects = [];
+  if (view.state.field(previewModeField) !== wantPreview) {
+    effects.push(togglePreviewEffect.of(wantPreview));
+  }
+  if (view.state.field(reviewModeField) !== wantReview) {
+    effects.push(toggleReviewEffect.of(wantReview));
+  }
+  if (effects.length) view.dispatch({ effects });
+}
 import { frontmatterTabRef } from "../extensions/frontmatter";
 import { renameFile } from "../lib/fileOps";
 import {
@@ -84,17 +105,7 @@ export function EditorPane({ pane }: { pane: Pane }) {
     registerPaneView(pane.id, viewRef.current);
     viewTabIdRef.current = activeTab.id;
 
-    // Sync preview and review mode. Review renders on top of preview, so both are on.
-    const wantPreview = activeTab.editorMode !== "source";
-    const wantReview = activeTab.editorMode === "review";
-    const effects = [];
-    if (viewRef.current.state.field(previewModeField) !== wantPreview) {
-      effects.push(togglePreviewEffect.of(wantPreview));
-    }
-    if (viewRef.current.state.field(reviewModeField) !== wantReview) {
-      effects.push(toggleReviewEffect.of(wantReview));
-    }
-    if (effects.length) viewRef.current.dispatch({ effects });
+    syncEditorMode(viewRef.current, activeTab.editorMode);
 
     // Restore scroll
     const savedScroll = scrollCache.get(activeTab.id);
@@ -138,14 +149,9 @@ export function EditorPane({ pane }: { pane: Pane }) {
     };
   }, [pane.id]);
 
-  // Sync preview mode on editorMode change
+  // Sync preview and review mode on editorMode change
   useEffect(() => {
-    if (!viewRef.current) return;
-    const isPreview = editorMode === "preview";
-    const current = viewRef.current.state.field(previewModeField);
-    if (current !== isPreview) {
-      viewRef.current.dispatch({ effects: togglePreviewEffect.of(isPreview) });
-    }
+    if (viewRef.current) syncEditorMode(viewRef.current, editorMode);
   }, [editorMode]);
 
   // Focus this pane's editor when it becomes active
