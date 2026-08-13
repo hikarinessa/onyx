@@ -37,6 +37,15 @@
     --status-error: oklch(0.645 0.1837 23.8);
     --status-success: oklch(0.827 0.1860 153.0);
 
+    /* Review (CriticMarkup) — derived from the status colours so every theme,
+       light or dark, gets review decorations that match its own palette. */
+    --critic-del-text: var(--status-error);
+    --critic-del-bg: color-mix(in oklab, var(--status-error) 14%, transparent);
+    --critic-ins-text: var(--status-success);
+    --critic-ins-bg: color-mix(in oklab, var(--status-success) 14%, transparent);
+    --critic-highlight-bg: color-mix(in oklab, var(--status-modified) 22%, transparent);
+    --critic-marker: var(--status-modified);
+
     /* Semantic */
     --tag-bg: oklch(0.670 0.1336 230.1 / 0.12);
     --tag-text: oklch(0.773 0.1475 225.8);

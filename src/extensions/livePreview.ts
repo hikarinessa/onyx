@@ -861,9 +861,31 @@ function listLineStyle(hangPx: number, indentSpaces: number, unitLen: number, sp
   return style;
 }
 
+// ── CriticMarkup interop ──
+//
+// `{==text==}` and `{~~old~>new~~}` contain the exact character sequences this module
+// reads as highlight and strikethrough, so without knowing where review constructs are it
+// would hide their markers and style their innards. criticMarkup.ts registers the lookup
+// here rather than being imported, which would make the two modules circular.
+
+interface ClaimedRange {
+  from: number;
+  to: number;
+}
+
+let claimedRangesHook: ((state: EditorState) => ClaimedRange[]) | null = null;
+
+export function setClaimedRangesHook(fn: (state: EditorState) => ClaimedRange[]) {
+  claimedRangesHook = fn;
+}
+
+/** Ranges claimed for the build currently in progress. Builds are synchronous. */
+let buildClaimed: ClaimedRange[] = [];
+
 function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSkipLines: Set<number>, focusedTableLines: Set<number>): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
+  buildClaimed = claimedRangesHook ? claimedRangesHook(view.state) : [];
   const { fmEnd, codeBlockStates } = scan;
   const metrics = getHangMetrics(view);
   const unitLen = view.state.facet(indentUnit).length;
@@ -1222,6 +1244,12 @@ function addInlineDecorations(
   const ranges: { from: number; to: number; deco: Decoration }[] = [];
   // Track claimed text spans to prevent overlapping matches
   const claimed: { from: number; to: number }[] = [];
+
+  // Seed with any CriticMarkup construct touching this line, so review syntax is never
+  // mistaken for a highlight or a strikethrough.
+  for (const c of buildClaimed) {
+    if (c.from < line.to && c.to > line.from) claimed.push(c);
+  }
 
   function isClaimed(from: number, to: number): boolean {
     return claimed.some((c) => from < c.to && to > c.from);

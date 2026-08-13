@@ -30,6 +30,7 @@ import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension, resetHangMetrics } from "../extensions/livePreview";
+import { criticMarkupExtension } from "../extensions/criticMarkup";
 import { lintingExtension, autofixContent, applyLintFix } from "../extensions/linting";
 import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
@@ -298,6 +299,7 @@ function buildExtensions(): Extension[] {
     autocompleteExtension(),
     symbolWrapExtension(),
     livePreviewExtension(),
+    ...criticMarkupExtension(),
     ...embedExtension(),
     ...blocksExtension(),
     keymap.of(lintKeymap),
