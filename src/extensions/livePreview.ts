@@ -1347,8 +1347,13 @@ function addInlineDecorations(
     claimed.push({ from: hashFrom, to: tagTo });
   }
 
-  // Sort by position and add to builder
-  ranges.sort((a, b) => a.from - b.from || a.to - b.to);
+  // RangeSetBuilder requires adds ordered by `from` AND `startSide` — sorting by `to`
+  // instead leaves two decorations that begin at the same offset (a replace and a mark,
+  // say) in whichever order they were produced, and the builder throws "Ranges must be
+  // added sorted by `from` position and `startSide`", taking the whole plugin down.
+  ranges.sort(
+    (a, b) => a.from - b.from || a.deco.startSide - b.deco.startSide || a.to - b.to,
+  );
   for (const r of ranges) {
     if (r.from < r.to) {
       builder.add(r.from, r.to, r.deco);
