@@ -42,11 +42,14 @@ It runs to a second line, and the marker only closes here.--}The text after it c
 
 ## Block-crossing substitution
 
-{~~### An old heading~>### A clearer heading~~}
+{~~### An old heading~>### A clearer heading~~} testing
 
-The substitution above spans the `###` marker itself, so both halves carry block syntax.
-Rendered prose cannot show two competing headings in one slot, and this is the case that
-falls back to raw text.
+The substitution above spans the `###` marker itself. The delimiters hide like any other
+substitution, and the `###` stays literal because live preview only renders a heading when
+the *line* opens with one — and this line opens with `{`. Preview mode is where this reads
+oddly: with the markup hidden, the surviving half shows its `###` as plain text. An
+annotation pass is better off proposing a change to the heading's words than to a span
+that swallows its marker.
 
 ## Interaction with existing syntax
 
@@ -55,9 +58,11 @@ inside the CriticMarkup delimiters, so a construct like {~~this one~>that one~~}
 claimed before the ordinary inline pass runs — otherwise its innards get styled as a
 strikethrough and the markers vanish.
 
-Both plain forms must still work everywhere: ==a real highlight== and ~~a real
-strikethrough~~ render as themselves, and they keep working {++inside ==an accepted
-addition==++} too.
+Both plain forms must still work everywhere: ==a real highlight== and ~~a real strikethrough~~
+render as themselves, and they keep working {++inside ==an accepted addition==++} too.
+
+Live preview matches inline syntax one line at a time, so a construct broken across a hard
+line break is not rendered at all — keep these on a single line when checking them.
 
 ## Second pass
 
