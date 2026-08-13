@@ -16,6 +16,7 @@ export function StatusBar() {
   const deletedPaths = useAppStore((s) => s.deletedPaths);
 
   const toggleEditorMode = useAppStore((s) => s.toggleEditorMode);
+  const suggestionCount = useAppStore((s) => s.suggestionCount);
 
   const hasConflict = saveConflictPath != null && saveConflictPath === activeTabPath;
   const isDeleted = activeTabPath != null && deletedPaths.has(activeTabPath);
@@ -92,15 +93,24 @@ export function StatusBar() {
                 {lintWarnings > 0 && <span className="statusbar-lint-warnings">{lintWarnings}W</span>}
               </span>
             )}
+            {suggestionCount > 0 && (
+              <span className="statusbar-suggestions" title="CriticMarkup suggestions awaiting a decision">
+                {suggestionCount} suggestion{suggestionCount === 1 ? "" : "s"}
+              </span>
+            )}
             <span
               className="statusbar-mode"
-              title="Toggle preview (Cmd+/)"
+              title={
+                suggestionCount > 0
+                  ? "Cycle Source / Preview / Review (Cmd+/)"
+                  : "Toggle preview (Cmd+/)"
+              }
               role="button"
               tabIndex={0}
-              onClick={() => { if (activeTabId) toggleEditorMode(activeTabId); }}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (activeTabId) toggleEditorMode(activeTabId); } }}
+              onClick={() => { if (activeTabId) toggleEditorMode(activeTabId, suggestionCount > 0); }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (activeTabId) toggleEditorMode(activeTabId, suggestionCount > 0); } }}
             >
-              {activeEditorMode === "preview" ? "Preview" : "Source"}
+              {activeEditorMode === "review" ? "Review" : activeEditorMode === "preview" ? "Preview" : "Source"}
             </span>
           </>
         )}

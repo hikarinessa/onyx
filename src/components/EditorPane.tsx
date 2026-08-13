@@ -9,6 +9,7 @@ import { EditorView, keymap } from "@codemirror/view";
 import { useAppStore } from "../stores/app";
 import type { Pane } from "../stores/panes";
 import { togglePreviewEffect, previewModeField } from "../extensions/livePreview";
+import { reviewModeField, toggleReviewEffect } from "../extensions/criticMarkup";
 import { frontmatterTabRef } from "../extensions/frontmatter";
 import { renameFile } from "../lib/fileOps";
 import {
@@ -83,12 +84,17 @@ export function EditorPane({ pane }: { pane: Pane }) {
     registerPaneView(pane.id, viewRef.current);
     viewTabIdRef.current = activeTab.id;
 
-    // Sync preview mode
-    const wantPreview = activeTab.editorMode === "preview";
-    const currentPreview = viewRef.current.state.field(previewModeField);
-    if (currentPreview !== wantPreview) {
-      viewRef.current.dispatch({ effects: togglePreviewEffect.of(wantPreview) });
+    // Sync preview and review mode. Review renders on top of preview, so both are on.
+    const wantPreview = activeTab.editorMode !== "source";
+    const wantReview = activeTab.editorMode === "review";
+    const effects = [];
+    if (viewRef.current.state.field(previewModeField) !== wantPreview) {
+      effects.push(togglePreviewEffect.of(wantPreview));
     }
+    if (viewRef.current.state.field(reviewModeField) !== wantReview) {
+      effects.push(toggleReviewEffect.of(wantReview));
+    }
+    if (effects.length) viewRef.current.dispatch({ effects });
 
     // Restore scroll
     const savedScroll = scrollCache.get(activeTab.id);

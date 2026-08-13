@@ -17,6 +17,7 @@ import { registerCommand, getAllCommands } from "./lib/commands";
 import { makeTableCommands } from "./extensions/tableEditor";
 import { copyBlock, deleteBlock, getCurrentBlock } from "./extensions/blocks";
 import { sortTaskListAtCursor } from "./extensions/sortTaskList";
+import { decideAll, nextSuggestion, prevSuggestion } from "./extensions/criticMarkup";
 import { getEditorView, getAllPaneViews } from "./components/Editor";
 import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
 import {
@@ -90,6 +91,54 @@ function registerCommands() {
     shortcut: "Cmd+Opt+]",
     category: "View",
     execute: () => store().toggleContextPanel(),
+  });
+  registerCommand({
+    id: "review.toggleMode",
+    label: "Toggle Review Mode",
+    category: "Review",
+    execute: () => {
+      const s = store();
+      const tab = selectActiveTab(s);
+      const view = getEditorView();
+      if (!tab || !view) return;
+      s.setEditorMode(tab.id, tab.editorMode === "review" ? "preview" : "review");
+    },
+  });
+  registerCommand({
+    id: "review.next",
+    label: "Next Suggestion",
+    category: "Review",
+    execute: () => {
+      const view = getEditorView();
+      if (view) nextSuggestion(view);
+    },
+  });
+  registerCommand({
+    id: "review.previous",
+    label: "Previous Suggestion",
+    category: "Review",
+    execute: () => {
+      const view = getEditorView();
+      if (view) prevSuggestion(view);
+    },
+  });
+  registerCommand({
+    id: "review.acceptAll",
+    label: "Accept All Remaining Suggestions",
+    category: "Review",
+    execute: () => {
+      const view = getEditorView();
+      if (view) decideAll(view, true);
+    },
+  });
+  registerCommand({
+    id: "review.rejectAll",
+    label: "Reject All Remaining Suggestions",
+    category: "Review",
+    execute: () => {
+      const view = getEditorView();
+      if (view) decideAll(view, false);
+    },
   });
   registerCommand({
     id: "file.quickOpen",

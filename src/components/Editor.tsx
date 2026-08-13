@@ -30,7 +30,7 @@ import { urlPasteExtension } from "../extensions/urlPaste";
 import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension, resetHangMetrics } from "../extensions/livePreview";
-import { criticMarkupExtension } from "../extensions/criticMarkup";
+import { criticMarkupExtension, getSuggestions } from "../extensions/criticMarkup";
 import { lintingExtension, autofixContent, applyLintFix } from "../extensions/linting";
 import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
@@ -236,10 +236,11 @@ function buildExtensions(): Extension[] {
   const editorModeKeymap = keymap.of([
     {
       key: "Mod-/",
-      run: () => {
+      run: (view) => {
         const s = useAppStore.getState();
         const tab = selectActiveTab(s);
-        if (tab) s.toggleEditorMode(tab.id);
+        // Review is only offered when there is something to review.
+        if (tab) s.toggleEditorMode(tab.id, getSuggestions(view.state).length > 0);
         return true;
       },
     },

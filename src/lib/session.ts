@@ -239,15 +239,15 @@ export async function restoreSession(): Promise<void> {
       );
     }
 
-    // Restore per-tab editor mode
+    // Restore per-tab editor mode. Set it directly rather than toggling: StrictMode runs
+    // effects twice in dev, and a second toggle would undo the first.
     const store = useAppStore.getState();
     const pane = store.paneState.panes.find((p) => p.id === paneId);
     if (pane) {
       for (const tab of paneData.tabs) {
-        if (tab.editorMode === "source") {
-          const existing = pane.tabs.find((t) => t.path === tab.path);
-          if (existing) store.toggleEditorMode(existing.id);
-        }
+        if (!tab.editorMode) continue;
+        const existing = pane.tabs.find((t) => t.path === tab.path);
+        if (existing) store.setEditorMode(existing.id, tab.editorMode);
       }
     }
 
