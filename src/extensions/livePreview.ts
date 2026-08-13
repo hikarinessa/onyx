@@ -916,9 +916,19 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
     }
   }
 
+  // Consecutive visible ranges can share a boundary line: a replaced block range — a
+  // fold, an embed, a multi-line review construct — splits the viewport mid-line, so
+  // `lineAt(range1.to)` and `lineAt(range2.from)` are the same line. Processing it twice
+  // rewinds the builder to that line's start after the first pass has already moved past
+  // it, and RangeSetBuilder rejects a backwards `from` by throwing, which kills the whole
+  // plugin for that update and leaves the viewport unrendered.
+  let lastLineDone = 0;
+
   for (const { from, to } of view.visibleRanges) {
-    const startLine = doc.lineAt(from).number;
+    const startLine = Math.max(doc.lineAt(from).number, lastLineDone + 1);
     const endLine = doc.lineAt(to).number;
+    if (startLine > endLine) continue;
+    lastLineDone = endLine;
 
     let inCodeBlock = codeBlockStates.get(startLine) ?? false;
     // Track block comments (%%...%%) and callouts across lines
