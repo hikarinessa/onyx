@@ -104,7 +104,11 @@ export const onyxHighlightStyle = HighlightStyle.define([
   { tag: tags.link, color: "var(--link-color)", textDecoration: "var(--link-underline, underline)" },
   { tag: tags.url, color: "var(--link-color)", textDecoration: "var(--link-underline, underline)" },
   { tag: tags.quote, color: "var(--text-tertiary)", fontStyle: "italic" },
-  { tag: tags.strikethrough, color: "var(--syntax-strikethrough)", textDecoration: "line-through" },
+  // No line-through here: text-decoration propagates to descendants and cannot be
+  // cancelled by them, so a strikethrough node wrapping a CriticMarkup substitution
+  // ({~~old~>new~~} parses as one) would strike the proposed text too. Preview mode
+  // draws its own via .cm-preview-strikethrough; source mode keeps the colour.
+  { tag: tags.strikethrough, color: "var(--syntax-strikethrough)" },
   { tag: tags.meta, color: "var(--syntax-meta)" },
   { tag: tags.comment, color: "var(--syntax-comment)" },
   { tag: tags.contentSeparator, color: "var(--syntax-hr)" },

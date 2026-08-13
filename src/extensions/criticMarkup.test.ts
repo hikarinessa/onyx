@@ -108,18 +108,18 @@ describe("decorations", () => {
     ]);
   });
 
-  it("leaves a block-crossing substitution raw", () => {
+  it("hides the delimiters even when the halves carry block syntax", () => {
+    // The `###` stays literal because livePreview only renders a heading when the line
+    // opens with one, and this line opens with `{`. No special case needed.
     const doc = "{~~### Old heading~>### New heading~~}";
     const d = decorations(doc);
-    // Markers stay visible — only the two halves are coloured.
-    expect(d.map((x) => x.cls)).toEqual(["cm-critic-del", "cm-critic-ins"]);
-    expect(textOf(doc, d[0])).toBe("### Old heading");
-    expect(textOf(doc, d[1])).toBe("### New heading");
-  });
-
-  it("treats a list-item substitution as block-crossing too", () => {
-    const d = decorations("{~~- old item~>- new item~~}");
-    expect(d.map((x) => x.cls)).toEqual(["cm-critic-del", "cm-critic-ins"]);
+    expect(d.map((x) => [textOf(doc, x), x.cls])).toEqual([
+      ["{~~", null],
+      ["### Old heading", "cm-critic-del"],
+      ["~>", null],
+      ["### New heading", "cm-critic-ins"],
+      ["~~}", null],
+    ]);
   });
 
   it("renders a point comment as a single widget over the whole token", () => {

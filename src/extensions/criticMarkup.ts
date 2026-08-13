@@ -71,20 +71,6 @@ const push = (out: Range<Decoration>[], deco: Decoration, s: Span) => {
   if (s.to > s.from) out.push(deco.range(s.from, s.to));
 };
 
-/**
- * True when a substitution's two halves carry block-level markdown — a heading marker, a
- * list bullet, a blockquote. Rendered prose cannot show two competing block structures in
- * one slot, so these keep their markers visible and stand as raw text.
- */
-const BLOCK_SYNTAX = /^\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s?)/;
-
-function crossesBlockSyntax(doc: string, s: Suggestion): boolean {
-  if (s.type !== "substitution" || !s.replacement) return false;
-  const old = doc.slice(s.original.from, s.original.to);
-  const neu = doc.slice(s.replacement.from, s.replacement.to);
-  return BLOCK_SYNTAX.test(old) || BLOCK_SYNTAX.test(neu);
-}
-
 function buildDecorations(state: EditorState, review: ReviewState): DecorationSet {
   if (!state.field(previewModeField)) return Decoration.none;
   const doc = state.doc.toString();
@@ -107,13 +93,11 @@ function buildDecorations(state: EditorState, review: ReviewState): DecorationSe
         break;
 
       case "substitution": {
-        if (crossesBlockSyntax(doc, s)) {
-          // Raw: markers stay visible, and the two halves are still coloured so the
-          // proposal reads as a proposal rather than as broken text.
-          push(out, DEL, s.original);
-          push(out, INS, s.replacement!);
-          break;
-        }
+        // Block-level syntax inside a substitution needs no special case. A token starts
+        // mid-line with `{`, and livePreview only renders a heading or a bullet when the
+        // *line* opens with one — so `### A heading` inside a proposal stays literal text
+        // on its own. The two competing block structures the design worried about never
+        // materialise, and hiding the delimiters here is what keeps the review readable.
         out.push(HIDE.range(token.from, s.original.from));
         push(out, DEL, s.original);
         out.push(HIDE.range(s.original.to, s.replacement!.from)); // the ~> separator
