@@ -19,6 +19,7 @@ import {
 import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from "@codemirror/view";
 import {
   acceptChange,
+  hasCriticMarkup,
   parseCriticMarkup,
   rejectChange,
   type DocChange,
@@ -26,13 +27,12 @@ import {
   type Span,
   type Suggestion,
 } from "../lib/criticMarkup";
-import { useAppStore } from "../stores/app";
+import { selectActiveTab, useAppStore } from "../stores/app";
 import { previewModeField, setClaimedRangesHook } from "./livePreview";
 
 // A document with no markup at all is the common case — skip the scan entirely rather
 // than running a regex over every note on every keystroke.
-const MARKERS = ["{--", "{++", "{~~", "{==", "{>>"];
-const hasMarkup = (text: string) => MARKERS.some((m) => text.includes(m));
+const hasMarkup = hasCriticMarkup;
 
 export interface ReviewState {
   suggestions: Suggestion[];
@@ -228,7 +228,16 @@ export const criticDecorationField = StateField.define<DecorationSet>({
  */
 const countPublisher = EditorView.updateListener.of((update) => {
   const n = update.state.field(criticMarkupField, false)?.suggestions.length ?? 0;
-  useAppStore.getState().setSuggestionCount(n);
+  const store = useAppStore.getState();
+  store.setSuggestionCount(n);
+
+  // Review retires itself. Deciding the last suggestion removes the last marker, and
+  // leaving the editor in a mode with nothing left to show would just be a dead end.
+  // Setting the store mode lets EditorPane dispatch it — an update listener must not.
+  if (n === 0 && update.docChanged) {
+    const tab = selectActiveTab(store);
+    if (tab?.editorMode === "review") store.setEditorMode(tab.id, "preview");
+  }
 });
 
 /** Suggestions in the document, in document order. Empty when there are none. */

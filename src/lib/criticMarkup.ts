@@ -64,6 +64,15 @@ const TOKEN = new RegExp(
 
 const STRAY = /\{--|--\}|\{\+\+|\+\+\}|\{~~|~~\}|\{==|==\}|\{>>|<<\}/g;
 
+const OPENERS = ["{--", "{++", "{~~", "{==", "{>>"];
+
+/**
+ * Cheap check for whether a document is worth parsing. Most notes carry no annotations,
+ * and this keeps the regex scan off the hot path for all of them.
+ */
+export const hasCriticMarkup = (text: string): boolean =>
+  OPENERS.some((m) => text.includes(m));
+
 const AUTHOR = /^@([A-Za-z0-9_-]+):\s*/;
 
 /** Marker widths, so inner spans can be derived from a match offset. */
