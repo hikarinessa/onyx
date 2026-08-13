@@ -247,7 +247,12 @@ export async function restoreSession(): Promise<void> {
       for (const tab of paneData.tabs) {
         if (!tab.editorMode) continue;
         const existing = pane.tabs.find((t) => t.path === tab.path);
-        if (existing) store.setEditorMode(existing.id, tab.editorMode);
+        if (!existing) continue;
+        // Opening the file may already have put it in Review because it carries
+        // suggestions. That takes precedence over the saved mode — a note asking to be
+        // reviewed should say so on every open, not only the first.
+        if (existing.editorMode === "review" && tab.editorMode !== "review") continue;
+        store.setEditorMode(existing.id, tab.editorMode);
       }
     }
 
