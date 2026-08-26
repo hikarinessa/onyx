@@ -76,6 +76,7 @@ const HIDE = Decoration.replace({});
 const DEL = Decoration.mark({ class: "cm-critic-del" });
 const INS = Decoration.mark({ class: "cm-critic-ins" });
 const HIGHLIGHT = Decoration.mark({ class: "cm-critic-highlight" });
+const KEPT = Decoration.mark({ class: "cm-critic-kept" });
 
 /** Review mode: the proposals are laid over the document and can be decided. */
 export const toggleReviewEffect = StateEffect.define<boolean>();
@@ -104,8 +105,12 @@ function buildPreviewProjection(review: ReviewState): Range<Decoration>[] {
   for (const s of review.suggestions) {
     const { token, original } = s;
     if (original.to > original.from) {
-      // Keep the original text, hide the markup on either side of it.
+      // Keep the original text, hide the markup on either side of it. The surviving text
+      // also needs its own colour back: `{~~old~>new~~}` parses as a strikethrough node,
+      // whose highlight style greys everything inside it, and in Preview there is no
+      // proposal on screen to explain why this sentence looks dimmed.
       out.push(HIDE.range(token.from, original.from));
+      out.push(KEPT.range(original.from, original.to));
       out.push(HIDE.range(original.to, token.to));
     } else {
       out.push(HIDE.range(token.from, token.to));

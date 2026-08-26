@@ -4083,6 +4083,18 @@
   border-radius: 2px;
 }
 
+/* Text that survives a proposal in Preview. `{~~old~>new~~}` parses as a strikethrough
+   node, so the grammar greys everything inside it — including the half that is simply the
+   document as it stands. Colour, unlike text-decoration, can be overridden by a
+   descendant, so restoring it here works where cancelling the strike did not. */
+.cm-critic-kept {
+  color: var(--text-primary);
+}
+
+.cm-critic-kept span {
+  color: inherit !important;
+}
+
 /* Stands in for a comment that has no text of its own to sit on. Never `display: none`
    at end of document — a widget with no client rects breaks drawSelection's measuring. */
 .cm-critic-marker {

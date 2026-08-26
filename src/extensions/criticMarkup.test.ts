@@ -227,7 +227,7 @@ describe("review cursor", () => {
  */
 describe("preview projection", () => {
   const visible = (doc: string) => {
-    const hidden = decorations(doc, "preview").filter((d) => d.cls === null);
+    const hidden = decorations(doc, "preview").filter((d) => d.cls === null && !d.widget);
     let out = "";
     let cursor = 0;
     for (const h of hidden.sort((a, b) => a.from - b.from)) {
@@ -255,6 +255,15 @@ describe("preview projection", () => {
 
   it("hides a point comment entirely", () => {
     expect(visible("done{>>@llm: really?<<}")).toBe("done");
+  });
+
+  it("restores the colour of text the grammar greys as strikethrough", () => {
+    // `{~~old~>new~~}` parses as one strikethrough node, so without this the surviving
+    // half renders dimmed in Preview with nothing on screen to explain why.
+    const doc = "we {~~ship~>release~~} it";
+    const kept = decorations(doc, "preview").find((d) => d.cls === "cm-critic-kept");
+    expect(kept).toBeDefined();
+    expect(doc.slice(kept!.from, kept!.to)).toBe("ship");
   });
 
   it("matches what rejecting everything would write to disk", () => {
