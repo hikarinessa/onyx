@@ -22,6 +22,7 @@ import {
   hasCriticMarkup,
   parseCriticMarkup,
   rejectChange,
+  replyChange,
   type DocChange,
   type ParseWarning,
   type Span,
@@ -231,10 +232,24 @@ export const criticDecorationField = StateField.define<DecorationSet>({
  * Mirrors the suggestion count into the store so the status bar and the mode cycle can
  * see it without reaching into editor state. Same shape as the lint diagnostics bridge.
  */
+let lastSignature = "";
+
 const countPublisher = EditorView.updateListener.of((update) => {
   const n = update.state.field(criticMarkupField, false)?.suggestions.length ?? 0;
   const store = useAppStore.getState();
   store.setSuggestionCount(n);
+
+  // The card column renders from editor state rather than a copy of it, so it only needs
+  // to know when to look again: the list changed, the selection moved, or the mode did.
+  const signature = [
+    n,
+    currentSuggestion(update.state)?.id ?? "-",
+    update.state.field(reviewModeField, false) ? "r" : "-",
+  ].join(":");
+  if (signature !== lastSignature) {
+    lastSignature = signature;
+    store.bumpReviewTick();
+  }
 
   // Review retires itself. Deciding the last suggestion removes the last marker, and
   // leaving the editor in a mode with nothing left to show would just be a dead end.
@@ -311,6 +326,48 @@ function decide(view: EditorView, make: (doc: string, s: Suggestion) => DocChang
   const doc = view.state.doc.toString();
   const change = make(doc, s);
   view.dispatch({ changes: change, effects: setCursorAt.of(change.from) });
+  return true;
+}
+
+/** Act on a specific suggestion, for the card column where the target is whatever was clicked. */
+function decideById(
+  view: EditorView,
+  id: string,
+  make: (doc: string, s: Suggestion) => DocChange,
+): boolean {
+  const s = getSuggestions(view.state).find((x) => x.id === id);
+  if (!s) return false;
+  const change = make(view.state.doc.toString(), s);
+  view.dispatch({ changes: change, effects: setCursorAt.of(change.from) });
+  view.focus();
+  return true;
+}
+
+export const acceptById = (view: EditorView, id: string) => decideById(view, id, acceptChange);
+
+export const rejectById = (view: EditorView, id: string, note?: string) =>
+  decideById(view, id, (d, s) => rejectChange(d, s, note));
+
+/** Answer a comment without consuming it — both the comment and the reply reach the next pass. */
+export function replyById(view: EditorView, id: string, text: string): boolean {
+  const s = getSuggestions(view.state).find((x) => x.id === id);
+  if (!s || !text.trim()) return false;
+  const change = replyChange(s, text);
+  view.dispatch({ changes: change, effects: setCursorAt.of(change.from) });
+  view.focus();
+  return true;
+}
+
+/** Put the keyboard cursor on a suggestion and bring it into view. */
+export function selectById(view: EditorView, id: string): boolean {
+  const s = getSuggestions(view.state).find((x) => x.id === id);
+  if (!s) return false;
+  view.dispatch({
+    effects: [
+      setCursorAt.of(s.token.from),
+      EditorView.scrollIntoView(s.token.from, { y: "center" }),
+    ],
+  });
   return true;
 }
 

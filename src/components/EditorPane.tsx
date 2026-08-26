@@ -10,6 +10,7 @@ import { useAppStore, type EditorMode } from "../stores/app";
 import type { Pane } from "../stores/panes";
 import { togglePreviewEffect, previewModeField } from "../extensions/livePreview";
 import { reviewModeField, toggleReviewEffect } from "../extensions/criticMarkup";
+import { ReviewCards } from "./ReviewCards";
 
 /**
  * Drive both mode fields from the single `editorMode` value.
@@ -51,6 +52,8 @@ export function EditorPane({ pane }: { pane: Pane }) {
   const isActive = pane.id === activePaneId;
   const activeTab = pane.tabs.find((t) => t.id === pane.activeTabId);
   const editorMode = activeTab?.editorMode ?? "source";
+  // Cards render from editor state, so the pane only needs a signal that it changed.
+  useAppStore((st) => st.reviewTick);
 
   // Set this pane as active on pointer down
   const handlePointerDown = useCallback(() => {
@@ -257,7 +260,10 @@ export function EditorPane({ pane }: { pane: Pane }) {
           }}
           spellCheck={false}
         />
-        <div className={`editor-container ${modeClass}`} ref={containerRef} />
+        <div className="editor-body">
+          <div className={`editor-container ${modeClass}`} ref={containerRef} />
+          {activeTab.editorMode === "review" && <ReviewCards view={viewRef.current} />}
+        </div>
       </div>
     </div>
   );

@@ -4048,6 +4048,187 @@
   .cm-preview-alt-cb.cb-pin       { color: oklch(0.60 0.13 295); }  /* purple */
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Review card column
+   Lives inside the pane rather than replacing the context panel: Review is
+   per-tab, so two panes can both be reviewing, and a shared column would have
+   one slot and two claimants.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.editor-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  /* Establishes the query container the card column measures itself against, so the
+     threshold follows the pane's width rather than the window's — split panes and a
+     hidden sidebar both change it. */
+  container-type: inline-size;
+}
+
+.editor-body > .editor-container {
+  min-width: 0;
+}
+
+.review-cards {
+  flex: 0 0 var(--review-cards-width, 300px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+/* Below this the prose has no readable measure left, so the column steps aside and
+   decisions happen through the keyboard and the inline markers instead. */
+@container (max-width: 620px) {
+  .review-cards {
+    display: none;
+  }
+}
+
+.review-cards-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.review-cards-count {
+  font-weight: 600;
+}
+
+.review-cards-hint {
+  display: flex;
+  color: var(--text-tertiary);
+  cursor: help;
+}
+
+.review-cards-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-cards-empty {
+  padding: 16px 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.review-card {
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-default);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-elevated);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.review-card.selected {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+.review-card.type-deletion { border-left-color: var(--critic-del-text); }
+.review-card.type-addition { border-left-color: var(--critic-ins-text); }
+.review-card.type-substitution { border-left-color: var(--critic-marker); }
+.review-card.type-comment { border-left-color: var(--accent); }
+
+.review-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.review-card-body {
+  color: var(--text-primary);
+  line-height: 1.45;
+  word-break: break-word;
+  margin-bottom: 8px;
+}
+
+.review-card-body del {
+  color: var(--critic-del-text);
+  text-decoration: line-through;
+}
+
+.review-card-body ins {
+  color: var(--critic-ins-text);
+  text-decoration: none;
+}
+
+.review-card-rationale {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.review-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.review-card-actions button {
+  padding: 3px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.review-card-actions button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.review-card-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.review-card-actions .accept { color: var(--critic-ins-text); }
+.review-card-actions .reject { color: var(--critic-del-text); }
+
+.review-card-actions .primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-base);
+}
+
+.review-card-compose textarea {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Review decorations (CriticMarkup)
    Unlayered — must compete with CM6 runtime styles.
    ═══════════════════════════════════════════════════════════════════════════ */

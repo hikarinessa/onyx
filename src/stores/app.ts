@@ -192,11 +192,14 @@ interface AppState {
   lintWarnings: number;
   /** Pending CriticMarkup suggestions in the active editor. Drives the mode cycle and status bar. */
   suggestionCount: number;
+  /** Bumped when the review card list or its selection changes, so the card column re-renders. */
+  reviewTick: number;
   lintDiagnostics: LintIssue[];
   lintPanelVisible: boolean;
   setLintCounts: (errors: number, warnings: number) => void;
   setLintDiagnostics: (diagnostics: LintIssue[]) => void;
   setSuggestionCount: (n: number) => void;
+  bumpReviewTick: () => void;
   toggleLintPanel: () => void;
 }
 
@@ -741,6 +744,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   lintErrors: 0,
   lintWarnings: 0,
   suggestionCount: 0,
+  reviewTick: 0,
   lintDiagnostics: [],
   lintPanelVisible: false,
   setLintCounts: (errors, warnings) => set({ lintErrors: errors, lintWarnings: warnings }),
@@ -749,6 +753,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSuggestionCount: (n) => {
     if (get().suggestionCount !== n) set({ suggestionCount: n });
   },
+
+  bumpReviewTick: () => set({ reviewTick: get().reviewTick + 1 }),
   toggleLintPanel: () => set((s) => ({ lintPanelVisible: !s.lintPanelVisible })),
 }));
 
