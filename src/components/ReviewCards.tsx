@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import {
   absorbedIds,
@@ -150,14 +150,36 @@ function Card({ view, s, doc, rationales, selected }: CardProps) {
 }
 
 export function ReviewCards({ view }: { view: EditorView | null }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const all = view ? getSuggestions(view.state) : [];
+  const rationales = attachedRationales(all);
+  const absorbed = absorbedIds(rationales);
+
+  // A rationale comment renders inside the edit it explains, so it has no card of its
+  // own. Selecting its star should light up the owning edit rather than nothing.
+  const ownerOf = new Map<string, string>();
+  for (const [editId, chain] of rationales) {
+    for (const c of chain) ownerOf.set(c.id, editId);
+  }
+
+  const raw = view ? (currentSuggestion(view.state)?.id ?? null) : null;
+  const selectedId = raw ? (ownerOf.get(raw) ?? raw) : null;
+
+  // Selection can come from the text side — a caret moved into a suggestion, a star
+  // clicked — and the matching card is often off screen. Keyed on the id so it only
+  // fires when the selection actually changes, leaving manual scrolling of the column
+  // alone. `nearest` moves the minimum needed and does nothing when it is already visible.
+  useLayoutEffect(() => {
+    if (!selectedId) return;
+    listRef.current
+      ?.querySelector(`[data-suggestion="${selectedId}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+  }, [selectedId]);
+
   if (!view) return null;
 
   const doc = view.state.doc.toString();
-  const all = getSuggestions(view.state);
-  const rationales = attachedRationales(all);
-  const absorbed = absorbedIds(rationales);
   const cards = all.filter((s) => !absorbed.has(s.id));
-  const current = currentSuggestion(view.state);
 
   return (
     <div className="review-cards">
@@ -165,12 +187,12 @@ export function ReviewCards({ view }: { view: EditorView | null }) {
         <span className="review-cards-count">
           {cards.length} {cards.length === 1 ? "suggestion" : "suggestions"}
         </span>
-        <span className="review-cards-hint" title="j/k move · a accept · x reject · Esc deselect">
+        <span className="review-cards-hint" title="j/k move · a accept · x reject">
           <Icon name="keyboard" size={13} />
         </span>
       </div>
 
-      <div className="review-cards-list">
+      <div className="review-cards-list" ref={listRef}>
         {cards.length === 0 ? (
           <div className="review-cards-empty">Nothing left to decide.</div>
         ) : (
@@ -181,7 +203,7 @@ export function ReviewCards({ view }: { view: EditorView | null }) {
               s={s}
               doc={doc}
               rationales={rationales.get(s.id) ?? []}
-              selected={current?.id === s.id}
+              selected={selectedId === s.id}
             />
           ))
         )}
