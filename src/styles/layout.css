@@ -4289,6 +4289,17 @@
 
 .cm-critic-marker:hover {
   color: var(--accent-hover);
+  background: var(--accent-muted);
+}
+
+/* The ring lives on the widget because a point comment's whole token is replaced —
+   there is no text underneath for the shared selection mark to paint on. */
+.cm-critic-marker.selected {
+  color: var(--accent);
+  background: var(--accent-muted);
+  outline: 1.5px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
 }
 
 /* Whichever suggestion the keyboard is pointing at — accept/reject must never be a guess

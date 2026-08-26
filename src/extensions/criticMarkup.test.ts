@@ -6,7 +6,6 @@ import {
   currentSuggestion,
   getClaimedRanges,
   getSuggestions,
-  setCursorAt,
   step,
   toggleReviewEffect,
 } from "./criticMarkup";
@@ -181,18 +180,38 @@ describe("decorations", () => {
   });
 });
 
-describe("review cursor", () => {
+describe("selection follows the caret", () => {
   const doc = "{--a--} mid {++b++} end {~~c~>d~~}";
+  const caretAt = (s: EditorState, at: number) => s.update({ selection: { anchor: at } }).state;
 
-  it("starts on the first suggestion", () => {
-    expect(currentSuggestion(stateFor(doc))!.type).toBe("deletion");
+  it("selects the suggestion the caret sits inside", () => {
+    // The whole point: putting the caret on an edit highlights that edit's card.
+    const state = stateFor(doc);
+    expect(currentSuggestion(caretAt(state, 3))!.type).toBe("deletion");
+    expect(currentSuggestion(caretAt(state, 15))!.type).toBe("addition");
+    expect(currentSuggestion(caretAt(state, 28))!.type).toBe("substitution");
+  });
+
+  it("selects the next suggestion when the caret is in ordinary prose", () => {
+    // So deciding one leaves the following one ready to accept.
+    const state = caretAt(stateFor(doc), 9); // inside " mid "
+    expect(currentSuggestion(state)!.type).toBe("addition");
+  });
+
+  it("selects nothing once the caret is past the last suggestion", () => {
+    // Needs trailing prose: a caret resting on the final token's closing edge is still
+    // inside it, which is why `doc.length` on the bare document does not qualify.
+    const trailing = doc + " and then some ordinary prose.";
+    const state = caretAt(stateFor(trailing), trailing.length);
+    expect(currentSuggestion(state)).toBeNull();
   });
 
   it("walks forward and back, clamping at both ends", () => {
     let state = stateFor(doc);
     const to = (s: EditorState, d: 1 | -1) =>
-      s.update({ effects: setCursorAt.of(step(s, d)!.token.from) }).state;
+      s.update({ selection: { anchor: step(s, d)!.token.from } }).state;
 
+    expect(currentSuggestion(state)!.type).toBe("deletion");
     state = to(state, 1);
     expect(currentSuggestion(state)!.type).toBe("addition");
     state = to(state, 1);
@@ -203,14 +222,15 @@ describe("review cursor", () => {
     expect(currentSuggestion(state)!.type).toBe("addition");
   });
 
-  it("survives a decision rather than dangling on a renumbered id", () => {
-    // Ids are positional, so every decision renumbers them. Holding an offset means the
-    // cursor lands on the next real suggestion instead of pointing at nothing.
+  it("lands on the next suggestion after a decision, not on nothing", () => {
+    // Ids are positional and every decision renumbers them, which is why nothing holds
+    // an id between transactions.
     let state = stateFor(doc);
     const first = currentSuggestion(state)!;
-    state = state
-      .update({ changes: { from: first.token.from, to: first.token.to, insert: "a" } })
-      .state;
+    state = state.update({
+      changes: { from: first.token.from, to: first.token.to, insert: "a" },
+      selection: { anchor: first.token.from },
+    }).state;
     expect(getSuggestions(state)).toHaveLength(2);
     expect(currentSuggestion(state)!.type).toBe("addition");
   });
@@ -218,6 +238,22 @@ describe("review cursor", () => {
   it("has no current suggestion once every one is decided", () => {
     const state = stateFor("{--a--}").update({ changes: { from: 0, to: 7, insert: "a" } }).state;
     expect(currentSuggestion(state)).toBeNull();
+  });
+
+  it("marks the selected point comment's widget so the star shows a ring", () => {
+    // A point comment's token is replaced wholesale, so the ring has to live on the
+    // widget — there is no text left for a mark decoration to paint.
+    const doc2 = "done{>>@llm: really?<<} and more";
+    const set = stateFor(doc2).update({ selection: { anchor: 4 } }).state
+      .field(criticDecorationField);
+    const iter = set.iter();
+    let widget: { selected?: boolean } | null = null;
+    while (iter.value) {
+      const spec = iter.value.spec as { widget?: { selected?: boolean } };
+      if (spec.widget) widget = spec.widget;
+      iter.next();
+    }
+    expect(widget?.selected).toBe(true);
   });
 });
 

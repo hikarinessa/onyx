@@ -48,20 +48,24 @@ const EMPTY: ReviewState = { suggestions: [], warnings: [], claimed: [] };
 class CommentMarkerWidget extends WidgetType {
   readonly id: string;
   readonly body: string;
+  readonly selected: boolean;
 
-  constructor(id: string, body: string) {
+  constructor(id: string, body: string, selected: boolean) {
     super();
     this.id = id;
     this.body = body;
+    this.selected = selected;
   }
 
   eq(other: CommentMarkerWidget) {
-    return other.id === this.id && other.body === this.body;
+    return other.id === this.id && other.body === this.body && other.selected === this.selected;
   }
 
   toDOM() {
     const el = document.createElement("span");
-    el.className = "cm-critic-marker";
+    // The selection ring is on the widget itself: a point comment's whole token is
+    // replaced, so a mark decoration over that range has nothing left to paint on.
+    el.className = this.selected ? "cm-critic-marker selected" : "cm-critic-marker";
     el.dataset.suggestion = this.id;
     el.title = this.body;
     el.textContent = "✦";
@@ -121,6 +125,7 @@ function buildPreviewProjection(review: ReviewState): Range<Decoration>[] {
 }
 
 function buildDecorations(state: EditorState, review: ReviewState): DecorationSet {
+  const selectedId = currentSuggestion(state)?.id ?? null;
   if (!state.field(previewModeField)) return Decoration.none;
   if (!review.suggestions.length) return Decoration.none;
 
@@ -174,7 +179,7 @@ function buildDecorations(state: EditorState, review: ReviewState): DecorationSe
           out.push(
             body
               ? Decoration.replace({
-                  widget: new CommentMarkerWidget(s.id, body),
+                  widget: new CommentMarkerWidget(s.id, body, s.id === selectedId),
                   inclusiveEnd: false,
                 }).range(s.original.to, token.to)
               : HIDE.range(s.original.to, token.to),
@@ -182,7 +187,7 @@ function buildDecorations(state: EditorState, review: ReviewState): DecorationSe
         } else {
           out.push(
             Decoration.replace({
-              widget: new CommentMarkerWidget(s.id, body),
+              widget: new CommentMarkerWidget(s.id, body, s.id === selectedId),
               inclusiveEnd: false,
             }).range(token.from, token.to),
           );
@@ -222,7 +227,9 @@ export const criticDecorationField = StateField.define<DecorationSet>({
     const modeChanged =
       tr.startState.field(previewModeField) !== tr.state.field(previewModeField) ||
       tr.startState.field(reviewModeField) !== tr.state.field(reviewModeField);
-    if (!tr.docChanged && !modeChanged) return value.map(tr.changes);
+    // Selection changes matter too: the marker widget draws its own ring, so moving the
+    // caret between suggestions has to re-render it.
+    if (!tr.docChanged && !modeChanged && !tr.selection) return value.map(tr.changes);
     return buildDecorations(tr.state, review);
   },
   provide: (f) => EditorView.decorations.from(f),
@@ -277,29 +284,22 @@ setClaimedRangesHook(getClaimedRanges);
 // ---------------------------------------------------------------------------
 
 /**
- * The suggestion the keyboard is pointing at. Held as a document offset rather than an
- * id: ids are positional and every decision renumbers them, so an id would dangle the
- * moment you accepted anything. An offset survives, and the nearest suggestion at or
- * after it is a sensible place to land.
+ * The selected suggestion is derived from the text caret rather than tracked beside it.
+ * Two notions of "where you are" can disagree, and this one has three ways in — the
+ * keyboard, a click on the text, a click on a card — so a separate cursor would need
+ * every one of them to remember to keep it in step. The caret already survives edits,
+ * which is what a stored offset was for.
+ *
+ * A caret inside a construct selects it; otherwise the next construct along is selected,
+ * so deciding one suggestion leaves the following one ready to accept.
  */
-export const setCursorAt = StateEffect.define<number | null>();
-
-const reviewCursorField = StateField.define<number | null>({
-  create: () => null,
-  update(value, tr) {
-    for (const e of tr.effects) if (e.is(setCursorAt)) return e.value;
-    if (value === null) return null;
-    return tr.changes.mapPos(value, 1);
-  },
-});
-
-/** The suggestion the cursor points at, or the first one if it points nowhere yet. */
 export function currentSuggestion(state: EditorState): Suggestion | null {
   const list = getSuggestions(state);
   if (!list.length) return null;
-  const at = state.field(reviewCursorField, false) ?? null;
-  if (at === null) return list[0];
-  return list.find((s) => s.token.to > at) ?? list[list.length - 1];
+  const at = state.selection.main.head;
+  const inside = list.find((s) => at >= s.token.from && at <= s.token.to);
+  if (inside) return inside;
+  return list.find((s) => s.token.from >= at) ?? null;
 }
 
 export function step(state: EditorState, delta: 1 | -1): Suggestion | null {
@@ -314,7 +314,8 @@ export function step(state: EditorState, delta: 1 | -1): Suggestion | null {
 const moveTo = (view: EditorView, s: Suggestion | null): boolean => {
   if (!s) return false;
   view.dispatch({
-    effects: [setCursorAt.of(s.token.from), EditorView.scrollIntoView(s.token.from, { y: "center" })],
+    selection: { anchor: s.token.from },
+    effects: EditorView.scrollIntoView(s.token.from, { y: "center" }),
   });
   return true;
 };
@@ -325,7 +326,7 @@ function decide(view: EditorView, make: (doc: string, s: Suggestion) => DocChang
   if (!s) return false;
   const doc = view.state.doc.toString();
   const change = make(doc, s);
-  view.dispatch({ changes: change, effects: setCursorAt.of(change.from) });
+  view.dispatch({ changes: change, selection: { anchor: change.from } });
   return true;
 }
 
@@ -338,7 +339,7 @@ function decideById(
   const s = getSuggestions(view.state).find((x) => x.id === id);
   if (!s) return false;
   const change = make(view.state.doc.toString(), s);
-  view.dispatch({ changes: change, effects: setCursorAt.of(change.from) });
+  view.dispatch({ changes: change, selection: { anchor: change.from } });
   view.focus();
   return true;
 }
@@ -353,7 +354,7 @@ export function replyById(view: EditorView, id: string, text: string): boolean {
   const s = getSuggestions(view.state).find((x) => x.id === id);
   if (!s || !text.trim()) return false;
   const change = replyChange(s, text);
-  view.dispatch({ changes: change, effects: setCursorAt.of(change.from) });
+  view.dispatch({ changes: change, selection: { anchor: change.from } });
   view.focus();
   return true;
 }
@@ -363,10 +364,8 @@ export function selectById(view: EditorView, id: string): boolean {
   const s = getSuggestions(view.state).find((x) => x.id === id);
   if (!s) return false;
   view.dispatch({
-    effects: [
-      setCursorAt.of(s.token.from),
-      EditorView.scrollIntoView(s.token.from, { y: "center" }),
-    ],
+    selection: { anchor: s.token.from },
+    effects: EditorView.scrollIntoView(s.token.from, { y: "center" }),
   });
   return true;
 }
@@ -382,7 +381,7 @@ export function decideAll(view: EditorView, accept: boolean): boolean {
   if (!list.length) return false;
   const doc = view.state.doc.toString();
   const changes = list.map((s) => (accept ? acceptChange(doc, s) : rejectChange(doc, s)));
-  view.dispatch({ changes, effects: setCursorAt.of(null) });
+  view.dispatch({ changes });
   return true;
 }
 
@@ -395,15 +394,23 @@ const reviewKeymap = keymap.of([
   { key: "k", run: (v) => v.state.field(reviewModeField) && prevSuggestion(v) },
   { key: "a", run: (v) => v.state.field(reviewModeField) && acceptCurrent(v) },
   { key: "x", run: (v) => v.state.field(reviewModeField) && rejectCurrent(v) },
-  {
-    key: "Escape",
-    run: (v) => {
-      if (!v.state.field(reviewModeField)) return false;
-      v.dispatch({ effects: setCursorAt.of(null) });
-      return true;
-    },
-  },
 ]);
+
+/**
+ * Clicking a comment star selects it. The star is a widget this module built, so its own
+ * element is a reliable target — unlike a mark decoration, whose DOM the syntax
+ * highlighter may have split into spans that `closest` cannot find.
+ */
+const markerClicks = EditorView.domEventHandlers({
+  mousedown(event, view) {
+    const target = event.target as HTMLElement | null;
+    const marker = target?.closest?.(".cm-critic-marker") as HTMLElement | null;
+    const id = marker?.dataset.suggestion;
+    if (!id) return false;
+    event.preventDefault();
+    return selectById(view, id);
+  },
+});
 
 /** Ring around whichever suggestion the keyboard is on, so `a`/`x` are never a guess. */
 const cursorHighlight = StateField.define<DecorationSet>({
@@ -423,9 +430,9 @@ export function criticMarkupExtension(): Extension[] {
   return [
     criticMarkupField,
     reviewModeField,
-    reviewCursorField,
     criticDecorationField,
     cursorHighlight,
+    markerClicks,
     countPublisher,
     Prec.high(reviewKeymap),
   ];
