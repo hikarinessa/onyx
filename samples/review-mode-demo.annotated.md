@@ -40,16 +40,21 @@ A single deletion can cover more than one line, which is why these cannot be bui
 line-based scan: {--This whole passage is a candidate for cutting.
 It runs to a second line, and the marker only closes here.--}The text after it continues normally.
 
-## Block-crossing substitution
+## Substituting inside a heading
 
-{~~### An old heading~>### A clearer heading~~} testing
+### {~~An old heading~>A clearer heading~~}
 
-The substitution above spans the `###` marker itself. The delimiters hide like any other
-substitution, and the `###` stays literal because live preview only renders a heading when
-the *line* opens with one — and this line opens with `{`. Preview mode is where this reads
-oddly: with the markup hidden, the surviving half shows its `###` as plain text. An
-annotation pass is better off proposing a change to the heading's words than to a span
-that swallows its marker.
+Leave the `###` outside the markup and substitute only the words. Both halves are then
+ordinary inline text, the line still opens with `###`, and it renders as a heading in every
+mode — the proposal shows inline, exactly like one in a paragraph.
+
+Putting the `###` inside the substitution instead, so that each half carries its own copy
+of the marker, parses and decides correctly but reads badly. The line then opens with a
+brace rather than a hash, so live preview will not treat it as a heading, and in Preview
+the surviving half shows its marker as plain text in the middle of rendered prose.
+
+The same holds for list bullets and blockquote markers: annotate the words, not the syntax
+that introduces them.
 
 ## Interaction with existing syntax
 
