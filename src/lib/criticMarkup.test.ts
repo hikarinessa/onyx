@@ -5,6 +5,10 @@ import {
   attachedRationales,
   dismissChange,
   parseCriticMarkup,
+  proposeComment,
+  proposeDeletion,
+  proposeInsertion,
+  proposeReplacement,
   rejectChange,
   replyChange,
   type Suggestion,
@@ -254,6 +258,56 @@ describe("decisions", () => {
       suggestions.map((s) => acceptChange(doc, s)),
     );
     expect(out).toBe(" keep b and d");
+  });
+});
+
+describe("authoring", () => {
+  // A hand-written suggestion must be indistinguishable from an LLM's to the parser and
+  // to the decision operations — reviewable, decidable, and attributed to @user.
+  const doc = "we ship it today";
+
+  it("proposes a deletion that parses and rejects back to the original", () => {
+    const out = applyChanges(doc, [proposeDeletion(doc, 3, 8)]);
+    expect(out).toBe("we {--ship --}it today");
+    const s = only(out);
+    expect(s.type).toBe("deletion");
+    expect(applyChanges(out, [rejectChange(out, s)])).toBe(doc);
+  });
+
+  it("proposes a replacement whose acceptance yields the new text", () => {
+    const out = applyChanges(doc, [proposeReplacement(doc, 3, 7, "release")]);
+    expect(out).toBe("we {~~ship~>release~~} it today");
+    const s = only(out);
+    expect(applyChanges(out, [acceptChange(out, s)])).toBe("we release it today");
+    expect(applyChanges(out, [rejectChange(out, s)])).toBe(doc);
+  });
+
+  it("proposes an insertion after a position", () => {
+    const out = applyChanges(doc, [proposeInsertion(doc.length, " and tomorrow")]);
+    const s = only(out);
+    expect(s.type).toBe("addition");
+    expect(applyChanges(out, [acceptChange(out, s)])).toBe("we ship it today and tomorrow");
+    expect(applyChanges(out, [rejectChange(out, s)])).toBe(doc);
+  });
+
+  it("anchors a comment to a selection and attributes it to the user", () => {
+    const out = applyChanges(doc, [proposeComment(doc, 3, 7, "really?")]);
+    expect(out).toBe("we {==ship==}{>>@user: really?<<} it today");
+    const s = only(out);
+    expect(s.author).toBe("user");
+    expect(applyChanges(out, [dismissChange(out, s)])).toBe(doc);
+  });
+
+  it("writes a point comment when nothing is selected", () => {
+    const out = applyChanges(doc, [proposeComment(doc, 7, 7, "hm")]);
+    expect(out).toBe("we ship{>>@user: hm<<} it today");
+    expect(only(out).original).toEqual({ from: 7, to: 7 });
+  });
+
+  it("neutralises markers in a hand-written comment", () => {
+    const out = applyChanges(doc, [proposeComment(doc, 3, 7, "no <<} here")]);
+    expect(parseCriticMarkup(out).warnings).toEqual([]);
+    expect(parseCriticMarkup(out).suggestions).toHaveLength(1);
   });
 });
 

@@ -341,6 +341,39 @@ export function replyChange(s: Suggestion, reply: string): DocChange {
   return { from: at, to: at, insert: clean ? `{>>@user: ${clean}<<}` : "" };
 }
 
+// ---------------------------------------------------------------------------
+// Authoring
+//
+// A suggestion the user writes by hand. It is tagged @user and stays pending like any
+// other, so it is reviewable rather than a slower way to type — the next annotation pass
+// reads it as an instruction, and whoever opens the note next can still decide it.
+// ---------------------------------------------------------------------------
+
+/** Sanitised body for the comment part of a hand-written suggestion. */
+const userComment = (text: string): string => `{>>@user: ${sanitizeNote(text)}<<}`;
+
+/** Propose removing the selected text. */
+export function proposeDeletion(doc: string, from: number, to: number): DocChange {
+  return { from, to, insert: `{--${doc.slice(from, to)}--}` };
+}
+
+/** Propose replacing the selected text. */
+export function proposeReplacement(doc: string, from: number, to: number, replacement: string): DocChange {
+  return { from, to, insert: `{~~${doc.slice(from, to)}~>${replacement}~~}` };
+}
+
+/** Propose inserting text at a position — after a selection, or at the caret. */
+export function proposeInsertion(at: number, text: string): DocChange {
+  return { from: at, to: at, insert: `{++${text}++}` };
+}
+
+/** Comment on the selected text, or at the caret when nothing is selected. */
+export function proposeComment(doc: string, from: number, to: number, text: string): DocChange {
+  const body = userComment(text);
+  if (from === to) return { from, to, insert: body };
+  return { from, to, insert: `{==${doc.slice(from, to)}==}${body}` };
+}
+
 /**
  * Apply non-overlapping changes to a string. CodeMirror does this itself on dispatch;
  * this exists for previews and for tests, which need the result without an editor.
