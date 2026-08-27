@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect } from "react";
 import { useAppStore, selectActiveTab, selectActiveTabPath, selectActiveEditorMode } from "../stores/app";
 import { replaceTabContent } from "./Editor";
 
@@ -11,6 +12,14 @@ export function StatusBar() {
   const wordCount = useAppStore((s) => s.wordCount);
   const charCount = useAppStore((s) => s.charCount);
   const saveConflictPath = useAppStore((s) => s.saveConflictPath);
+  const statusNotice = useAppStore((s) => s.statusNotice);
+
+  // A notice is a failed action, not a state — it clears itself so it cannot go stale.
+  useEffect(() => {
+    if (!statusNotice) return;
+    const t = window.setTimeout(() => useAppStore.getState().setStatusNotice(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [statusNotice]);
   const lintErrors = useAppStore((s) => s.lintErrors);
   const lintWarnings = useAppStore((s) => s.lintWarnings);
   const deletedPaths = useAppStore((s) => s.deletedPaths);
@@ -91,6 +100,11 @@ export function StatusBar() {
               >
                 {lintErrors > 0 && <span className="statusbar-lint-errors">{lintErrors}E</span>}
                 {lintWarnings > 0 && <span className="statusbar-lint-warnings">{lintWarnings}W</span>}
+              </span>
+            )}
+            {statusNotice && (
+              <span className="statusbar-notice" role="status">
+                {statusNotice}
               </span>
             )}
             {suggestionCount > 0 && (

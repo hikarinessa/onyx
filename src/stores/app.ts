@@ -164,6 +164,10 @@ interface AppState {
   saveConflictPath: string | null;
   setSaveConflictPath: (path: string | null) => void;
 
+  /** A short-lived message for the status bar — an action that could not complete. */
+  statusNotice: string | null;
+  setStatusNotice: (msg: string | null) => void;
+
   // Paths deleted externally — auto-save guard checks this before writing
   deletedPaths: Set<string>;
   addDeletedPath: (path: string) => void;
@@ -714,6 +718,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   saveConflictPath: null,
   setSaveConflictPath: (path) => set({ saveConflictPath: path }),
+
+  statusNotice: null,
+  setStatusNotice: (msg) => set({ statusNotice: msg }),
 
   deletedPaths: new Set<string>(),
   addDeletedPath: (path) => set((s) => {

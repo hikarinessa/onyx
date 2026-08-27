@@ -357,14 +357,21 @@ export function proposeDeletion(doc: string, from: number, to: number): DocChang
   return { from, to, insert: `{--${doc.slice(from, to)}--}` };
 }
 
+/**
+ * Proposed text is typed by the user, so it gets the same treatment as a note: a marker
+ * sequence in it would close the construct early and corrupt everything after.
+ */
+const sanitizeProposal = (text: string): string =>
+  text.replace(/~~\}/g, "~~ }").replace(/~>/g, "~ >").replace(/\+\+\}/g, "++ }");
+
 /** Propose replacing the selected text. */
 export function proposeReplacement(doc: string, from: number, to: number, replacement: string): DocChange {
-  return { from, to, insert: `{~~${doc.slice(from, to)}~>${replacement}~~}` };
+  return { from, to, insert: `{~~${doc.slice(from, to)}~>${sanitizeProposal(replacement)}~~}` };
 }
 
 /** Propose inserting text at a position — after a selection, or at the caret. */
 export function proposeInsertion(at: number, text: string): DocChange {
-  return { from: at, to: at, insert: `{++${text}++}` };
+  return { from: at, to: at, insert: `{++${sanitizeProposal(text)}++}` };
 }
 
 /** Comment on the selected text, or at the caret when nothing is selected. */

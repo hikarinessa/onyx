@@ -318,6 +318,28 @@ describe("authoring", () => {
     expect(applyChanges(nested, [acceptChange(nested, suggestions[0])])).toBe("we release it");
   });
 
+  it("documents that an insertion at an edit's seam steals its rationale", () => {
+    // Rationales attach by adjacency. Inserting between an edit and the comment that
+    // explains it re-attaches that comment to the insertion — the LLM's reasoning now
+    // shows under the wrong suggestion. The menu refuses this seam; the test pins the
+    // consequence so the refusal is not mistaken for over-caution.
+    const doc = "{~~a~>b~~}{>>@llm: why<<} rest";
+    const seam = doc.indexOf("{>>");
+    const split = applyChanges(doc, [proposeInsertion(seam, "x")]);
+    const { suggestions } = parseCriticMarkup(split);
+    const chains = attachedRationales(suggestions);
+    const ins = suggestions.find((s) => s.type === "addition")!;
+    expect(chains.get(ins.id)).toHaveLength(1);
+    expect(chains.get(suggestions[0].id)).toBeUndefined();
+  });
+
+  it("neutralises markers in a proposed replacement", () => {
+    const doc = "we ship it";
+    const out = applyChanges(doc, [proposeReplacement(doc, 3, 7, "x~~} broken ~> too")]);
+    expect(parseCriticMarkup(out).warnings).toEqual([]);
+    expect(parseCriticMarkup(out).suggestions).toHaveLength(1);
+  });
+
   it("neutralises markers in a hand-written comment", () => {
     const out = applyChanges(doc, [proposeComment(doc, 3, 7, "no <<} here")]);
     expect(parseCriticMarkup(out).warnings).toEqual([]);

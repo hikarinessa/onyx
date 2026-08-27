@@ -56,7 +56,10 @@ export function EditorPane({ pane }: { pane: Pane }) {
   const activeTab = pane.tabs.find((t) => t.id === pane.activeTabId);
   const editorMode = activeTab?.editorMode ?? "source";
   // Cards render from editor state, so the pane only needs a signal that it changed.
+  // The view is held in a ref, which render must not read; mirror it into state once it
+  // exists so the card column can take it as an ordinary prop.
   useAppStore((st) => st.reviewTick);
+  const [cardView, setCardView] = useState<EditorView | null>(null);
 
   // Set this pane as active on pointer down
   const handlePointerDown = useCallback(() => {
@@ -110,6 +113,7 @@ export function EditorPane({ pane }: { pane: Pane }) {
     // Register this pane's view for external access
     registerPaneView(pane.id, viewRef.current);
     viewTabIdRef.current = activeTab.id;
+    setCardView(viewRef.current);
 
     syncEditorMode(viewRef.current, activeTab.editorMode);
 
@@ -151,6 +155,7 @@ export function EditorPane({ pane }: { pane: Pane }) {
         unregisterPaneView(pane.id);
         viewRef.current.destroy();
         viewRef.current = null;
+        setCardView(null);
       }
     };
   }, [pane.id]);
@@ -201,6 +206,8 @@ export function EditorPane({ pane }: { pane: Pane }) {
 
   // ── Right-click menu ──
   const [menu, setMenu] = useState<{ x: number; y: number; sections: MenuSection[] } | null>(null);
+
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     const view = viewRef.current;
@@ -290,8 +297,8 @@ export function EditorPane({ pane }: { pane: Pane }) {
             ref={containerRef}
             onContextMenu={handleContextMenu}
           />
-          {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
-          {activeTab.editorMode === "review" && <ReviewCards view={viewRef.current} />}
+          {menu && <ContextMenu {...menu} onClose={closeMenu} />}
+          {activeTab.editorMode === "review" && <ReviewCards view={cardView} />}
         </div>
       </div>
     </div>

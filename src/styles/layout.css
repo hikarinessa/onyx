@@ -1780,6 +1780,10 @@
     opacity: 1;
   }
 
+  .statusbar-notice {
+    color: var(--status-modified);
+  }
+
   .statusbar-mode {
     cursor: pointer;
     padding: 1px 6px;

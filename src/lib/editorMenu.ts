@@ -3,7 +3,9 @@ import type { MenuItem, MenuSection } from "../components/ContextMenu";
 import { copyBlock, deleteBlock, getCurrentBlock } from "../extensions/blocks";
 import { sortTaskListAtCursor } from "../extensions/sortTaskList";
 import { toggleBold, toggleInlineCode, toggleItalic } from "../extensions/formatting";
-import { getClaimedRanges, reviewModeField } from "../extensions/criticMarkup";
+import { getClaimedRanges, getSuggestions, reviewModeField } from "../extensions/criticMarkup";
+import { useAppStore } from "../stores/app";
+import { attachedRationales } from "./criticMarkup";
 import {
   proposeComment,
   proposeDeletion,
@@ -41,13 +43,34 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
   // as part of that construct's text, and deciding the outer one either swallows the
   // inner or leaves its markers behind as garbage. So authoring is refused wherever the
   // target — or the caret, for a point insertion — touches a claimed range.
-  const claimed = getClaimedRanges(state);
+  //
+  // An edit and the rationale comments flush against it are one span for this purpose.
+  // Rationales attach by adjacency, so an insertion at the seam between them would cut
+  // the chain and re-attach the LLM's reasoning to the user's suggestion instead.
+  const suggestions = getSuggestions(state);
+  const chains = attachedRationales(suggestions);
+  const claimed = getClaimedRanges(state).map((c) => ({ ...c }));
+  for (const [editId, chain] of chains) {
+    const edit = suggestions.find((x) => x.id === editId);
+    const span = claimed.find((c) => c.from === edit?.token.from);
+    if (span) span.to = Math.max(span.to, chain[chain.length - 1].token.to);
+  }
   const touchesClaimed = (from: number, to: number) =>
-    claimed.some((c) => from < c.to && to > c.from) ||
-    claimed.some((c) => from === to && from > c.from && from < c.to);
+    from === to
+      ? claimed.some((c) => from > c.from && from < c.to)
+      : claimed.some((c) => from < c.to && to > c.from);
   const blocked = target ? touchesClaimed(target.from, target.to) : touchesClaimed(sel.head, sel.head);
 
+  // Items run after the menu was built, and the editor stays live in between: the menu
+  // takes focus so CodeMirror's keymaps are off, but that is a courtesy, not a guarantee.
+  // Every offset here indexes into the document as it was at right-click, so a dispatch
+  // against a changed document is refused rather than applied to the wrong text.
   const dispatch = (change: { from: number; to: number; insert: string }) => {
+    if (!view.state.doc.eq(state.doc)) {
+      useAppStore.getState().setStatusNotice("Document changed — menu action cancelled");
+      view.focus();
+      return;
+    }
     view.dispatch({ changes: change, selection: { anchor: change.from } });
     view.focus();
   };
@@ -139,6 +162,7 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
   // Done through the editor state and the async clipboard API rather than execCommand,
   // which only acts on the focused editable and the menu has taken focus from it.
   const selectedText = () => state.sliceDoc(sel.from, sel.to);
+  const notice = (msg: string) => useAppStore.getState().setStatusNotice(msg);
   const clipboard: MenuSection = {
     id: "clipboard",
     items: [
@@ -147,10 +171,16 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
         label: "Cut",
         shortcut: "⌘X",
         disabled: !hasSelection,
+        // The write settles before the delete, so a rejected write leaves the text where
+        // it was rather than gone with nothing on the clipboard to show for it.
         run: () => {
-          void navigator.clipboard.writeText(selectedText());
-          view.dispatch({ changes: { from: sel.from, to: sel.to, insert: "" } });
-          view.focus();
+          navigator.clipboard
+            .writeText(selectedText())
+            .then(() => dispatch({ from: sel.from, to: sel.to, insert: "" }))
+            .catch(() => {
+              notice("Cut failed — clipboard unavailable");
+              view.focus();
+            });
         },
       },
       {
@@ -159,8 +189,10 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
         shortcut: "⌘C",
         disabled: !hasSelection,
         run: () => {
-          void navigator.clipboard.writeText(selectedText());
-          view.focus();
+          navigator.clipboard
+            .writeText(selectedText())
+            .catch(() => notice("Copy failed — clipboard unavailable"))
+            .finally(() => view.focus());
         },
       },
       {
@@ -171,10 +203,14 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
           navigator.clipboard
             .readText()
             .then((text) => {
+              if (!view.state.doc.eq(state.doc)) {
+                notice("Document changed — paste cancelled");
+                return;
+              }
               view.dispatch(view.state.replaceSelection(text));
-              view.focus();
             })
-            .catch(() => view.focus());
+            .catch(() => notice("Paste failed — clipboard read not permitted here; use ⌘V"))
+            .finally(() => view.focus());
         },
       },
     ],

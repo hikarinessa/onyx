@@ -53,6 +53,13 @@ export function ContextMenu({ x, y, sections, onClose }: ContextMenuProps) {
     setPos(clamp(x, y, ref.current));
   }, [x, y, prompting]);
 
+  // A menu owns the keyboard while it is open. Without this the editor keeps focus and
+  // every CodeMirror keymap stays live underneath the menu — in Review mode a bare `a`
+  // would accept a suggestion and shift every offset the menu was built from.
+  useEffect(() => {
+    if (!prompting) ref.current?.focus();
+  }, [prompting]);
+
   useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
@@ -104,6 +111,7 @@ export function ContextMenu({ x, y, sections, onClose }: ContextMenuProps) {
       ref={ref}
       className="context-menu editor-context-menu"
       style={{ left: pos.left, top: pos.top }}
+      tabIndex={-1}
       onContextMenu={(e) => e.preventDefault()}
     >
       {prompting ? (
