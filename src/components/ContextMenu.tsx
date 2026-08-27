@@ -57,18 +57,25 @@ export function ContextMenu({ x, y, sections, onClose }: ContextMenuProps) {
     const onPointerDown = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
+    // Escape steps back one level: out of the prompt to the list, then out of the menu.
+    // This is the only Escape handler, so there is no ordering to get wrong between it
+    // and one on the textarea.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      if (prompting) setPrompting(null);
+      else onClose();
     };
-    // Capture phase, so a click that lands on the editor closes the menu before
-    // CodeMirror gets to move the caret.
+    // Both on the capture phase, so they run before CodeMirror's own handlers: a click
+    // on the editor closes the menu before the caret moves, and Escape never reaches the
+    // editor's keymap while the menu is open.
     document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, true);
     };
-  }, [onClose]);
+  }, [onClose, prompting]);
 
   const visible = sections.filter((s) => s.items.length > 0);
   if (visible.length === 0) return null;
@@ -112,10 +119,6 @@ export function ContextMenu({ x, y, sections, onClose }: ContextMenuProps) {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 submit();
-              }
-              if (e.key === "Escape") {
-                e.stopPropagation();
-                setPrompting(null);
               }
             }}
           />

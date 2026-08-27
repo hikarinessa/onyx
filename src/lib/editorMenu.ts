@@ -3,7 +3,7 @@ import type { MenuItem, MenuSection } from "../components/ContextMenu";
 import { copyBlock, deleteBlock, getCurrentBlock } from "../extensions/blocks";
 import { sortTaskListAtCursor } from "../extensions/sortTaskList";
 import { toggleBold, toggleInlineCode, toggleItalic } from "../extensions/formatting";
-import { reviewModeField } from "../extensions/criticMarkup";
+import { getClaimedRanges, reviewModeField } from "../extensions/criticMarkup";
 import {
   proposeComment,
   proposeDeletion,
@@ -17,8 +17,9 @@ import {
  * menu is short in plain prose and grows only where more applies.
  */
 
-const CHECKBOX_LINE = /^\s*[-*+]\s\[[^\]]\]\s/;
-const LIST_LINE = /^\s*(?:[-*+]|\d+\.)\s/;
+// Sort acts on bullet lists only, and only sorts anything when checkboxes are present.
+// Offering it anywhere else is a button that does nothing.
+const CHECKBOX_BULLET = /^\s*[-*+]\s\[[^\]]\]\s/;
 
 /** Extend a click-with-no-selection to the word under the caret. */
 function wordAt(view: EditorView, pos: number): { from: number; to: number } | null {
@@ -36,6 +37,16 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
   const target = hasSelection ? { from: sel.from, to: sel.to } : wordAt(view, sel.head);
   const targetLabel = hasSelection ? "selection" : "word";
 
+  // The parser does not nest. A suggestion written inside an existing construct is read
+  // as part of that construct's text, and deciding the outer one either swallows the
+  // inner or leaves its markers behind as garbage. So authoring is refused wherever the
+  // target — or the caret, for a point insertion — touches a claimed range.
+  const claimed = getClaimedRanges(state);
+  const touchesClaimed = (from: number, to: number) =>
+    claimed.some((c) => from < c.to && to > c.from) ||
+    claimed.some((c) => from === to && from > c.from && from < c.to);
+  const blocked = target ? touchesClaimed(target.from, target.to) : touchesClaimed(sel.head, sel.head);
+
   const dispatch = (change: { from: number; to: number; insert: string }) => {
     view.dispatch({ changes: change, selection: { anchor: change.from } });
     view.focus();
@@ -47,7 +58,16 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
   // reviewed; someone who just wants the text changed would type.
   const suggest: MenuSection = {
     id: "suggest",
-    items: [
+    items: blocked
+      ? [
+          {
+            id: "suggest.blocked",
+            label: "Inside an existing suggestion",
+            disabled: true,
+            run: () => {},
+          },
+        ]
+      : [
       {
         id: "suggest.comment",
         label: target ? `Comment on ${targetLabel}…` : "Comment here…",
@@ -75,7 +95,7 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
             {
               id: "suggest.insert",
               label: `Suggest inserting after ${targetLabel}…`,
-              prompt: "Text to insert",
+              prompt: "Text to insert (include any leading space)",
               run: (text) => dispatch(proposeInsertion(target.to, text ?? "")),
             },
           ] satisfies MenuItem[])
@@ -83,11 +103,11 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
             {
               id: "suggest.insert",
               label: "Suggest inserting here…",
-              prompt: "Text to insert",
+              prompt: "Text to insert (include any leading space)",
               run: (text) => dispatch(proposeInsertion(sel.head, text ?? "")),
             },
           ] satisfies MenuItem[])),
-    ],
+      ],
   };
 
   // ── Format ──
@@ -107,7 +127,7 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
       ? [
           { id: "block.copy", label: "Copy Block", run: () => copyBlock(view) },
           { id: "block.extract", label: "Extract Block to Note…", run: extractBlock },
-          ...(CHECKBOX_LINE.test(line.text) || LIST_LINE.test(line.text)
+          ...(CHECKBOX_BULLET.test(line.text)
             ? [{ id: "block.sort", label: "Sort Task List by Status", run: () => sortTaskListAtCursor(view) }]
             : []),
           { id: "block.delete", label: "Delete Block", destructive: true, run: () => deleteBlock(view) },
@@ -116,12 +136,47 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
   };
 
   // ── Clipboard ──
+  // Done through the editor state and the async clipboard API rather than execCommand,
+  // which only acts on the focused editable and the menu has taken focus from it.
+  const selectedText = () => state.sliceDoc(sel.from, sel.to);
   const clipboard: MenuSection = {
     id: "clipboard",
     items: [
-      { id: "clip.cut", label: "Cut", shortcut: "⌘X", disabled: !hasSelection, run: () => document.execCommand("cut") },
-      { id: "clip.copy", label: "Copy", shortcut: "⌘C", disabled: !hasSelection, run: () => document.execCommand("copy") },
-      { id: "clip.paste", label: "Paste", shortcut: "⌘V", run: () => document.execCommand("paste") },
+      {
+        id: "clip.cut",
+        label: "Cut",
+        shortcut: "⌘X",
+        disabled: !hasSelection,
+        run: () => {
+          void navigator.clipboard.writeText(selectedText());
+          view.dispatch({ changes: { from: sel.from, to: sel.to, insert: "" } });
+          view.focus();
+        },
+      },
+      {
+        id: "clip.copy",
+        label: "Copy",
+        shortcut: "⌘C",
+        disabled: !hasSelection,
+        run: () => {
+          void navigator.clipboard.writeText(selectedText());
+          view.focus();
+        },
+      },
+      {
+        id: "clip.paste",
+        label: "Paste",
+        shortcut: "⌘V",
+        run: () => {
+          navigator.clipboard
+            .readText()
+            .then((text) => {
+              view.dispatch(view.state.replaceSelection(text));
+              view.focus();
+            })
+            .catch(() => view.focus());
+        },
+      },
     ],
   };
 

@@ -304,6 +304,20 @@ describe("authoring", () => {
     expect(only(out).original).toEqual({ from: 7, to: 7 });
   });
 
+  it("documents why authoring inside a construct must be refused upstream", () => {
+    // The parser does not nest. Writing a deletion inside a substitution's original
+    // text makes the outer construct's original *contain* the inner markup, and
+    // accepting the outer one swallows the inner suggestion whole. The menu refuses
+    // the operation; this pins down what happens if something else does not.
+    const doc = "we {~~ship~>release~~} it";
+    const nested = applyChanges(doc, [proposeDeletion(doc, 6, 10)]);
+    expect(nested).toBe("we {~~{--ship--}~>release~~} it");
+    const { suggestions } = parseCriticMarkup(nested);
+    expect(suggestions).toHaveLength(1);
+    expect(suggestions[0].type).toBe("substitution");
+    expect(applyChanges(nested, [acceptChange(nested, suggestions[0])])).toBe("we release it");
+  });
+
   it("neutralises markers in a hand-written comment", () => {
     const out = applyChanges(doc, [proposeComment(doc, 3, 7, "no <<} here")]);
     expect(parseCriticMarkup(out).warnings).toEqual([]);
