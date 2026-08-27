@@ -4,6 +4,25 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.11.0] — 2026-08-27
+
+### Added
+- **Review mode** (#110) — a third editor mode alongside Source and Preview, for deciding CriticMarkup suggestions written into a note by an LLM. `Cmd+/` cycles the three, skipping Review when a note holds no suggestions. A note carrying suggestions opens in Review, and deciding the last one drops back to Preview
+- **Suggestion rendering** — insertions, deletions, substitutions, anchored comments and point comments render as tracked changes over the prose. Colours derive from the existing status tokens, so every theme follows its own palette
+- **Preview as the document as it stands** — proposals are hidden rather than shown: deletions and substitutions keep the text they would change, additions and comments disappear. This is the note you would have if you decided nothing, and it converges on the finished document as suggestions are decided
+- **Card column** — one card per suggestion beside the prose, selection-synced with the editor in both directions. Accept, reject, reject with a reason, reply to a comment, dismiss. The reason and the reply are written back into the note as `@user` comments for the next annotation pass. Below a pane width where the prose loses a readable measure, the column steps aside and the keyboard remains
+- **Keyboard review** — `j`/`k` walk suggestions, `a` accepts, `x` rejects, with the selection derived from the text caret so clicking a card, clicking a comment marker, or arrowing into a suggestion all agree
+- **Review commands** — toggle review mode, next/previous suggestion, accept all remaining, reject all remaining. The status bar names the mode and carries the pending count
+- **vitest harness** (DEVPLAN 12.1.2, audit 0.3) wired into CI, with a sample corpus in `samples/` asserting that deciding every suggestion consumes every marker and leaves a document the parser reports as clean
+
+### Fixed
+- **Live preview could die mid-document** (#109) — consecutive entries in `view.visibleRanges` can share a boundary line when a replaced block range (a fold, an embed, a multi-line construct) splits the viewport mid-line. That line was processed twice, rewinding the decoration builder to its start after the first pass had moved past it; `RangeSetBuilder` rejects a backwards position by throwing, and CodeMirror drops a plugin that throws. The document then rendered with no preview decorations at all — headings, highlights and strikethroughs left raw — while state-field decorations survived
+- **Inline decorations were sorted by end offset** rather than by `startSide`, which the builder requires. Two decorations beginning at the same offset with different sides could reach it in the wrong order and throw the same way
+- **Session restore set editor mode by toggling it**, which StrictMode's double-invoked effects undid, and which could not express a third mode
+
+### Changed
+- The markdown grammar's strikethrough style no longer applies `line-through`. `{~~old~>new~~}` parses as one strikethrough node, so the style struck the *proposed* text as well as the original, and CSS text-decoration propagates to descendants without any way to cancel it. Preview mode draws its own; source mode keeps the colour without the line
+
 ## [0.10.11] — 2026-08-11
 
 ### Added

@@ -25,9 +25,10 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Phase 9 (Per-Block Features + Full-Text Search):** Complete
 - **Phase 10 (Split Panes):** Complete
 - **Phase 11 (Tier 2 Features):** In progress (slash commands, callouts, tag chips, 13 new themes, theme preview)
+- **Review mode (#110):** Parser, three-mode toggle, card column and the `/annotate` + `/re-view` skills are done. Outstanding: a To Review queue (needs indexer counts) and a setting for auto-engage.
 - **Phase 12 (Hardening & Quality):** Planned — from the 2026-06 audit; quick wins done (CI skeleton, unused deps, fileOps bypass fix). Safety-net tasks (12.1) must precede the refactors (12.3).
 
-**Current version:** 0.10.11
+**Current version:** 0.11.0
 
 ## Project Structure
 
@@ -67,6 +68,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── urlPaste.ts           #   30 lines — CM6: URL paste → markdown link
 │   ├── autocomplete.ts       #   98 lines — CM6: wikilink + tag + slash command autocomplete
 │   ├── slashCommands.ts      #  221 lines — CM6: slash commands (/table, /code, /callout, /today, /template)
+│   ├── criticMarkup.ts       #   439 lines — CM6: CriticMarkup decorations, Review mode field, decisions, keymap
 │   ├── livePreview.ts        # 1579 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, URLs, callouts, tag chips, fold, hanging indent, indent guides)
 │   ├── embeds.ts             #  712 lines — CM6: ![[...]] note/image embeds (StateField-based block decorations)
 │   ├── headingFold.ts        #   71 lines — CM6: foldService for heading-based section folding
@@ -79,6 +81,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── tableAdapter.ts       #  243 lines — CM6: md-advanced-tables adapter (0-indexed↔1-indexed)
 │   └── tableEditor.ts        #  175 lines — CM6: table keymap (Tab/Enter) + TSV paste + command palette
 ├── lib/
+│   ├── criticMarkup.ts       #   359 lines — CriticMarkup parser + decision operations (accept/reject/dismiss/reply)
 │   ├── fileOps.ts            #  205 lines — Centralized file mutations (with link warnings, fs:change event-driven)
 │   ├── openFile.ts           #   91 lines — Shared open-file-in-editor utility (with nav stack, orphan detection)
 │   ├── periodicNotes.ts      #   37 lines — Create/open periodic notes utility
@@ -149,6 +152,7 @@ cargo tauri dev          # Dev server (Vite HMR + Rust hot reload)
 cargo check              # Rust type check (use instead of full build to save RAM)
 cargo test               # Rust unit tests
 npx tsc --noEmit         # TypeScript type check
+npm test                 # Vitest (pure-logic suites; node environment, no jsdom)
 ```
 
 ## GitHub Issues
