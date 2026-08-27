@@ -102,17 +102,12 @@ function toggleWrap(view: EditorView, marker: string): boolean {
   return true;
 }
 
+export const toggleBold = (view: EditorView) => toggleWrap(view, "**");
+export const toggleItalic = (view: EditorView) => toggleWrap(view, "_");
+export const toggleInlineCode = (view: EditorView) => toggleWrap(view, "`");
+
 export const formattingKeymap = [
-  {
-    key: "Mod-b",
-    run: (view: EditorView) => toggleWrap(view, "**"),
-  },
-  {
-    key: "Mod-i",
-    run: (view: EditorView) => toggleWrap(view, "_"),
-  },
-  {
-    key: "Mod-Shift-c",
-    run: (view: EditorView) => toggleWrap(view, "`"),
-  },
+  { key: "Mod-b", run: toggleBold },
+  { key: "Mod-i", run: toggleItalic },
+  { key: "Mod-Shift-c", run: toggleInlineCode },
 ];

@@ -11,6 +11,9 @@ import type { Pane } from "../stores/panes";
 import { togglePreviewEffect, previewModeField } from "../extensions/livePreview";
 import { reviewModeField, toggleReviewEffect } from "../extensions/criticMarkup";
 import { ReviewCards } from "./ReviewCards";
+import { ContextMenu, type MenuSection } from "./ContextMenu";
+import { editorMenuSections } from "../lib/editorMenu";
+import { extractBlockToNote } from "../lib/blockExtract";
 
 /**
  * Drive both mode fields from the single `editorMode` value.
@@ -196,6 +199,27 @@ export function EditorPane({ pane }: { pane: Pane }) {
     return () => view.scrollDOM.removeEventListener("scroll", handleScroll);
   }, [pane.id, activeTab?.id]);
 
+  // ── Right-click menu ──
+  const [menu, setMenu] = useState<{ x: number; y: number; sections: MenuSection[] } | null>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    const view = viewRef.current;
+    if (!view || !view.contentDOM.contains(e.target as Node)) return;
+    e.preventDefault();
+    // A right-click outside the current selection moves the caret there first, so the
+    // menu describes the place that was clicked rather than wherever the caret was.
+    const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+    const sel = view.state.selection.main;
+    if (pos !== null && (pos < sel.from || pos > sel.to)) {
+      view.dispatch({ selection: { anchor: pos } });
+    }
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      sections: editorMenuSections(view, () => extractBlockToNote(view)),
+    });
+  }, []);
+
   // ── Inline title ──
   const [titleValue, setTitleValue] = useState("");
   const titleRef = useRef<HTMLInputElement>(null);
@@ -261,7 +285,12 @@ export function EditorPane({ pane }: { pane: Pane }) {
           spellCheck={false}
         />
         <div className="editor-body">
-          <div className={`editor-container ${modeClass}`} ref={containerRef} />
+          <div
+            className={`editor-container ${modeClass}`}
+            ref={containerRef}
+            onContextMenu={handleContextMenu}
+          />
+          {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
           {activeTab.editorMode === "review" && <ReviewCards view={viewRef.current} />}
         </div>
       </div>

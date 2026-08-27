@@ -15,9 +15,12 @@ import { restoreSession, initSessionPersistence } from "./lib/session";
 import { createOrOpenPeriodicNote } from "./lib/periodicNotes";
 import { registerCommand, getAllCommands } from "./lib/commands";
 import { makeTableCommands } from "./extensions/tableEditor";
-import { copyBlock, deleteBlock, getCurrentBlock } from "./extensions/blocks";
+import { copyBlock, deleteBlock } from "./extensions/blocks";
 import { sortTaskListAtCursor } from "./extensions/sortTaskList";
 import { decideAll, nextSuggestion, prevSuggestion } from "./extensions/criticMarkup";
+import { extractBlockToNote } from "./lib/blockExtract";
+import { toggleBold, toggleInlineCode, toggleItalic } from "./extensions/formatting";
+import type { EditorView } from "@codemirror/view";
 import { getEditorView, getAllPaneViews } from "./components/Editor";
 import { applyTheme, getAvailableThemes, restoreTheme } from "./lib/themes";
 import {
@@ -26,7 +29,7 @@ import {
   normaliseCombo,
   getGlobalKeyMap,
 } from "./lib/keybindings";
-import { createNewNote, createNoteWithContent } from "./lib/fileOps";
+import { createNewNote } from "./lib/fileOps";
 import { navigateHistory, openFileInEditor } from "./lib/openFile";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -225,9 +228,13 @@ function registerCommands() {
   // Editor-scope commands — dispatched by CM6 keymaps, registered here for
   // keybinding display. execute() is a no-op since CM6 handles dispatch.
   const editorNoop = () => {};
-  registerCommand({ id: "editor.bold", label: "Bold", shortcut: "Cmd+B", category: "Format", execute: editorNoop });
-  registerCommand({ id: "editor.italic", label: "Italic", shortcut: "Cmd+I", category: "Format", execute: editorNoop });
-  registerCommand({ id: "editor.inlineCode", label: "Inline Code", shortcut: "Cmd+Shift+C", category: "Format", execute: editorNoop });
+  const withView = (fn: (v: EditorView) => unknown) => () => {
+    const v = getEditorView();
+    if (v) fn(v);
+  };
+  registerCommand({ id: "editor.bold", label: "Bold", shortcut: "Cmd+B", category: "Format", execute: withView(toggleBold) });
+  registerCommand({ id: "editor.italic", label: "Italic", shortcut: "Cmd+I", category: "Format", execute: withView(toggleItalic) });
+  registerCommand({ id: "editor.inlineCode", label: "Inline Code", shortcut: "Cmd+Shift+C", category: "Format", execute: withView(toggleInlineCode) });
   registerCommand({ id: "editor.moveLineUp", label: "Move Line Up", shortcut: "Alt+Up", category: "Editor", execute: editorNoop });
   registerCommand({ id: "editor.moveLineDown", label: "Move Line Down", shortcut: "Alt+Down", category: "Editor", execute: editorNoop });
   registerCommand({ id: "editor.followLink", label: "Follow Link", shortcut: "Cmd+Enter", category: "Editor", execute: editorNoop });
@@ -433,21 +440,7 @@ function registerCommands() {
     category: "Block",
     execute: async () => {
       const v = getEditorView();
-      if (!v) return;
-      const block = getCurrentBlock(v);
-      if (!block) return;
-      const tab = selectActiveTab(store());
-      if (!tab) return;
-      const dir = tab.path.substring(0, tab.path.lastIndexOf("/"));
-      const firstLine = block.text.split("\n")[0].replace(/^#+\s*/, "").trim();
-      const baseName = (firstLine.substring(0, 40) || "Extracted Note").replace(/[/:\0]/g, "");
-      // All file mutations go through fileOps (see docs/GUIDELINES.md)
-      const notePath = await createNoteWithContent(dir, baseName, block.text + "\n");
-      // Replace the block with a wikilink to the new note
-      const linkName = notePath.split("/").pop()!.replace(".md", "");
-      v.dispatch({
-        changes: { from: block.from, to: block.to, insert: `[[${linkName}]]` },
-      });
+      if (v) await extractBlockToNote(v);
     },
   });
 

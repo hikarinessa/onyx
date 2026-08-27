@@ -1385,6 +1385,84 @@
     background: var(--error-bg-subtle);
   }
 
+  .context-menu-item.disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .context-menu-item.disabled:hover {
+    background: none;
+    color: var(--text-secondary);
+  }
+
+  .context-menu-label {
+    flex: 1;
+  }
+
+  .context-menu-shortcut {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-family: var(--font-mono);
+  }
+
+  .editor-context-menu {
+    min-width: 200px;
+    font-family: var(--font-ui);
+  }
+
+  /* An item that needs text first — Replace…, Insert after…, Comment… — swaps the list
+     for a small compose box in place rather than opening a second surface. */
+  .context-menu-prompt {
+    padding: 6px 10px 8px;
+    width: 260px;
+  }
+
+  .context-menu-prompt-label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-bottom: 6px;
+  }
+
+  .context-menu-prompt textarea {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm, 4px);
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    resize: vertical;
+  }
+
+  .context-menu-prompt-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .context-menu-prompt-actions button {
+    padding: 3px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm, 4px);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .context-menu-prompt-actions button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg-base);
+  }
+
+  .context-menu-prompt-actions button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
   /* Quick open modal */
   .quick-open-overlay {
     position: fixed;
