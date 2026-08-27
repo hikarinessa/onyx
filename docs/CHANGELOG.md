@@ -4,6 +4,16 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.11.1] — 2026-08-27
+
+### Added
+- **Editor context menu** (#110) — right-click in the editor for a menu computed from the click point: write a suggestion by hand (comment, delete, replace, insert — tagged `@user`, pending like any other, refused inside an existing suggestion), bold/italic/inline code, copy/extract/sort/delete the block, cut/copy/paste. Items that need text swap the list for a compose box in place. Built as a generic data-driven component the other right-click menus can migrate onto
+- **Status notices** — a short-lived status bar message for an action that could not complete, clearing itself after a few seconds
+
+### Fixed
+- The palette's Bold, Italic and Inline Code commands were registered as no-ops so the keybinding list could show their shortcuts; they now do what they say
+- Block extraction lived inline in its palette command; it is now a shared function
+
 ## [0.11.0] — 2026-08-27
 
 ### Added
