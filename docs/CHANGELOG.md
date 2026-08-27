@@ -4,6 +4,12 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.11.2] — 2026-08-27
+
+### Fixed
+- **Wikilinks to notes that do not exist now render dimmed**, with a dashed underline. `--link-broken` had been defined in every theme and used nowhere, so existing and missing links looked identical. Existence is resolved by a batched Rust command that runs the same steps as following the link, so the dimming and the click cannot disagree
+- **Clicking a wikilink with no target creates the note** beside the current file — the place resolution looks first — and opens it. Previously the click fell through in silence
+
 ## [0.11.1] — 2026-08-27
 
 ### Added
