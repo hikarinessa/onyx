@@ -31,6 +31,8 @@ import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension, resetHangMetrics } from "../extensions/livePreview";
 import { criticMarkupExtension, getSuggestions } from "../extensions/criticMarkup";
+import { brokenLinksExtension, refreshBrokenLinks, setBrokenLinkContextHook } from "../extensions/brokenLinks";
+import { createNoteWithContent } from "../lib/fileOps";
 import { lintingExtension, autofixContent, applyLintFix } from "../extensions/linting";
 import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
@@ -305,6 +307,7 @@ function buildExtensions(): Extension[] {
     symbolWrapExtension(),
     livePreviewExtension(),
     ...criticMarkupExtension(),
+    ...brokenLinksExtension(),
     ...embedExtension(),
     ...blocksExtension(),
     keymap.of(lintKeymap),
@@ -553,6 +556,12 @@ export function Editor() {
       }
     });
 
+    setBrokenLinkContextHook(() => {
+      const st = useAppStore.getState();
+      const pane = st.paneState.panes.find((p) => p.id === st.paneState.activePaneId);
+      return pane?.tabs.find((t) => t.id === pane.activeTabId)?.path ?? null;
+    });
+
     wikilinkFollowRef.current = async (link: string, newTab: boolean, otherPane: boolean) => {
       const state = useAppStore.getState();
       const { paneState } = state;
@@ -564,6 +573,18 @@ export function Editor() {
           link,
           contextPath: currentTab.path,
         });
+        if (!resolved) {
+          // No target: the link is an invitation. Create the note beside the current one
+          // — the same place resolution would have looked first — and open it, so the
+          // link that was just dimmed resolves from now on.
+          const dir = currentTab.path.substring(0, currentTab.path.lastIndexOf("/"));
+          const baseName = link.split("/").pop()!.replace(/\.md$/, "");
+          const created = await createNoteWithContent(dir, baseName, `# ${baseName}\n\n`);
+          const name = created.split("/").pop() || created;
+          await openFileInEditor(created, name, { replaceActive: !newTab });
+          for (const [, v] of getAllPaneViews()) refreshBrokenLinks(v);
+          return;
+        }
         if (resolved) {
           const name = resolved.split("/").pop() || resolved;
           if (otherPane && paneState.panes.length > 1) {

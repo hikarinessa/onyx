@@ -4,7 +4,7 @@ use chrono::{Datelike, NaiveDate};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{Emitter, State};
@@ -573,17 +573,16 @@ pub fn get_index_stats(
     db.get_stats()
 }
 
-#[tauri::command]
-pub fn resolve_wikilink(
-    link: String,
-    context_path: String,
-    state: State<AppState>,
+/// Resolve one wikilink target against a context file. Shared by the single-link command
+/// the click handler uses and the batch command the renderer uses, so the two can never
+/// disagree about whether a link has somewhere to go.
+fn resolve_link_target(
+    link: &str,
+    context_dir: &Path,
+    state: &State<AppState>,
 ) -> Result<Option<String>, String> {
-    let context = PathBuf::from(&context_path);
-    let context_dir = context.parent().map(PathBuf::from).unwrap_or_default();
-
     // Normalise: strip .md suffix if present (avoid double .md)
-    let base = link.strip_suffix(".md").unwrap_or(&link);
+    let base = link.strip_suffix(".md").unwrap_or(link);
 
     // Step 1: Path with '/' — resolve relative to each registered directory root
     if base.contains('/') {
@@ -601,13 +600,44 @@ pub fn resolve_wikilink(
     let same_dir_candidate = context_dir.join(format!("{}.md", base));
     if same_dir_candidate.exists() {
         let canonical = same_dir_candidate.canonicalize().map_err(|e| e.to_string())?;
-        validate_path(&canonical, &state)?;
+        validate_path(&canonical, state)?;
         return Ok(Some(canonical.to_string_lossy().to_string()));
     }
 
     // Step 3: Query SQLite by title or filename (already in index = already validated)
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.resolve_by_title(base)
+}
+
+#[tauri::command]
+pub fn resolve_wikilink(
+    link: String,
+    context_path: String,
+    state: State<AppState>,
+) -> Result<Option<String>, String> {
+    let context = PathBuf::from(&context_path);
+    let context_dir = context.parent().map(PathBuf::from).unwrap_or_default();
+    resolve_link_target(&link, &context_dir, &state)
+}
+
+/// Which of a document's wikilinks have no target. One call per document rather than
+/// one per link, and the same resolution the click handler uses — a link the renderer
+/// dims is exactly a link that clicking would fail to open.
+#[tauri::command]
+pub fn find_broken_wikilinks(
+    links: Vec<String>,
+    context_path: String,
+    state: State<AppState>,
+) -> Result<Vec<String>, String> {
+    let context = PathBuf::from(&context_path);
+    let context_dir = context.parent().map(PathBuf::from).unwrap_or_default();
+    let mut broken = Vec::new();
+    for link in links {
+        if resolve_link_target(&link, &context_dir, &state)?.is_none() {
+            broken.push(link);
+        }
+    }
+    Ok(broken)
 }
 
 // ── Unified Bookmarks (JSON-backed) ──

@@ -261,6 +261,7 @@ pub fn run() {
             commands::get_backlinks,
             commands::get_index_stats,
             commands::resolve_wikilink,
+            commands::find_broken_wikilinks,
             commands::toggle_bookmark,
             commands::get_bookmarks,
             commands::is_file_bookmarked,

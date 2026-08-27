@@ -4130,6 +4130,22 @@
   .cm-preview-alt-cb.cb-pin       { color: oklch(0.60 0.13 295); }  /* purple */
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Broken wikilinks
+   Unlayered — must compete with CM6 runtime styles.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* A link with no target. Dimmed rather than red: red says "error", and a note that
+   does not exist yet is an invitation, not a mistake — clicking it creates the note.
+   The mark sits outside the span livePreview colours, so the inner span must inherit. */
+.cm-wikilink-broken,
+.cm-wikilink-broken .cm-preview-wikilink,
+.cm-wikilink-broken .cm-wikilink {
+  color: var(--link-broken) !important;
+  opacity: 0.7;
+  text-decoration-style: dashed;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Review card column
    Lives inside the pane rather than replacing the context panel: Review is
    per-tab, so two panes can both be reviewing, and a shared column would have
