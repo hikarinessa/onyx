@@ -4,6 +4,16 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Reveal in File Tree** — from a tab's right-click menu, a search result's right-click menu, the File menu, the palette, or ⇧⌘E. Opens the sidebar on Files, expands every folder down to the note, scrolls it to the centre and flashes it once. Works for orphan notes too
+- **Tab context menu** — Reveal in File Tree, Reveal in Finder, Close, Close Others, Close All
+- **Search result context menu** — Open Note, Reveal in File Tree
+
+### Changed
+- The editor menu's suggestion items drop the word "selection" when text is highlighted: Comment…, Suggest deleting, Suggest replacing…, Suggest inserting after selection…. With only a caret they still name the word under it
+
 ## [0.11.2] — 2026-08-27
 
 ### Fixed

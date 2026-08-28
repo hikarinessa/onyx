@@ -4,6 +4,8 @@ import { openFileInEditor } from "../lib/openFile";
 import { getEditorView } from "./Editor";
 import { EditorSelection } from "@codemirror/state";
 import { Icon } from "./Icon";
+import { ContextMenu, type MenuSection } from "./ContextMenu";
+import { useAppStore } from "../stores/app";
 
 interface LineMatch {
   line_number: number;
@@ -87,6 +89,36 @@ export function SearchPanel() {
     });
   };
 
+  // ── Right-click menu on a result ──
+  const [menu, setMenu] = useState<{ x: number; y: number; sections: MenuSection[] } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  const handleResultContextMenu = (e: React.MouseEvent, path: string) => {
+    e.preventDefault();
+    const name = path.split("/").pop() || path;
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      sections: [
+        {
+          id: "result",
+          items: [
+            {
+              id: "result.open",
+              label: "Open Note",
+              run: () => openFileInEditor(path, name, { replaceActive: true }),
+            },
+            {
+              id: "result.revealTree",
+              label: "Reveal in File Tree",
+              run: () => useAppStore.getState().revealInTree(path),
+            },
+          ],
+        },
+      ],
+    });
+  };
+
   const highlightMatch = (text: string, q: string) => {
     if (!q.trim()) return text;
     const qLower = q.toLowerCase();
@@ -158,6 +190,7 @@ export function SearchPanel() {
                 expanded={expandedFiles.has(r.path)}
                 onToggle={() => toggleFile(r.path)}
                 onLineClick={openAtLine}
+                onContextMenu={handleResultContextMenu}
                 highlightMatch={highlightMatch}
               />
             ))}
@@ -177,12 +210,14 @@ export function SearchPanel() {
                 expanded={expandedFiles.has(r.path)}
                 onToggle={() => toggleFile(r.path)}
                 onLineClick={openAtLine}
+                onContextMenu={handleResultContextMenu}
                 highlightMatch={highlightMatch}
               />
             ))}
           </div>
         )}
       </div>
+      {menu && <ContextMenu {...menu} onClose={closeMenu} />}
     </div>
   );
 }
@@ -193,6 +228,7 @@ function FileResult({
   expanded,
   onToggle,
   onLineClick,
+  onContextMenu,
   highlightMatch,
 }: {
   result: ContentSearchResult;
@@ -200,6 +236,7 @@ function FileResult({
   expanded: boolean;
   onToggle: () => void;
   onLineClick: (path: string, line: number) => void;
+  onContextMenu: (e: React.MouseEvent, path: string) => void;
   highlightMatch: (text: string, q: string) => React.ReactNode;
 }) {
   const hasLineMatches = result.line_matches.length > 0;
@@ -214,7 +251,11 @@ function FileResult({
 
   return (
     <div className="search-file-group">
-      <div className="search-file-header" onClick={handleHeaderClick}>
+      <div
+        className="search-file-header"
+        onClick={handleHeaderClick}
+        onContextMenu={(e) => onContextMenu(e, result.path)}
+      >
         {hasLineMatches ? (
           <Icon name={expanded ? "chevron-down" : "chevron-right"} size={12} />
         ) : (
