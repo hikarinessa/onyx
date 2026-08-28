@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useAppStore, selectActivePane } from "../stores/app";
+import { useAppStore, selectActivePane, type Tab } from "../stores/app";
 import { Icon } from "./Icon";
+import { ContextMenu, type MenuSection } from "./ContextMenu";
+import * as fileOps from "../lib/fileOps";
 
 export function TabBar({ paneId }: { paneId?: string }) {
   // Get the specific pane's tabs, or fall back to active pane
@@ -117,6 +119,47 @@ export function TabBar({ paneId }: { paneId?: string }) {
     setMenuOpen(false);
   };
 
+  // ── Right-click menu on a tab ──
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; sections: MenuSection[] } | null>(null);
+  const closeTabMenu = useCallback(() => setTabMenu(null), []);
+
+  const tabMenuSections = (tab: Tab): MenuSection[] => {
+    const revealInTree = useAppStore.getState().revealInTree;
+    return [
+      {
+        id: "locate",
+        items: [
+          { id: "tab.revealTree", label: "Reveal in File Tree", run: () => revealInTree(tab.path) },
+          {
+            id: "tab.revealFinder",
+            label: "Reveal in Finder",
+            run: () => fileOps.revealInFinder(tab.path).catch((err) => console.error("Failed to reveal in Finder:", err)),
+          },
+        ],
+      },
+      {
+        id: "close",
+        items: [
+          { id: "tab.close", label: "Close", shortcut: "⌘W", run: () => closeTab(tab.id) },
+          {
+            id: "tab.closeOthers",
+            label: "Close Others",
+            disabled: tabs.length < 2,
+            run: () => {
+              for (const t of tabs) if (t.id !== tab.id) closeTab(t.id);
+            },
+          },
+          { id: "tab.closeAll", label: "Close All", run: closeAllTabs },
+        ],
+      },
+    ];
+  };
+
+  const handleTabContextMenu = (e: React.MouseEvent, tab: Tab) => {
+    e.preventDefault();
+    setTabMenu({ x: e.clientX, y: e.clientY, sections: tabMenuSections(tab) });
+  };
+
   return (
     <div
       className={`tabbar ${isActivePane ? "" : "tabbar-inactive"}`}
@@ -140,6 +183,7 @@ export function TabBar({ paneId }: { paneId?: string }) {
             onDragOver={(e) => handleDragOver(e, i)}
             onDrop={(e) => handleDrop(e, i)}
             onDragEnd={handleDragEnd}
+            onContextMenu={(e) => handleTabContextMenu(e, tab)}
             onMouseDown={(e) => {
               if (e.button === 1) {
                 e.preventDefault();
@@ -208,6 +252,7 @@ export function TabBar({ paneId }: { paneId?: string }) {
           )}
         </div>
       )}
+      {tabMenu && <ContextMenu {...tabMenu} onClose={closeTabMenu} />}
     </div>
   );
 }
