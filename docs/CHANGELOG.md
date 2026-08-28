@@ -4,7 +4,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
-## [Unreleased]
+## [0.11.3] — 2026-08-28
 
 ### Added
 - **Reveal in File Tree** — from a tab's right-click menu, a search result's right-click menu, the File menu, the palette, or ⇧⌘E. Opens the sidebar on Files, expands every folder down to the note, scrolls it to the centre and flashes it once. Works for orphan notes too
