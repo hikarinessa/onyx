@@ -122,6 +122,13 @@ interface AppState {
   toggleDirCollapsed: (dirId: string) => void;
   expandedSubdirs: string[];
   toggleSubdirExpanded: (path: string) => void;
+  /** Open a root directory and every subdirectory listed — idempotent, unlike the toggles. */
+  expandTreeTo: (dirId: string, subdirs: string[]) => void;
+
+  // A request for the sidebar to scroll a file into view. Bumping `seq` re-fires a
+  // reveal of the same path; the sidebar does the expanding and scrolling itself.
+  treeReveal: { path: string; seq: number } | null;
+  revealInTree: (path: string) => void;
 
   // Quick open
   quickOpenVisible: boolean;
@@ -678,6 +685,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     return { expandedSubdirs: [...s.expandedSubdirs, path] };
   }),
+  expandTreeTo: (dirId, subdirs) => set((s) => ({
+    collapsedDirs: s.collapsedDirs.filter((d) => d !== dirId),
+    expandedSubdirs: Array.from(new Set([...s.expandedSubdirs, ...subdirs])),
+  })),
+
+  treeReveal: null,
+  revealInTree: (path) => set((s) => ({
+    treeReveal: { path, seq: (s.treeReveal?.seq ?? 0) + 1 },
+    sidebarVisible: true,
+    sidebarTab: "files",
+  })),
 
   quickOpenVisible: false,
   quickOpenMode: "open",

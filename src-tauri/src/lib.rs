@@ -109,6 +109,7 @@ pub fn run() {
                 .separator()
                 .item(&MenuItemBuilder::with_id("close_tab", "Close Tab").accelerator("CmdOrCtrl+W").build(app)?)
                 .separator()
+                .item(&MenuItemBuilder::with_id("reveal_in_tree", "Reveal in File Tree").accelerator("CmdOrCtrl+Shift+E").build(app)?)
                 .item(&MenuItemBuilder::with_id("reveal_in_finder", "Reveal in Finder").accelerator("CmdOrCtrl+Shift+R").build(app)?)
                 .item(&MenuItemBuilder::with_id("copy_path", "Copy File Path").build(app)?)
                 .separator()

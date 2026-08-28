@@ -126,6 +126,8 @@ interface TreeNodeProps {
   depth: number;
   activeFilePath: string | null;
   renamingPath: string | null;
+  /** The file a reveal just scrolled to; it flashes once so the eye lands on it. */
+  flashPath: string | null;
   fileTreeVersion: number;
   sortOrder: string;
   onFileClick: (path: string, name: string, metaKey: boolean) => void;
@@ -134,7 +136,7 @@ interface TreeNodeProps {
   onRenameCancel: () => void;
 }
 
-function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion, sortOrder, onFileClick, onContextMenu, onRenameSubmit, onRenameCancel }: TreeNodeProps) {
+function TreeNode({ entry, depth, activeFilePath, renamingPath, flashPath, fileTreeVersion, sortOrder, onFileClick, onContextMenu, onRenameSubmit, onRenameCancel }: TreeNodeProps) {
   const expandedSubdirs = useAppStore((s) => s.expandedSubdirs);
   const toggleSubdirExpanded = useAppStore((s) => s.toggleSubdirExpanded);
   const expanded = entry.is_dir && expandedSubdirs.includes(entry.path);
@@ -190,7 +192,7 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
   return (
     <div className={entry.is_dir ? "tree-directory" : "tree-file"}>
       <div
-        className={`tree-item ${isActive ? "active" : ""}`}
+        className={`tree-item ${isActive ? "active" : ""} ${flashPath === entry.path ? "tree-reveal-flash" : ""}`}
         style={{ "--indent": depth } as React.CSSProperties}
         onClick={isRenaming ? undefined : toggle}
         onContextMenu={(e) => onContextMenu(e, entry)}
@@ -232,6 +234,7 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, fileTreeVersion,
               depth={depth + 1}
               activeFilePath={activeFilePath}
               renamingPath={renamingPath}
+              flashPath={flashPath}
               fileTreeVersion={fileTreeVersion}
               sortOrder={sortOrder}
               onFileClick={onFileClick}
@@ -277,6 +280,75 @@ export function Sidebar() {
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const iconPickerDirIdRef = useRef(iconPickerDirId);
   iconPickerDirIdRef.current = iconPickerDirId;
+
+  // ── Reveal a file in the tree ──
+  // Expanding is state; the nodes appear only after each level's children arrive over
+  // IPC, so the scroll waits for the row to exist rather than assuming it does.
+  const treeReveal = useAppStore((s) => s.treeReveal);
+  const expandTreeTo = useAppStore((s) => s.expandTreeTo);
+  const treeRef = useRef<HTMLDivElement>(null);
+  const [flashPath, setFlashPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!treeReveal) return;
+    const { path } = treeReveal;
+    const notice = (msg: string) => useAppStore.getState().setStatusNotice(msg);
+
+    const dir = directories
+      .filter((d) => path.startsWith(d.path + "/"))
+      .sort((a, b) => b.path.length - a.path.length)[0];
+    if (dir) {
+      const ancestors: string[] = [];
+      let p = path.slice(0, path.lastIndexOf("/"));
+      while (p.length > dir.path.length) {
+        ancestors.push(p);
+        p = p.slice(0, p.lastIndexOf("/"));
+      }
+      expandTreeTo(dir.id, ancestors);
+    } else if (orphanPaths.includes(path)) {
+      setOrphansCollapsed(false);
+    } else {
+      notice("File is not in the file tree");
+      return;
+    }
+
+    const root = treeRef.current;
+    if (!root) return;
+    const selector = `[data-tree-path="${CSS.escape(path)}"]`;
+    let found = false;
+    let raf = 0;
+    const reveal = () => {
+      const el = root.querySelector<HTMLElement>(selector);
+      if (!el) return false;
+      found = true;
+      el.scrollIntoView({ block: "center" });
+      // Drop the class for a frame so a second reveal of the same file flashes again.
+      setFlashPath(null);
+      raf = requestAnimationFrame(() => setFlashPath(path));
+      return true;
+    };
+    if (reveal()) return () => cancelAnimationFrame(raf);
+
+    const observer = new MutationObserver(() => {
+      if (reveal()) observer.disconnect();
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      if (!found) notice("Could not find the file in the tree");
+    }, 3000);
+    return () => {
+      observer.disconnect();
+      clearTimeout(timer);
+      cancelAnimationFrame(raf);
+    };
+  }, [treeReveal]); // eslint-disable-line -- a reveal is an event; directories/orphans are read as of that moment
+
+  useEffect(() => {
+    if (!flashPath) return;
+    const timer = setTimeout(() => setFlashPath(null), 1500);
+    return () => clearTimeout(timer);
+  }, [flashPath]);
 
   // Close sort dropdown on outside click
   useEffect(() => {
@@ -713,7 +785,7 @@ export function Sidebar() {
           )}
         </div>
       </div>
-      <div className="sidebar-directories">
+      <div className="sidebar-directories" ref={treeRef}>
       {directories.length === 0 ? (
         <div className="sidebar-empty">
           <p
@@ -778,6 +850,7 @@ export function Sidebar() {
                       depth={0}
                       activeFilePath={activeTabPath ?? ""}
                       renamingPath={renamingPath}
+                      flashPath={flashPath}
                       fileTreeVersion={fileTreeVersion}
                       sortOrder={sortOrder}
                       onFileClick={handleFileClick}
@@ -814,9 +887,10 @@ export function Sidebar() {
               return (
                 <div
                   key={p}
-                  className={`tree-item ${isActive ? "active" : ""}`}
+                  className={`tree-item ${isActive ? "active" : ""} ${flashPath === p ? "tree-reveal-flash" : ""}`}
                   style={{ "--indent": 0 } as React.CSSProperties}
                   onClick={(e) => handleFileClick(p, name, e.metaKey)}
+                  data-tree-path={p}
                 >
                   <span className="tree-item-chevron" />
                   <span className="tree-item-icon"><Icon name="file-text" size={14} /></span>

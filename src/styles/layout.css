@@ -831,6 +831,17 @@
     font-weight: 600;
   }
 
+  /* A revealed file pulses its outline twice so the eye finds it after the scroll. */
+  .tree-item.tree-reveal-flash {
+    animation: tree-reveal-flash 1.2s ease-out;
+  }
+
+  @keyframes tree-reveal-flash {
+    0%, 50% { box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-muted); }
+    25%, 75% { box-shadow: inset 0 0 0 1px transparent; }
+    100% { box-shadow: inset 0 0 0 1px transparent; }
+  }
+
   .tree-item.drop-target {
     background: var(--accent-muted);
     outline: 1px dashed var(--accent);

@@ -274,6 +274,18 @@ function registerCommands() {
   });
 
   registerCommand({
+    id: "file.revealInTree",
+    label: "Reveal in File Tree",
+    shortcut: "Cmd+Shift+E",
+    category: "File",
+    execute: () => {
+      const s = store();
+      const tab = selectActiveTab(s);
+      if (tab) s.revealInTree(tab.path);
+    },
+  });
+
+  registerCommand({
     id: "file.revealInFinder",
     label: "Reveal in Finder",
     shortcut: "Cmd+Shift+R",
@@ -629,6 +641,13 @@ export default function App() {
           break;
         case "insert_wikilink":
           openQuickOpenForWikilink();
+          break;
+        case "reveal_in_tree":
+          (() => {
+            const s = store();
+            const tab = selectActiveTab(s);
+            if (tab) s.revealInTree(tab.path);
+          })();
           break;
         case "reveal_in_finder":
           (() => {
