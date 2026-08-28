@@ -37,7 +37,10 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
   const inReview = state.field(reviewModeField, false) ?? false;
 
   const target = hasSelection ? { from: sel.from, to: sel.to } : wordAt(view, sel.head);
-  const targetLabel = hasSelection ? "selection" : "word";
+  // A highlighted selection is its own label; a word under a bare caret is not visible
+  // as a target, so the menu names it.
+  const on = hasSelection ? "" : " on word";
+  const noun = hasSelection ? "" : " word";
 
   // The parser does not nest. A suggestion written inside an existing construct is read
   // as part of that construct's text, and deciding the outer one either swallows the
@@ -93,7 +96,7 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
       : [
       {
         id: "suggest.comment",
-        label: target ? `Comment on ${targetLabel}…` : "Comment here…",
+        label: target ? `Comment${on}…` : "Comment here…",
         prompt: "What should the next pass know?",
         run: (text) => {
           const doc = state.doc.toString();
@@ -105,19 +108,19 @@ export function editorMenuSections(view: EditorView, extractBlock: () => void): 
         ? ([
             {
               id: "suggest.delete",
-              label: `Suggest deleting ${targetLabel}`,
+              label: `Suggest deleting${noun}`,
               run: () => dispatch(proposeDeletion(state.doc.toString(), target.from, target.to)),
             },
             {
               id: "suggest.replace",
-              label: `Suggest replacing ${targetLabel}…`,
+              label: `Suggest replacing${noun}…`,
               prompt: "Replacement text",
               run: (text) =>
                 dispatch(proposeReplacement(state.doc.toString(), target.from, target.to, text ?? "")),
             },
             {
               id: "suggest.insert",
-              label: `Suggest inserting after ${targetLabel}…`,
+              label: `Suggest inserting after ${hasSelection ? "selection" : "word"}…`,
               prompt: "Text to insert (include any leading space)",
               run: (text) => dispatch(proposeInsertion(target.to, text ?? "")),
             },
