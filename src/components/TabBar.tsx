@@ -32,6 +32,11 @@ export function TabBar({ paneId }: { paneId?: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // Right-click menu on a tab. Declared with the other hooks, above the empty-tabs
+  // early return, so the hook count is the same on every render.
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; sections: MenuSection[] } | null>(null);
+  const closeTabMenu = useCallback(() => setTabMenu(null), []);
+
   const checkOverflow = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -120,9 +125,6 @@ export function TabBar({ paneId }: { paneId?: string }) {
   };
 
   // ── Right-click menu on a tab ──
-  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; sections: MenuSection[] } | null>(null);
-  const closeTabMenu = useCallback(() => setTabMenu(null), []);
-
   const tabMenuSections = (tab: Tab): MenuSection[] => {
     const revealInTree = useAppStore.getState().revealInTree;
     return [
