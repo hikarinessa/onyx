@@ -45,10 +45,8 @@ fn commit_file(target: &PathBuf, content: &str, state: &State<AppState>) -> Resu
             format!("Failed to rename temp file: {}", e)
         })?;
 
-    // Update mtime tracking after successful write (use canonical key)
-    let canonical_key = target.canonicalize()
-        .unwrap_or_else(|_| target.clone())
-        .to_string_lossy().to_string();
+    // Update mtime tracking after successful write
+    let canonical_key = mtime_key(target);
     if let Ok(meta) = std::fs::metadata(target) {
         if let Ok(mtime) = meta.modified() {
             if let Ok(mut mtimes) = state.last_read_mtimes.lock() {
@@ -93,6 +91,51 @@ fn canonical_path(path: &PathBuf) -> Result<PathBuf, String> {
             .map(|p| p.join(name))
             .map_err(|e| format!("Cannot resolve parent directory: {}", e))
     }).map_err(|e: String| e)
+}
+
+/// Key under which a file's last-known mtime is tracked. Resolves through the
+/// parent directory when the file itself does not exist yet, so a path that is
+/// about to be created and the same path once it exists share one key.
+fn mtime_key(path: &Path) -> String {
+    let buf = path.to_path_buf();
+    canonical_path(&buf)
+        .unwrap_or(buf)
+        .to_string_lossy()
+        .to_string()
+}
+
+/// Drop every mtime entry for `key` and, when `is_dir`, for everything under it.
+fn forget_mtimes(mtimes: &mut HashMap<String, std::time::SystemTime>, key: &str, is_dir: bool) {
+    mtimes.remove(key);
+    if is_dir {
+        let prefix = format!("{}/", key.trim_end_matches('/'));
+        mtimes.retain(|k, _| !k.starts_with(&prefix));
+    }
+}
+
+/// Move mtime entries from `old_key` to `new_key` after a rename, so an open
+/// tab keeps its conflict detection and the old path stops reporting a state
+/// it no longer has. Directories re-key every entry under them.
+fn rekey_mtimes(
+    mtimes: &mut HashMap<String, std::time::SystemTime>,
+    old_key: &str,
+    new_key: &str,
+    is_dir: bool,
+) {
+    if let Some(t) = mtimes.remove(old_key) {
+        mtimes.insert(new_key.to_string(), t);
+    }
+    if is_dir {
+        let old_prefix = format!("{}/", old_key.trim_end_matches('/'));
+        let new_prefix = format!("{}/", new_key.trim_end_matches('/'));
+        let moved: Vec<(String, std::time::SystemTime)> = mtimes
+            .iter()
+            .filter(|(k, _)| k.starts_with(&old_prefix))
+            .map(|(k, v)| (format!("{}{}", new_prefix, &k[old_prefix.len()..]), *v))
+            .collect();
+        mtimes.retain(|k, _| !k.starts_with(&old_prefix));
+        mtimes.extend(moved);
+    }
 }
 
 fn validate_path(path: &PathBuf, state: &State<AppState>) -> Result<(), String> {
@@ -229,10 +272,7 @@ pub fn read_file(path: String, state: State<AppState>) -> Result<String, String>
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
     // Record mtime so write_file can detect external modifications.
-    // Use canonical path as key for consistency (avoids symlink/trailing-slash mismatches).
-    let canonical_key = file_path.canonicalize()
-        .unwrap_or_else(|_| file_path.clone())
-        .to_string_lossy().to_string();
+    let canonical_key = mtime_key(&file_path);
     if let Ok(meta) = std::fs::metadata(&file_path) {
         if let Ok(mtime) = meta.modified() {
             let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
@@ -256,10 +296,7 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
     let target = PathBuf::from(&path);
     validate_path(&target, &state)?;
 
-    // Use canonical path as mtime key for consistency with read_file
-    let canonical_key = target.canonicalize()
-        .unwrap_or_else(|_| target.clone())
-        .to_string_lossy().to_string();
+    let canonical_key = mtime_key(&target);
 
     // Combined no-op + mtime check. Uses mtime first to avoid expensive disk read on every auto-save.
     {
@@ -297,6 +334,27 @@ pub fn write_file(path: String, content: String, state: State<AppState>) -> Resu
                 }
             }
         }
+    }
+
+    commit_file(&target, &content, &state)
+}
+
+/// Create a file that does not exist yet. Unlike `write_file`, a stale mtime
+/// record for the path (left by an earlier note that was renamed or deleted
+/// out from under the tracker) is discarded rather than reported as a
+/// deleted-file conflict, since there is no open tab to protect.
+#[tauri::command]
+pub fn create_file(path: String, content: String, state: State<AppState>) -> Result<(), String> {
+    let target = PathBuf::from(&path);
+    validate_path(&target, &state)?;
+
+    if target.exists() {
+        return Err(format!("A file already exists at: {}", path));
+    }
+
+    {
+        let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
+        forget_mtimes(&mut mtimes, &mtime_key(&target), false);
     }
 
     commit_file(&target, &content, &state)
@@ -893,8 +951,15 @@ pub fn rename_file(
 
     let is_dir = old.is_dir();
 
+    let old_key = mtime_key(&old);
+
     std::fs::rename(&old, &new)
         .map_err(|e| format!("Failed to rename: {}", e))?;
+
+    // Keep mtime tracking pointed at the file's new location
+    if let Ok(mut mtimes) = state.last_read_mtimes.lock() {
+        rekey_mtimes(&mut mtimes, &old_key, &mtime_key(&new), is_dir);
+    }
 
     // Update the index
     let renamed_file_id: Option<i64> = {
@@ -952,9 +1017,15 @@ pub fn trash_file(path: String, state: State<AppState>, app: tauri::AppHandle) -
     validate_path(&file_path, &state)?;
 
     let is_dir = file_path.is_dir();
+    let key = mtime_key(&file_path);
 
     trash::delete(&file_path)
         .map_err(|e| format!("Failed to move to trash: {}", e))?;
+
+    // The path no longer holds the file we tracked
+    if let Ok(mut mtimes) = state.last_read_mtimes.lock() {
+        forget_mtimes(&mut mtimes, &key, is_dir);
+    }
 
     // Remove from index
     let db = state.db.lock().map_err(|e| e.to_string())?;
@@ -1713,6 +1784,56 @@ mod tests {
 
     fn targets(items: &[&str]) -> HashSet<String> {
         items.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn mtime_map(keys: &[&str]) -> HashMap<String, std::time::SystemTime> {
+        keys.iter()
+            .map(|k| (k.to_string(), std::time::UNIX_EPOCH))
+            .collect()
+    }
+
+    fn sorted_keys(m: &HashMap<String, std::time::SystemTime>) -> Vec<String> {
+        let mut v: Vec<String> = m.keys().cloned().collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn forget_mtimes_removes_exact_file_key_only() {
+        let mut m = mtime_map(&["/v/Untitled.md", "/v/Untitled 2.md"]);
+        forget_mtimes(&mut m, "/v/Untitled.md", false);
+        assert_eq!(sorted_keys(&m), vec!["/v/Untitled 2.md"]);
+    }
+
+    #[test]
+    fn forget_mtimes_for_dir_removes_children_not_siblings() {
+        let mut m = mtime_map(&["/v/a/x.md", "/v/a/sub/y.md", "/v/ab/z.md", "/v/a"]);
+        forget_mtimes(&mut m, "/v/a", true);
+        assert_eq!(sorted_keys(&m), vec!["/v/ab/z.md"]);
+    }
+
+    #[test]
+    fn rekey_mtimes_moves_file_entry() {
+        let mut m = mtime_map(&["/v/Untitled.md"]);
+        rekey_mtimes(&mut m, "/v/Untitled.md", "/v/Foo.md", false);
+        assert_eq!(sorted_keys(&m), vec!["/v/Foo.md"]);
+    }
+
+    #[test]
+    fn rekey_mtimes_missing_old_key_is_noop() {
+        let mut m = mtime_map(&["/v/Other.md"]);
+        rekey_mtimes(&mut m, "/v/Untitled.md", "/v/Foo.md", false);
+        assert_eq!(sorted_keys(&m), vec!["/v/Other.md"]);
+    }
+
+    #[test]
+    fn rekey_mtimes_for_dir_moves_children_not_siblings() {
+        let mut m = mtime_map(&["/v/a/x.md", "/v/a/sub/y.md", "/v/ab/z.md"]);
+        rekey_mtimes(&mut m, "/v/a", "/v/b", true);
+        assert_eq!(
+            sorted_keys(&m),
+            vec!["/v/ab/z.md", "/v/b/sub/y.md", "/v/b/x.md"]
+        );
     }
 
     #[test]

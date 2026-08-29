@@ -32,7 +32,7 @@ export async function createNote(dirPath: string): Promise<string> {
   } catch (e) {
     console.warn("Folder-rule resolution failed; creating empty file:", e);
   }
-  await invoke("write_file", { path, content });
+  await invoke("create_file", { path, content });
   loadFileIntoCache(path, content, cursorOffset);
   useAppStore.getState().openFile(path, name);
   useAppStore.getState().bumpFileTreeVersion();
@@ -55,7 +55,7 @@ export async function createNoteWithContent(
     path = `${dirPath}/${baseName} ${counter}.md`;
     counter++;
   }
-  await invoke("write_file", { path, content });
+  await invoke("create_file", { path, content });
   await invoke("reindex_file", { path });
   useAppStore.getState().bumpFileTreeVersion();
   return path;
