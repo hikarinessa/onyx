@@ -159,7 +159,8 @@ export async function createFolder(parentPath: string): Promise<string> {
 
 /**
  * Create a new note in the active tab's directory, or the first registered directory.
- * Used by Cmd+N and the command palette.
+ * Used by Cmd+N, the File menu and the command palette. A failure is shown as a
+ * status notice rather than thrown, since none of those callers has a UI of its own.
  */
 export async function createNewNote(): Promise<void> {
   const allTabs = getAllTabs();
@@ -170,14 +171,24 @@ export async function createNewNote(): Promise<void> {
     ? activeTab.path.replace(/\/[^/]+$/, "")
     : undefined;
 
-  if (!dir) {
-    const dirs = await invoke<{ path: string }[]>("get_registered_directories");
-    if (dirs.length > 0) {
-      await createNote(dirs[0].path);
+  try {
+    if (!dir) {
+      const dirs = await invoke<{ path: string }[]>("get_registered_directories");
+      if (dirs.length > 0) {
+        await createNote(dirs[0].path);
+      }
+      return;
     }
-    return;
+    await createNote(dir);
+  } catch (err) {
+    reportFailure("Could not create note", err);
   }
-  await createNote(dir);
+}
+
+/** Log a failed file operation and show it in the status bar */
+export function reportFailure(action: string, err: unknown): void {
+  console.error(`${action}:`, err);
+  useAppStore.getState().setStatusNotice(`${action}: ${String(err)}`);
 }
 
 /** Reveal a file in the OS file manager */

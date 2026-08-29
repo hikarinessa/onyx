@@ -661,7 +661,7 @@ export function Sidebar() {
       const newPath = await fileOps.createNote(dir);
       setRenamingPath(newPath);
     } catch (err) {
-      console.error("Failed to create note:", err);
+      fileOps.reportFailure("Could not create note", err);
     }
   };
 
@@ -670,7 +670,7 @@ export function Sidebar() {
       const newPath = await fileOps.createNote(dirPath);
       setRenamingPath(newPath);
     } catch (err) {
-      console.error("Failed to create note:", err);
+      fileOps.reportFailure("Could not create note", err);
     }
   };
 
@@ -680,7 +680,7 @@ export function Sidebar() {
       const folderPath = await fileOps.createFolder(dir);
       setRenamingPath(folderPath);
     } catch (err) {
-      console.error("Failed to create folder:", err);
+      fileOps.reportFailure("Could not create folder", err);
     }
   };
 
