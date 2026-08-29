@@ -4,7 +4,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
-## [Unreleased]
+## [0.11.4] — 2026-08-29
 
 ### Fixed
 - **Creating a second note in a folder failed silently** once the first `Untitled.md` had been renamed or deleted. The Rust side keeps a last-known mtime per path to detect external edits; rename and trash left the old path's entry behind, so the next `Untitled.md` at that path was refused as a deleted file. Rename now re-keys the entry, trash drops it, and new notes go through a dedicated `create_file` command that never inherits a stale record. The same trap could catch ⌘N and the File menu
