@@ -14,6 +14,7 @@ export function SidebarContextMenu({
   onClose,
   onNewNote,
   onNewFolder,
+  onDuplicate,
   onRename,
   onDelete,
   onReveal,
@@ -22,6 +23,7 @@ export function SidebarContextMenu({
   onClose: () => void;
   onNewNote: (entry: DirEntry) => void;
   onNewFolder: (entry: DirEntry) => void;
+  onDuplicate: (entry: DirEntry) => void;
   onRename: (entry: DirEntry) => void;
   onDelete: (entry: DirEntry) => void;
   onReveal: (entry: DirEntry) => void;
@@ -59,6 +61,7 @@ export function SidebarContextMenu({
   }, [menu.x, menu.y]);
 
   const isDir = menu.entry.is_dir;
+  const isNote = !isDir && menu.entry.name.endsWith(".md");
 
   return (
     <div
@@ -84,6 +87,17 @@ export function SidebarContextMenu({
           }}
         >
           New Folder
+        </div>
+      )}
+      {isNote && (
+        <div
+          className="context-menu-item"
+          onClick={() => {
+            onDuplicate(menu.entry);
+            onClose();
+          }}
+        >
+          Duplicate
         </div>
       )}
       <div className="context-menu-separator" />

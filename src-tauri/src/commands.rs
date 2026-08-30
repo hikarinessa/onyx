@@ -360,6 +360,33 @@ pub fn create_file(path: String, content: String, state: State<AppState>) -> Res
     commit_file(&target, &content, &state)
 }
 
+/// Copy an existing file to a path that does not exist yet, writing the copy
+/// through `commit_file` so it is indexed and mtime-tracked like any other write.
+#[tauri::command]
+pub fn copy_file(source: String, dest: String, state: State<AppState>) -> Result<(), String> {
+    let from = PathBuf::from(&source);
+    let to = PathBuf::from(&dest);
+    validate_path(&from, &state)?;
+    validate_path(&to, &state)?;
+
+    if !from.is_file() {
+        return Err(format!("Not a file: {}", source));
+    }
+    if to.exists() {
+        return Err(format!("A file already exists at: {}", dest));
+    }
+
+    let content = std::fs::read_to_string(&from)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    {
+        let mut mtimes = state.last_read_mtimes.lock().map_err(|e| e.to_string())?;
+        forget_mtimes(&mut mtimes, &mtime_key(&to), false);
+    }
+
+    commit_file(&to, &content, &state)
+}
+
 #[tauri::command]
 pub fn get_registered_directories(state: State<AppState>) -> Result<Vec<crate::dirs::RegisteredDirectory>, String> {
     let dirs = state.directories.lock().map_err(|e| e.to_string())?;

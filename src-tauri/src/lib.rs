@@ -252,6 +252,7 @@ pub fn run() {
             commands::read_file,
             commands::write_file,
             commands::create_file,
+            commands::copy_file,
             commands::get_registered_directories,
             commands::register_directory,
             commands::unregister_directory,

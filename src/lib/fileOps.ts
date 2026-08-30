@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, selectAllTabs, type Tab } from "../stores/app";
-import { loadFileIntoCache, migrateEditorCache, clearEditorCache, snapshotEditor } from "../components/Editor";
+import { loadFileIntoCache, migrateEditorCache, clearEditorCache, snapshotEditor, flushSaveForTab } from "../components/Editor";
+import { openFileInEditor } from "./openFile";
 
 /** Get all tabs across all panes */
 function getAllTabs(): Tab[] {
@@ -59,6 +60,35 @@ export async function createNoteWithContent(
   await invoke("reindex_file", { path });
   useAppStore.getState().bumpFileTreeVersion();
   return path;
+}
+
+/**
+ * Duplicate a note as a sibling named `<stem> copy.md` (then `<stem> copy 2.md`, …),
+ * open the copy in a new tab, and return its path. Pending edits in an open tab
+ * are flushed first so the copy matches what is on screen.
+ */
+export async function duplicateNote(path: string): Promise<string> {
+  const openTab = getAllTabs().find((t) => t.path === path);
+  if (openTab) {
+    snapshotEditor(openTab.id);
+    await flushSaveForTab(openTab.id);
+  }
+
+  const dir = path.replace(/\/[^/]+$/, "");
+  const stem = (path.split("/").pop() || path).replace(/\.md$/, "");
+  let name = `${stem} copy.md`;
+  let dest = `${dir}/${name}`;
+  let counter = 1;
+  while (await invoke<boolean>("path_exists", { path: dest })) {
+    counter++;
+    name = `${stem} copy ${counter}.md`;
+    dest = `${dir}/${name}`;
+  }
+
+  await invoke("copy_file", { source: path, dest });
+  useAppStore.getState().bumpFileTreeVersion();
+  await openFileInEditor(dest, name, { replaceActive: false });
+  return dest;
 }
 
 /** Rename a file (not a folder), updating tabs and caches synchronously */

@@ -674,6 +674,15 @@ export function Sidebar() {
     }
   };
 
+  const handleDuplicate = async (entry: DirEntry) => {
+    try {
+      const newPath = await fileOps.duplicateNote(entry.path);
+      setRenamingPath(newPath);
+    } catch (err) {
+      fileOps.reportFailure("Could not duplicate note", err);
+    }
+  };
+
   const handleNewFolder = async (entry: DirEntry) => {
     const dir = entry.is_dir ? entry.path : entry.path.replace(/\/[^/]+$/, "");
     try {
@@ -954,6 +963,7 @@ export function Sidebar() {
           onClose={() => setContextMenu(null)}
           onNewNote={handleNewNote}
           onNewFolder={handleNewFolder}
+          onDuplicate={handleDuplicate}
           onRename={handleRename}
           onDelete={handleDelete}
           onReveal={handleReveal}

@@ -4,6 +4,11 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Duplicate** in the file tree's right-click menu — copies a note beside itself as `<name> copy.md` (then `copy 2`, `copy 3`, …), opens the copy in a new tab and starts a rename. Unsaved edits in an open tab are flushed first so the copy matches what is on screen
+
 ## [0.11.4] — 2026-08-29
 
 ### Fixed
