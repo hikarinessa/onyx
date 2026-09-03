@@ -4,10 +4,14 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
-## [Unreleased]
+## [0.11.5] — 2026-09-03
 
 ### Added
+- **Accept Suggestion / Reject Suggestion in the command palette**, gated on Review mode
 - **Duplicate** in the file tree's right-click menu — copies a note beside itself as `<name> copy.md` (then `copy 2`, `copy 3`, …), opens the copy in a new tab and starts a rename. Unsaved edits in an open tab are flushed first so the copy matches what is on screen
+
+### Fixed
+- **Typing in Review mode no longer triggers review actions.** Bare `j/k/a/x` accepted, rejected or moved between suggestions instead of inserting the letter — and the accept could land on a suggestion below the fold. Deciding now has no default keybinding: it lives in the palette, the suggestion cards, and the right-click menu, so every key that produces a character belongs to typing
 
 ## [0.11.4] — 2026-08-29
 

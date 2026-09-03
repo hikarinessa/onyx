@@ -28,7 +28,7 @@ Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMi
 - **Review mode (#110):** Parser, three-mode toggle, card column and the `/annotate` + `/re-view` skills are done. Outstanding: a To Review queue (needs indexer counts) and a setting for auto-engage.
 - **Phase 12 (Hardening & Quality):** Planned — from the 2026-06 audit; quick wins done (CI skeleton, unused deps, fileOps bypass fix). Safety-net tasks (12.1) must precede the refactors (12.3).
 
-**Current version:** 0.11.4
+**Current version:** 0.11.5
 
 ## Project Structure
 
