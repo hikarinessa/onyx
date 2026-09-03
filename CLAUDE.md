@@ -68,7 +68,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── urlPaste.ts           #   30 lines — CM6: URL paste → markdown link
 │   ├── autocomplete.ts       #   98 lines — CM6: wikilink + tag + slash command autocomplete
 │   ├── slashCommands.ts      #  221 lines — CM6: slash commands (/table, /code, /callout, /today, /template)
-│   ├── criticMarkup.ts       #   439 lines — CM6: CriticMarkup decorations, Review mode field, decisions, keymap
+│   ├── criticMarkup.ts       #   439 lines — CM6: CriticMarkup decorations, Review mode field, decisions
 │   ├── livePreview.ts        # 1579 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, URLs, callouts, tag chips, fold, hanging indent, indent guides)
 │   ├── embeds.ts             #  712 lines — CM6: ![[...]] note/image embeds (StateField-based block decorations)
 │   ├── headingFold.ts        #   71 lines — CM6: foldService for heading-based section folding

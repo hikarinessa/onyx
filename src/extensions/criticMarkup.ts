@@ -9,14 +9,13 @@
  */
 
 import {
-  Prec,
   StateEffect,
   StateField,
   type EditorState,
   type Extension,
   type Range,
 } from "@codemirror/state";
-import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from "@codemirror/view";
+import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
 import {
   acceptChange,
   hasCriticMarkup,
@@ -386,17 +385,6 @@ export function decideAll(view: EditorView, accept: boolean): boolean {
 }
 
 /**
- * re-view's review keys. Only live in Review mode — in Preview or Source these are
- * ordinary characters, and stealing `a` from someone typing would be unforgivable.
- */
-const reviewKeymap = keymap.of([
-  { key: "j", run: (v) => v.state.field(reviewModeField) && nextSuggestion(v) },
-  { key: "k", run: (v) => v.state.field(reviewModeField) && prevSuggestion(v) },
-  { key: "a", run: (v) => v.state.field(reviewModeField) && acceptCurrent(v) },
-  { key: "x", run: (v) => v.state.field(reviewModeField) && rejectCurrent(v) },
-]);
-
-/**
  * Clicking a comment star selects it. The star is a widget this module built, so its own
  * element is a reliable target — unlike a mark decoration, whose DOM the syntax
  * highlighter may have split into spans that `closest` cannot find.
@@ -434,6 +422,5 @@ export function criticMarkupExtension(): Extension[] {
     cursorHighlight,
     markerClicks,
     countPublisher,
-    Prec.high(reviewKeymap),
   ];
 }

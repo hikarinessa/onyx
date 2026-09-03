@@ -14,7 +14,6 @@ import {
   replyById,
   selectById,
 } from "../extensions/criticMarkup";
-import { Icon } from "./Icon";
 
 /**
  * The card column beside the prose in Review mode.
@@ -186,9 +185,6 @@ export function ReviewCards({ view }: { view: EditorView | null }) {
       <div className="review-cards-head">
         <span className="review-cards-count">
           {cards.length} {cards.length === 1 ? "suggestion" : "suggestions"}
-        </span>
-        <span className="review-cards-hint" title="j/k move · a accept · x reject">
-          <Icon name="keyboard" size={13} />
         </span>
       </div>
 

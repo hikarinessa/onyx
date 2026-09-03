@@ -17,7 +17,7 @@ import { registerCommand, getAllCommands } from "./lib/commands";
 import { makeTableCommands } from "./extensions/tableEditor";
 import { copyBlock, deleteBlock } from "./extensions/blocks";
 import { sortTaskListAtCursor } from "./extensions/sortTaskList";
-import { decideAll, nextSuggestion, prevSuggestion } from "./extensions/criticMarkup";
+import { acceptCurrent, decideAll, nextSuggestion, prevSuggestion, rejectCurrent } from "./extensions/criticMarkup";
 import { extractBlockToNote } from "./lib/blockExtract";
 import { toggleBold, toggleInlineCode, toggleItalic } from "./extensions/formatting";
 import type { EditorView } from "@codemirror/view";
@@ -123,6 +123,26 @@ function registerCommands() {
     execute: () => {
       const view = getEditorView();
       if (view) prevSuggestion(view);
+    },
+  });
+  // Deciding is gated on Review mode: from the palette in Preview or Source these would
+  // edit markup the user cannot currently see.
+  registerCommand({
+    id: "review.acceptCurrent",
+    label: "Accept Suggestion",
+    category: "Review",
+    execute: () => {
+      const view = getEditorView();
+      if (view && selectActiveTab(store())?.editorMode === "review") acceptCurrent(view);
+    },
+  });
+  registerCommand({
+    id: "review.rejectCurrent",
+    label: "Reject Suggestion",
+    category: "Review",
+    execute: () => {
+      const view = getEditorView();
+      if (view && selectActiveTab(store())?.editorMode === "review") rejectCurrent(view);
     },
   });
   registerCommand({
