@@ -1,4 +1,5 @@
 use crate::db::{Database, LinkRecord};
+use crate::skip;
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
@@ -213,43 +214,19 @@ impl Indexer {
     }
 }
 
+/// Walk filter: the registered root itself is always walked; everything below it goes
+/// through the shared skip rules so the index matches the tree and the watcher.
 fn is_ignored(entry: &walkdir::DirEntry) -> bool {
-    let name = entry.file_name().to_string_lossy();
-    if name == ".claude" {
+    if entry.depth() == 0 {
         return false;
     }
-
-    // Claude Code high-churn data subdirs: skip when nested under a `.claude`
-    // ancestor. No markdown content, hammered by FSEvents during active sessions.
-    if matches!(
-        name.as_ref(),
-        "file-history"
-            | "telemetry"
-            | "todos"
-            | "agent-state"
-            | "session-env"
-            | "paste-cache"
-            | "backups"
-            | "shell-snapshots"
-            | "tasks"
-            | "statsig"
-            | "sessions"
-            | "ide"
-            | "debug"
-            | "cache"
-    ) && entry
+    let name = entry.file_name().to_string_lossy();
+    let parent = entry
         .path()
-        .ancestors()
-        .skip(1)
-        .any(|p| p.file_name().map_or(false, |n| n == ".claude"))
-    {
-        return true;
-    }
-
-    matches!(
-        name.as_ref(),
-        ".obsidian" | ".git" | "node_modules" | ".DS_Store" | ".trash"
-    ) || name.starts_with('.')
+        .parent()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().to_string());
+    skip::is_skipped_entry(&name, parent.as_deref())
 }
 
 fn index_single_file(path: &Path, dir_id: &str, db: &Mutex<Database>) -> Result<(), String> {

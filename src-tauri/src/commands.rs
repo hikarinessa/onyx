@@ -17,8 +17,6 @@ use crate::periodic;
 static RE_WIKILINK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[\[([^\[\]]+)\]\]").unwrap());
 
-const IGNORED_NAMES: &[&str] = &[".obsidian", ".git", "node_modules", ".DS_Store", ".trash"];
-
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Atomic write + self-write mark + mtime update + reindex.
@@ -178,11 +176,7 @@ pub fn list_directory(path: String, sort_order: Option<String>, state: State<App
             let entry = entry.ok()?;
             let name = entry.file_name().to_string_lossy().to_string();
 
-            if IGNORED_NAMES.contains(&name.as_str()) {
-                return None;
-            }
-
-            if name.starts_with('.') && name != ".claude" {
+            if crate::skip::is_skipped_entry(&name, parent_name.as_deref()) {
                 return None;
             }
 

@@ -10,6 +10,7 @@ mod paths;
 mod periodic;
 mod plugins;
 mod scripts;
+mod skip;
 mod watcher;
 
 use std::sync::{Arc, Mutex};
