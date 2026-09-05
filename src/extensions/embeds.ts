@@ -56,20 +56,24 @@ let fsListenerInit = false;
 function initFsListener() {
   if (fsListenerInit) return;
   fsListenerInit = true;
-  listen<{ kind: string; path: string }>("fs:change", (event) => {
-    const { path } = event.payload;
-    // Invalidate the resolved-path entry and all link-name entries that map to it
-    const links = pathToLinks.get(path);
-    if (!embedCache.has(path) && !links) return;
-    embedCache.delete(path);
-    inflightFetches.delete(path);
-    if (links) {
-      for (const link of links) {
-        embedCache.delete(link);
-        inflightFetches.delete(link);
+  listen<{ kind: string; path: string }[]>("fs:change", (event) => {
+    let invalidated = false;
+    for (const { path } of event.payload) {
+      // Invalidate the resolved-path entry and all link-name entries that map to it
+      const links = pathToLinks.get(path);
+      if (!embedCache.has(path) && !links) continue;
+      embedCache.delete(path);
+      inflightFetches.delete(path);
+      if (links) {
+        for (const link of links) {
+          embedCache.delete(link);
+          inflightFetches.delete(link);
+        }
+        pathToLinks.delete(path);
       }
-      pathToLinks.delete(path);
+      invalidated = true;
     }
+    if (!invalidated) return;
     for (const view of activeViews) {
       view.dispatch({ effects: embedContentReady.of(undefined) });
     }

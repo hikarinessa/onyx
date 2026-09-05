@@ -38,7 +38,9 @@ import { invalidateCache } from "./lib/ipcCache";
 import { loadAndApplyConfig } from "./lib/configBridge";
 import { clearEditorCache, migrateEditorCache, cancelPendingSave, lastSavedContent, replaceTabContent } from "./components/Editor";
 import { updateRecentDocPath, markRecentDocDeleted } from "./lib/recentDocs";
+import { createRefreshScheduler } from "./lib/refreshScheduler";
 
+/** One entry of an `fs:change` batch; Rust emits the batch as an array in observation order. */
 interface FsChangeEvent {
   kind: "create" | "modify" | "remove" | "rename";
   path: string;
@@ -690,12 +692,14 @@ export default function App() {
     // if a rename event arrives that matches, we cancel the remove processing.
     const pendingRemoves = new Map<string, ReturnType<typeof setTimeout>>();
 
-    // Central fs:change handler — cross-cutting concerns (tabs, cache, auto-save guard)
-    const unlistenFsChange = listen<FsChangeEvent>("fs:change", (event) => {
-      if (cancelled) return;
-      invalidateCache();
+    // The tree and the bookmark strip refresh once per burst of changes, not once per
+    // file: a git checkout produces thousands of events in seconds, and every refresh
+    // re-lists each expanded folder.
+    const treeRefresh = createRefreshScheduler(() => useAppStore.getState().bumpFileTreeVersion());
+    const bookmarkRefresh = createRefreshScheduler(() => useAppStore.getState().bumpBookmarkVersion());
 
-      const { kind, path, old_path, is_dir } = event.payload;
+    // Central fs:change handler — cross-cutting concerns (tabs, cache, auto-save guard)
+    const handleFsChange = ({ kind, path, old_path, is_dir }: FsChangeEvent) => {
       const store = useAppStore.getState();
 
       if (kind === "remove") {
@@ -724,8 +728,8 @@ export default function App() {
               s.addDeletedPath(tab.path);
             }
           }
-          s.bumpFileTreeVersion();
-          s.bumpBookmarkVersion();
+          treeRefresh.request();
+          bookmarkRefresh.request();
           markRecentDocDeleted(path);
         }, 300);
         pendingRemoves.set(path, timer);
@@ -765,16 +769,16 @@ export default function App() {
           }
         }
 
-        store.bumpFileTreeVersion();
+        treeRefresh.request();
         updateRecentDocPath(old_path, path, newName);
       } else if (kind === "create") {
-        store.bumpFileTreeVersion();
+        treeRefresh.request();
       }
 
       // Auto-reload open tabs on external changes.
       // Covers "modify" (normal edits) and "create" (atomic rename-over, e.g. git checkout).
       if (kind === "modify" || kind === "create") {
-        if (kind === "modify") store.bumpFileTreeVersion();
+        if (kind === "modify") treeRefresh.request();
 
         const changedTab = selectAllTabs(store).find((t) => t.path === path);
         if (changedTab) {
@@ -791,6 +795,12 @@ export default function App() {
           }
         }
       }
+    };
+
+    const unlistenFsChange = listen<FsChangeEvent[]>("fs:change", (event) => {
+      if (cancelled) return;
+      invalidateCache();
+      for (const change of event.payload) handleFsChange(change);
     });
 
     // Handle files opened via Finder "Open With" or dock icon drop
@@ -838,6 +848,8 @@ export default function App() {
       unlistenDragDrop.then((fn) => fn());
       for (const timer of pendingRemoves.values()) clearTimeout(timer);
       pendingRemoves.clear();
+      treeRefresh.cancel();
+      bookmarkRefresh.cancel();
     };
   }, []);
 

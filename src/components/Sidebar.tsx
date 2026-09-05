@@ -454,18 +454,12 @@ export function Sidebar() {
     if (fileTreeVersion > 0) loadDirectories();
   }, [fileTreeVersion]); // eslint-disable-line -- intentionally only react to version bumps
 
-  // Listen for file system changes to refresh
+  // External changes reach the tree through fileTreeVersion (App.tsx's fs:change handler).
+  // hide_empty_folders uses the SQLite index, so a folder created outside Onyx stays
+  // hidden until the indexer catches up; refresh once more when it reports done.
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>;
     let cancelled = false;
-    const unlistenFs = listen("fs:change", () => {
-      if (cancelled) return;
-      clearTimeout(timeout);
-      timeout = setTimeout(loadDirectories, 1000);
-    });
-    // hide_empty_folders uses the SQLite index; a Finder-created folder
-    // stays hidden until the indexer catches up. fs:change fires too early
-    // (index hasn't run yet) so we also refresh once the indexer reports done.
     const unlistenIndex = listen("index:complete", () => {
       if (cancelled) return;
       clearTimeout(timeout);
@@ -475,7 +469,6 @@ export function Sidebar() {
     return () => {
       cancelled = true;
       clearTimeout(timeout);
-      unlistenFs.then((fn) => fn());
       unlistenIndex.then((fn) => fn());
     };
   }, [loadDirectories]);

@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::{Emitter, State};
+use tauri::State;
 
 use crate::object_types::{self, ObjectType};
 use crate::periodic;
@@ -169,6 +169,7 @@ pub fn list_directory(path: String, sort_order: Option<String>, state: State<App
         .unwrap_or(true);
 
     let db = state.db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    let parent_name = dir_path.file_name().map(|n| n.to_string_lossy().to_string());
 
     let mut entries: Vec<DirEntry> = std::fs::read_dir(&dir_path)
         .map_err(|e| format!("Failed to read directory: {}", e))?
@@ -934,12 +935,12 @@ fn propagate_rename_to_wikilinks(
             continue;
         }
         rewritten += 1;
-        let _ = app.emit("fs:change", &FileChangeEvent {
+        crate::watcher::emit_changes(&app, vec![FileChangeEvent {
             kind: "modify".to_string(),
             path: source_path,
             old_path: None,
             is_dir: false,
-        });
+        }]);
     }
 
     Ok(rewritten)
@@ -1022,12 +1023,12 @@ pub fn rename_file(
     }
 
     // Emit fs:change rename event before returning
-    let _ = app.emit("fs:change", &FileChangeEvent {
+    crate::watcher::emit_changes(&app, vec![FileChangeEvent {
         kind: "rename".to_string(),
         path: new_path,
         old_path: Some(old_path),
         is_dir,
-    });
+    }]);
 
     Ok(())
 }
@@ -1063,12 +1064,12 @@ pub fn trash_file(path: String, state: State<AppState>, app: tauri::AppHandle) -
     }
 
     // Emit fs:change remove event before returning
-    let _ = app.emit("fs:change", &FileChangeEvent {
+    crate::watcher::emit_changes(&app, vec![FileChangeEvent {
         kind: "remove".to_string(),
         path,
         old_path: None,
         is_dir,
-    });
+    }]);
 
     Ok(())
 }
@@ -1371,12 +1372,12 @@ pub fn create_periodic_note(
     let _ = crate::indexer::Indexer::reindex_file(&full_path, &dir_id, &state.db);
 
     // Emit fs:change create event before returning
-    let _ = app.emit("fs:change", &FileChangeEvent {
+    crate::watcher::emit_changes(&app, vec![FileChangeEvent {
         kind: "create".to_string(),
         path: path_str.clone(),
         old_path: None,
         is_dir: false,
-    });
+    }]);
 
     Ok(CreatePeriodicNoteResult {
         path: path_str,

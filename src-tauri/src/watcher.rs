@@ -1,7 +1,8 @@
 use crate::db::Database;
 use crate::indexer::Indexer;
+use crate::skip;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -11,14 +12,43 @@ use tauri::Emitter;
 
 const SELF_WRITE_COOLDOWN: Duration = Duration::from_secs(2);
 const INDEX_DEBOUNCE: Duration = Duration::from_secs(3);
+/// How often queued watcher events are flushed to the frontend as one `fs:change` batch.
+const EMIT_INTERVAL: Duration = Duration::from_millis(100);
 
-/// Events emitted to the frontend
+/// One file-system change. The frontend always receives these in batches: the `fs:change`
+/// payload is a `Vec<FileChangeEvent>` in observation order.
 #[derive(Clone, serde::Serialize)]
 pub struct FileChangeEvent {
     pub kind: String, // "create", "modify", "remove", "rename"
     pub path: String,
     pub old_path: Option<String>,
     pub is_dir: bool,
+}
+
+/// Emit a batch of changes as a single `fs:change` event.
+///
+/// One event per batch keeps the host→page traffic proportional to bursts, not to files:
+/// a git worktree checkout produces thousands of FSEvents in a few seconds, and each
+/// per-file event used to cost a script evaluation plus a full sidebar refresh.
+/// An empty batch emits nothing.
+pub fn emit_changes(app: &tauri::AppHandle, changes: Vec<FileChangeEvent>) {
+    let batch = coalesce(changes);
+    if batch.is_empty() {
+        return;
+    }
+    if let Err(e) = app.emit("fs:change", &batch) {
+        log::error!("Failed to emit fs:change ({} changes): {}", batch.len(), e);
+    }
+}
+
+/// Collapse exact duplicates (same kind and path) to their first occurrence, keeping order.
+/// A create followed by a remove of the same path stays as two entries.
+fn coalesce(changes: Vec<FileChangeEvent>) -> Vec<FileChangeEvent> {
+    let mut seen: HashSet<(String, String)> = HashSet::new();
+    changes
+        .into_iter()
+        .filter(|c| seen.insert((c.kind.clone(), c.path.clone())))
+        .collect()
 }
 
 pub struct FileWatcher {
@@ -42,7 +72,10 @@ impl FileWatcher {
             Arc::new(Mutex::new(HashMap::new()));
 
         let writes_ref = recent_writes.clone();
-        let app_ref = app.clone();
+
+        // Changes observed but not yet sent to the frontend; flushed every EMIT_INTERVAL
+        let pending_emit: Arc<Mutex<Vec<FileChangeEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let emit_ref = pending_emit.clone();
 
         // Debounce map: path -> scheduled reindex time
         let pending_reindex: Arc<Mutex<HashMap<PathBuf, Instant>>> =
@@ -59,12 +92,19 @@ impl FileWatcher {
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_ref = shutdown.clone();
 
-        // Spawn a debounce processor thread
+        // Registered roots, for skip checks on the part of a path below its root
+        let roots: Vec<PathBuf> = dir_pairs.iter().map(|(_, p)| p.clone()).collect();
+
+        // Spawn a processor thread: flushes the emit queue every tick, runs debounced
+        // reindexes and rescans when their deadlines pass
         let db_debounce = db.clone();
         let dirs_debounce = dir_pairs.clone();
         let debounce_thread = std::thread::spawn(move || {
             while !shutdown_ref.load(Ordering::Relaxed) {
-                std::thread::sleep(Duration::from_millis(500));
+                std::thread::sleep(EMIT_INTERVAL);
+
+                let batch: Vec<FileChangeEvent> = std::mem::take(&mut *pending_emit.lock().unwrap());
+                emit_changes(&app, batch);
 
                 let now = Instant::now();
                 let mut ready: Vec<(PathBuf, String)> = Vec::new();
@@ -167,6 +207,15 @@ impl FileWatcher {
                         continue;
                     }
 
+                    // Skip folders Onyx never shows (.git, node_modules, agent worktrees, …)
+                    let skipped = roots.iter().any(|root| {
+                        path.strip_prefix(root)
+                            .map_or(false, |rel| skip::is_skipped_path(rel))
+                    });
+                    if skipped {
+                        continue;
+                    }
+
                     // Suppress self-write events
                     {
                         let mut writes = writes_ref.lock().unwrap();
@@ -189,16 +238,12 @@ impl FileWatcher {
                         _ => continue,
                     };
 
-                    let change = FileChangeEvent {
+                    emit_ref.lock().unwrap().push(FileChangeEvent {
                         kind: kind.to_string(),
                         path: path.to_string_lossy().to_string(),
                         old_path: None,
                         is_dir,
-                    };
-
-                    if let Err(e) = app_ref.emit("fs:change", &change) {
-                        log::error!("Failed to emit fs:change: {}", e);
-                    }
+                    });
 
                     // Schedule reindex with debounce for .md files
                     if is_md {
@@ -248,5 +293,53 @@ impl Drop for FileWatcher {
         if let Some(handle) = self.debounce_thread.take() {
             let _ = handle.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn change(kind: &str, path: &str) -> FileChangeEvent {
+        FileChangeEvent {
+            kind: kind.to_string(),
+            path: path.to_string(),
+            old_path: None,
+            is_dir: false,
+        }
+    }
+
+    fn keys(batch: &[FileChangeEvent]) -> Vec<(String, String)> {
+        batch.iter().map(|c| (c.kind.clone(), c.path.clone())).collect()
+    }
+
+    #[test]
+    fn coalesce_drops_exact_duplicates_and_keeps_order() {
+        let batch = coalesce(vec![
+            change("create", "/a.md"),
+            change("modify", "/a.md"),
+            change("modify", "/a.md"),
+            change("create", "/b.md"),
+            change("modify", "/a.md"),
+        ]);
+        assert_eq!(
+            keys(&batch),
+            vec![
+                ("create".into(), "/a.md".into()),
+                ("modify".into(), "/a.md".into()),
+                ("create".into(), "/b.md".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn coalesce_keeps_create_then_remove_of_one_path() {
+        let batch = coalesce(vec![change("create", "/a.md"), change("remove", "/a.md")]);
+        assert_eq!(batch.len(), 2);
+    }
+
+    #[test]
+    fn coalesce_of_nothing_is_nothing() {
+        assert!(coalesce(Vec::new()).is_empty());
     }
 }
