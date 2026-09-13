@@ -4419,6 +4419,62 @@
   border-radius: 2px;
 }
 
+/* Footnote numbers, at the reference and at the definition. Raised with `top` rather than
+   `vertical-align: super`, which would make every line holding a footnote taller than its
+   neighbours. */
+.cm-footnote-ref,
+.cm-footnote-def {
+  position: relative;
+  top: -0.5em;
+  line-height: 0;
+  font-family: var(--font-ui);
+  font-size: 0.7em;
+  font-weight: 600;
+  color: var(--link-color);
+  cursor: pointer;
+  padding: 0 0.15em;
+  border-radius: 2px;
+  user-select: none;
+}
+
+.cm-footnote-def {
+  margin-right: 0.35em;
+}
+
+.cm-footnote-body,
+.cm-footnote-body span {
+  color: var(--text-primary) !important;
+  text-decoration: none !important;
+}
+
+.cm-footnote-ref:hover,
+.cm-footnote-def:hover {
+  background: var(--accent-muted);
+}
+
+.cm-tooltip.cm-tooltip-hover {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-popup) !important;
+}
+
+.cm-footnote-tooltip {
+  max-width: 360px;
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.cm-footnote-tooltip-number {
+  margin-right: 6px;
+  font-weight: 600;
+  color: var(--link-color);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Print / PDF export styles
    Unlayered — must compete with CM6 runtime styles.

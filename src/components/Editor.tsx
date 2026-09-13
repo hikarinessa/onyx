@@ -31,6 +31,7 @@ import { autocompleteExtension } from "../extensions/autocomplete";
 import { symbolWrapExtension } from "../extensions/symbolWrap";
 import { livePreviewExtension, resetHangMetrics } from "../extensions/livePreview";
 import { criticMarkupExtension, getSuggestions } from "../extensions/criticMarkup";
+import { footnotesExtension } from "../extensions/footnotes";
 import { brokenLinksExtension, refreshBrokenLinks, setBrokenLinkContextHook } from "../extensions/brokenLinks";
 import { createNoteWithContent } from "../lib/fileOps";
 import { lintingExtension, autofixContent, applyLintFix } from "../extensions/linting";
@@ -307,6 +308,7 @@ function buildExtensions(): Extension[] {
     symbolWrapExtension(),
     livePreviewExtension(),
     ...criticMarkupExtension(),
+    ...footnotesExtension(),
     ...brokenLinksExtension(),
     ...embedExtension(),
     ...blocksExtension(),

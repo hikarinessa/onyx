@@ -8,9 +8,10 @@ import {
 import { RangeSetBuilder } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
 import { previewModeField } from "./livePreview";
+import { followFootnoteAt, jumpToDefinition, jumpToReference } from "./footnotes";
 
 /**
- * Link handling: wikilinks + URLs.
+ * Link handling: wikilinks + URLs, plus footnote jumps within the note.
  *
  * Owns ALL click dispatch for link-like elements. Uses posAtCoords + regex
  * against the document text — never DOM classes or textContent (CM6's syntax
@@ -152,7 +153,7 @@ const linkDecorations = ViewPlugin.fromClass(
 
 // ── Click dispatch ──
 //
-// Single handler, priority chain: wikilink → URL.
+// Single handler, priority chain: footnote → wikilink → URL.
 // mousedown for preview mode (before CM6 moves cursor).
 // click for source mode (Cmd+click only).
 // All extraction via posAtCoords + regex against document text.
@@ -169,6 +170,20 @@ const linkClickHandler = EditorView.domEventHandlers({
       event.preventDefault();
       openExternalUrl(urlEl.dataset.url);
       return true;
+    }
+
+    // Footnote number widgets: a reference goes to its definition, a definition's number
+    // back to the first reference.
+    const footnoteEl = target.closest("[data-footnote-ref], [data-footnote-def]") as HTMLElement | null;
+    if (footnoteEl) {
+      const { footnoteRef, footnoteDef } = footnoteEl.dataset;
+      const moved = footnoteRef
+        ? jumpToDefinition(view, footnoteRef)
+        : footnoteDef
+          ? jumpToReference(view, footnoteDef)
+          : false;
+      if (moved) event.preventDefault();
+      return moved;
     }
 
     // 2. Regular text: posAtCoords + regex against document text
@@ -203,6 +218,12 @@ const linkClickHandler = EditorView.domEventHandlers({
     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
     if (pos == null) return false;
 
+    // Footnote?
+    if (followFootnoteAt(view, pos)) {
+      event.preventDefault();
+      return true;
+    }
+
     // Wikilink?
     const linkText = wikilinkAtPos(view.state.doc, pos);
     if (linkText && wikilinkFollowRef.current) {
@@ -223,12 +244,14 @@ const linkClickHandler = EditorView.domEventHandlers({
   },
 });
 
-/** Cmd+Enter keymap — follow wikilink or open URL under cursor */
+/** Cmd+Enter keymap — follow footnote or wikilink, or open URL, under cursor */
 const linkKeymap = keymap.of([
   {
     key: "Mod-Enter",
     run(view) {
       const pos = view.state.selection.main.head;
+
+      if (followFootnoteAt(view, pos)) return true;
 
       const linkText = wikilinkAtPos(view.state.doc, pos);
       if (linkText && wikilinkFollowRef.current) {
