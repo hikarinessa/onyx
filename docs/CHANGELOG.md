@@ -4,6 +4,11 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Footnotes in Preview.** A `[^label]` reference shows as its superscript number and its definition's `[^label]:` marker as the same number, numbered in order of first reference. Hovering a reference shows the footnote text; clicking it moves the cursor to the definition, and clicking the definition's number goes back to the first reference. ⌘-click and ⌘Enter do the same in Source mode. As elsewhere in live preview, the line holding the cursor shows the raw syntax for editing. References with no definition, and definitions nothing refers to, stay plain text
+
 ## [0.11.6] — 2026-09-13
 
 ### Added

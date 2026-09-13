@@ -61,7 +61,7 @@ src/                          # Frontend (React + TypeScript)
 │   └── LintPanel.tsx         #   98 lines — Lint diagnostics panel (toggle from status bar)
 ├── extensions/
 │   ├── frontmatter.ts        #  176 lines — CM6: frontmatter detection, styling, auto-fold, toggle-fold command
-│   ├── wikilinks.ts          #  273 lines — CM6: link handling (wikilinks + URLs), click dispatch, decorations
+│   ├── wikilinks.ts          #  296 lines — CM6: link handling (wikilinks + URLs + footnote jumps), click dispatch, decorations
 │   ├── tags.ts               #  117 lines — CM6: #tag syntax highlighting (viewport-aware)
 │   ├── formatting.ts         #  118 lines — CM6: Cmd+B/I/Shift+C toggle wrap (multi-cursor safe)
 │   ├── outliner.ts           #  371 lines — CM6: list item indent/outdent/move/enter + ordered renumbering + list type cycle
@@ -69,6 +69,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── autocomplete.ts       #   98 lines — CM6: wikilink + tag + slash command autocomplete
 │   ├── slashCommands.ts      #  221 lines — CM6: slash commands (/table, /code, /callout, /today, /template)
 │   ├── criticMarkup.ts       #   439 lines — CM6: CriticMarkup decorations, Review mode field, decisions
+│   ├── footnotes.ts          #   215 lines — CM6: footnote numbers in preview, hover text, jump targets (clicks routed via wikilinks.ts)
 │   ├── livePreview.ts        # 1579 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, URLs, callouts, tag chips, fold, hanging indent, indent guides)
 │   ├── embeds.ts             #  712 lines — CM6: ![[...]] note/image embeds (StateField-based block decorations)
 │   ├── headingFold.ts        #   71 lines — CM6: foldService for heading-based section folding
@@ -82,6 +83,7 @@ src/                          # Frontend (React + TypeScript)
 │   └── tableEditor.ts        #  175 lines — CM6: table keymap (Tab/Enter) + TSV paste + command palette
 ├── lib/
 │   ├── criticMarkup.ts       #   359 lines — CriticMarkup parser + decision operations (accept/reject/dismiss/reply)
+│   ├── footnotes.ts          #   189 lines — Footnote parser (references, multi-line definitions, first-reference numbering)
 │   ├── fileOps.ts            #  205 lines — Centralized file mutations (with link warnings, fs:change event-driven)
 │   ├── openFile.ts           #   91 lines — Shared open-file-in-editor utility (with nav stack, orphan detection)
 │   ├── periodicNotes.ts      #   37 lines — Create/open periodic notes utility
