@@ -4,7 +4,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
-## [Unreleased]
+## [0.11.6] — 2026-09-13
 
 ### Added
 - **Onyx reopens at the size and position it had when last quit.** A window last seen on a monitor that is no longer connected opens on a connected one instead
