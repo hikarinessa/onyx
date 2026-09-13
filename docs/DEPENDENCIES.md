@@ -22,6 +22,7 @@ Actual dependencies used in the project, with rationale. Updated for v0.10.3.
 | Serialization | `serde` + `serde_json` | 1 | JSON serialization for IPC, config, frontmatter |
 | Logging | `log` + `tauri-plugin-log` | 0.4 / 2 | Structured logging from Rust to WebView console |
 | URL opener | `tauri-plugin-opener` | 2.5 | Opens http/https URLs in default browser. `opener:default` capability permission |
+| Window state | `tauri-plugin-window-state` | 2.4 | Reopens the window at its last size and position (`SIZE \| POSITION` flags only; visibility, decorations and fullscreen stay under `tauri.conf.json`). Moves a window saved on a disconnected monitor back on screen. Rust-side only, so no capability permission. State file: `~/Library/Application Support/app.onyx.notes/.window-state.json`, shared by dev builds and the installed app |
 | Tauri | `tauri` | 2.10 | App framework, IPC, window management, event system |
 
 ### Not Yet Used (planned)

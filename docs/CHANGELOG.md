@@ -6,6 +6,9 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ## [Unreleased]
 
+### Added
+- **Onyx reopens at the size and position it had when last quit.** A window last seen on a monitor that is no longer connected opens on a connected one instead
+
 ### Fixed
 - **Input died for good after a burst of external file changes** (#115). A git worktree checkout inside a registered folder produced thousands of watcher events in seconds; each one re-listed every expanded folder on the host's main thread, WebKit's message queue overflowed, and WebKit then discarded everything the page sent for the rest of the session — clicks, keys and titlebar drags included, while the window kept painting. The watcher now flushes changes every 100 ms as one `fs:change` batch with duplicates dropped, and the sidebar and bookmark strip refresh once per burst (100 ms trailing, 2 s ceiling) instead of once per file
 - **Claude Code agent worktrees are no longer indexed, watched, or shown.** `.claude/worktrees` holds full checkouts that come and go with agent runs; they made up 8.7k of 13.6k index rows. The skip rules for the indexer, the watcher and the file tree now share one module, so the three can no longer disagree about which folders exist

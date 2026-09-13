@@ -86,6 +86,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // Reopen the window at its last size and position. Visibility, decorations and
+        // fullscreen stay under tauri.conf.json; the plugin also pulls a window saved on a
+        // since-disconnected monitor back onto a connected one.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION,
+                )
+                .build(),
+        )
         .setup(|app| {
             // Build native menu bar
             // macOS: first submenu becomes the app menu. Add explicit one
