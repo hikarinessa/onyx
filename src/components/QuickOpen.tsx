@@ -114,10 +114,10 @@ export function QuickOpen() {
             query: query.trim(),
           });
           if (!cancelled) {
-            // Files opened often and lately rise above other matches; the rest keep
-            // the fuzzy-match order. Ranked before the cut so a favourite isn't dropped.
+            // Frecency reorders the ten best matches and never reaches past them, so
+            // a file used often can rise, but can't push out the closest match.
             setResults(
-              rankByFrecency("files", hits, (f) => f.path).slice(0, 10).map((f) => ({
+              rankByFrecency("files", hits.slice(0, 10), (f) => f.path).map((f) => ({
                 name: f.title ? f.title + ".md" : f.path.split("/").pop() || f.path,
                 path: f.path,
               }))

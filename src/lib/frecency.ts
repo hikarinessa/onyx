@@ -1,9 +1,11 @@
 /**
  * Frecency: rank by how often and how recently something was chosen.
  *
- * score = uses × 0.5^(age / HALF_LIFE), so a use counts half as much a week later. Used
- * by the command palette (command ids) and Quick Open (file paths). Kept in localStorage,
- * like recent docs: losing it only loses ordering, never data.
+ * score = uses × 0.5^(age / HALF_LIFE), so a use counts half as much a week later, and
+ * a score under MIN_SCORE counts as never used: one use fades out after about three
+ * weeks rather than outranking better matches forever. Used by the command palette
+ * (command ids) and Quick Open (file paths). Kept in localStorage, like recent docs:
+ * losing it only loses ordering, never data.
  */
 
 export type FrecencyNamespace = "commands" | "files";
@@ -16,6 +18,7 @@ interface Entry {
 
 const HALF_LIFE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 500;
+const MIN_SCORE = 0.1;
 const storageKey = (ns: FrecencyNamespace) => `onyx-frecency-${ns}`;
 
 const cache = new Map<FrecencyNamespace, Record<string, Entry>>();
@@ -26,7 +29,10 @@ function load(ns: FrecencyNamespace): Record<string, Entry> {
   let table: Record<string, Entry> = {};
   try {
     const raw = localStorage.getItem(storageKey(ns));
-    if (raw) table = JSON.parse(raw);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      table = parsed as Record<string, Entry>;
+    }
   } catch {
     // unreadable or unavailable: start empty
   }
@@ -35,8 +41,9 @@ function load(ns: FrecencyNamespace): Record<string, Entry> {
 }
 
 export function frecencyScore(entry: Entry | undefined, now: number): number {
-  if (!entry) return 0;
-  return entry.uses * Math.pow(0.5, (now - entry.last) / HALF_LIFE_MS);
+  if (!entry || typeof entry.uses !== "number" || typeof entry.last !== "number") return 0;
+  const score = entry.uses * Math.pow(0.5, (now - entry.last) / HALF_LIFE_MS);
+  return score < MIN_SCORE ? 0 : score;
 }
 
 export function recordUse(ns: FrecencyNamespace, key: string, now = Date.now()): void {
@@ -44,10 +51,12 @@ export function recordUse(ns: FrecencyNamespace, key: string, now = Date.now()):
   const prev = table[key];
   table[key] = { uses: (prev?.uses ?? 0) + 1, last: now };
 
-  const keys = Object.keys(table);
-  if (keys.length > MAX_ENTRIES) {
-    keys.sort((a, b) => frecencyScore(table[a], now) - frecencyScore(table[b], now));
-    for (const k of keys.slice(0, keys.length - MAX_ENTRIES)) delete table[k];
+  // Over the cap, drop the weakest, never the entry just used: a full table of strong
+  // entries would otherwise evict every newcomer on arrival.
+  const others = Object.keys(table).filter((k) => k !== key);
+  if (others.length + 1 > MAX_ENTRIES) {
+    others.sort((a, b) => frecencyScore(table[a], now) - frecencyScore(table[b], now));
+    for (const k of others.slice(0, others.length + 1 - MAX_ENTRIES)) delete table[k];
   }
   try {
     localStorage.setItem(storageKey(ns), JSON.stringify(table));

@@ -44,6 +44,32 @@ describe("frecency", () => {
     expect(rankByFrecency("files", ["/b.md", "/a.md"], (x) => x, 1000)).toEqual(["/a.md", "/b.md"]);
   });
 
+  it("treats a long-unused entry as never used", () => {
+    const now = 100 * DAY;
+    recordUse("files", "stale", now - 60 * DAY);
+    expect(rankByFrecency("files", ["best", "stale"], (x) => x, now)).toEqual(["best", "stale"]);
+  });
+
+  it("keeps the entry just used when the table is full of stronger ones", () => {
+    const now = 100 * DAY;
+    for (let i = 0; i < 500; i++) {
+      recordUse("files", `k${i}`, now);
+      recordUse("files", `k${i}`, now);
+    }
+    recordUse("files", "newcomer", now);
+    const stored = JSON.parse(localStorage.getItem("onyx-frecency-files")!);
+    expect(stored.newcomer).toBeDefined();
+    expect(Object.keys(stored)).toHaveLength(500);
+  });
+
+  it("survives a corrupt stored value", () => {
+    localStorage.setItem("onyx-frecency-commands", "null");
+    resetFrecencyCache();
+    expect(rankByFrecency("commands", ["a", "b"], (x) => x, 1000)).toEqual(["a", "b"]);
+    recordUse("commands", "b", 1000);
+    expect(rankByFrecency("commands", ["a", "b"], (x) => x, 1000)).toEqual(["b", "a"]);
+  });
+
   it("keeps namespaces apart", () => {
     recordUse("commands", "x", 1000);
     expect(rankByFrecency("files", ["y", "x"], (v) => v, 1000)).toEqual(["y", "x"]);
