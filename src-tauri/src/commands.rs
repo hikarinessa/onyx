@@ -401,6 +401,7 @@ pub fn register_directory(
         let mut dirs = state.directories.lock().map_err(|e| e.to_string())?;
         dirs.register(PathBuf::from(path), label, color)?
     };
+    sync_index_roots(&state)?;
 
     // Now safe to lock watcher — directories lock is released
     let mut watcher_lock = state.watcher.lock().map_err(|e| e.to_string())?;
@@ -435,11 +436,23 @@ pub fn unregister_directory(
     let mut dirs = state.directories.lock().map_err(|e| e.to_string())?;
     dirs.unregister(&id)?;
     drop(dirs);
+    sync_index_roots(&state)?;
 
     // Remove indexed files for this directory (cascading deletes handle links/tags)
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.delete_by_dir(&id)?;
 
+    Ok(())
+}
+
+/// Hand the index the registered roots, in sidebar order, for root-relative links.
+/// Call after anything that changes the directory list or its order.
+pub fn sync_index_roots(state: &State<AppState>) -> Result<(), String> {
+    let roots: Vec<String> = {
+        let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+        dirs.list().iter().map(|d| d.path.to_string_lossy().to_string()).collect()
+    };
+    state.db.lock().map_err(|e| e.to_string())?.set_roots(roots);
     Ok(())
 }
 
@@ -489,8 +502,8 @@ pub fn reorder_directories(
     ordered_ids: Vec<String>,
     state: State<AppState>,
 ) -> Result<(), String> {
-    let mut dirs = state.directories.lock().map_err(|e| e.to_string())?;
-    dirs.reorder(&ordered_ids)
+    state.directories.lock().map_err(|e| e.to_string())?.reorder(&ordered_ids)?;
+    sync_index_roots(&state)
 }
 
 /// Sink for the frontend's global error trap (main.tsx). Webview exceptions
@@ -591,7 +604,12 @@ fn search_content_blocking(
             })
         });
     }
-    let mut results = found.into_inner().unwrap_or_default();
+    // A poisoned lock means a walker thread panicked: say so rather than let a crashed
+    // search read as "no matches". The results gathered before it are still good.
+    let mut results = found.into_inner().unwrap_or_else(|poisoned| {
+        log::error!("Content search: a walker thread panicked; results may be incomplete");
+        poisoned.into_inner()
+    });
 
     // Search orphan files
     for orphan in &orphan_paths {
@@ -686,9 +704,10 @@ fn search_file(
                 heading_hits += hits;
             }
             if line_matches.len() < 10 {
-                // Lowercasing can change byte lengths outside ASCII; only trust the
-                // match offset when it can't have moved.
-                let match_at = (line_lower.len() == line.len())
+                // The offset is found in the lowercased line. For an ASCII line the two
+                // are byte-for-byte aligned; otherwise lowercasing can shift offsets
+                // (İ grows, ẞ shrinks), so window from the line start instead.
+                let match_at = line.is_ascii()
                     .then(|| line_lower.find(query_lower))
                     .flatten();
                 line_matches.push(LineMatch {
@@ -751,10 +770,17 @@ mod search_tests {
     }
 
     #[test]
-    fn a_snippet_never_splits_a_character() {
-        let line = "é".repeat(150); // 300 bytes, every char two bytes
-        let s = snippet(&line, Some(101));
+    fn a_snippet_never_splits_a_character_at_either_end() {
+        // Two-byte chars exercise rounding at the start only (start + 200 lands on a
+        // boundary again); three-byte chars also put the end mid-character.
+        let two = "é".repeat(150); // 300 bytes, 2-byte chars
+        let s = snippet(&two, Some(101));
         assert!(s.trim_matches('…').chars().all(|c| c == 'é'));
+        let three = "€".repeat(100); // 300 bytes, 3-byte chars
+        for at in [60, 61, 62, 100, 150] {
+            let s = snippet(&three, Some(at));
+            assert!(s.trim_matches('…').chars().all(|c| c == '€'), "at {at}: {s}");
+        }
     }
 
     #[test]
@@ -787,13 +813,21 @@ pub fn get_index_stats(
 /// disagree about whether a link has somewhere to go.
 fn resolve_link_target(
     link: &str,
-    context_dir: &Path,
+    context_path: &Path,
     state: &State<AppState>,
 ) -> Result<Option<String>, String> {
-    // Normalise: strip .md suffix if present (avoid double .md)
-    let base = link.strip_suffix(".md").unwrap_or(link);
+    // The index answers first, by the same rule backlinks and rename rewriting use
+    // (db::resolve_link), so a click opens exactly the note the link is recorded against.
+    {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        if let Some(path) = db.resolve_link_path(link, &context_path.to_string_lossy())? {
+            return Ok(Some(path));
+        }
+    }
 
-    // Step 1: Path with '/' — resolve relative to each registered directory root
+    // A note not indexed yet (just created, or indexing still running) is found on disk,
+    // in the same order: root-relative folder path, then the linking note's folder.
+    let base = link.strip_suffix(".md").unwrap_or(link);
     if base.contains('/') {
         let dirs = state.directories.lock().map_err(|e| e.to_string())?;
         for dir in dirs.list() {
@@ -804,18 +838,14 @@ fn resolve_link_target(
             }
         }
     }
-
-    // Step 2: Same directory as context file
+    let context_dir = context_path.parent().map(PathBuf::from).unwrap_or_default();
     let same_dir_candidate = context_dir.join(format!("{}.md", base));
     if same_dir_candidate.exists() {
         let canonical = same_dir_candidate.canonicalize().map_err(|e| e.to_string())?;
         validate_path(&canonical, state)?;
         return Ok(Some(canonical.to_string_lossy().to_string()));
     }
-
-    // Step 3: Query SQLite by title or filename (already in index = already validated)
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.resolve_by_title(base)
+    Ok(None)
 }
 
 #[tauri::command]
@@ -824,9 +854,7 @@ pub fn resolve_wikilink(
     context_path: String,
     state: State<AppState>,
 ) -> Result<Option<String>, String> {
-    let context = PathBuf::from(&context_path);
-    let context_dir = context.parent().map(PathBuf::from).unwrap_or_default();
-    resolve_link_target(&link, &context_dir, &state)
+    resolve_link_target(&link, Path::new(&context_path), &state)
 }
 
 /// Which of a document's wikilinks have no target. One call per document rather than
@@ -838,11 +866,9 @@ pub fn find_broken_wikilinks(
     context_path: String,
     state: State<AppState>,
 ) -> Result<Vec<String>, String> {
-    let context = PathBuf::from(&context_path);
-    let context_dir = context.parent().map(PathBuf::from).unwrap_or_default();
     let mut broken = Vec::new();
     for link in links {
-        if resolve_link_target(&link, &context_dir, &state)?.is_none() {
+        if resolve_link_target(&link, Path::new(&context_path), &state)?.is_none() {
             broken.push(link);
         }
     }

@@ -10,6 +10,9 @@ fn escape_like_literal(s: &str) -> String {
 
 pub struct Database {
     conn: Connection,
+    /// Registered directory roots in sidebar order, for root-relative `[[folder/note]]`
+    /// links. Kept in step with the directory list by `set_roots`.
+    roots: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -65,48 +68,114 @@ pub struct BookmarkRecord {
 }
 
 /// Schema changes on top of the base tables, oldest first (see `run_migrations`).
-const SCHEMA_MIGRATIONS: &[&str] = &[
-    // 1: pending links resolve case-insensitively, like every other wikilink lookup
-    "CREATE INDEX IF NOT EXISTS idx_links_target_nocase ON links(target COLLATE NOCASE);",
+/// Entry n brings the database to version n + 1. Once released, append; never edit.
+const SCHEMA_MIGRATIONS: &[fn(&Connection) -> Result<(), String>] = &[
+    add_link_target_stem,
 ];
 
-/// A wikilink target's file id, or None. Title (file stem) matches win and ties go to
-/// the first path alphabetically, the same rule `resolve_by_title` uses for clicks, so
-/// backlinks and click-to-follow agree on which note a duplicate name means.
-fn resolve_link_target(conn: &Connection, target: &str) -> Result<Option<i64>, String> {
-    let id: Option<i64> = conn.query_row(
-        "SELECT id FROM files WHERE title = ?1 COLLATE NOCASE ORDER BY path LIMIT 1",
-        params![target],
-        |row| row.get(0),
-    ).optional().map_err(|e| format!("Failed to resolve link target: {}", e))?;
-    if id.is_some() {
-        return Ok(id);
+/// 1: `links.target_stem`, the lowercased note name a link can resolve to, indexed so
+/// every link naming a note is one lookup away when that note is indexed or removed.
+fn add_link_target_stem(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "ALTER TABLE links ADD COLUMN target_stem TEXT;
+         CREATE INDEX IF NOT EXISTS idx_links_target_stem ON links(target_stem);",
+    ).map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, String)> = {
+        let mut stmt = conn.prepare("SELECT id, target FROM links").map_err(|e| e.to_string())?;
+        let mapped = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).map_err(|e| e.to_string())?;
+        mapped.collect::<Result<_, _>>().map_err(|e| e.to_string())?
+    };
+    for (id, target) in rows {
+        conn.execute("UPDATE links SET target_stem = ?1 WHERE id = ?2", params![link_stem(&target), id])
+            .map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
 
-    // [[folder/note]] and [[note.md]] resolve by path suffix. Narrow by the last
-    // segment's stem through the title index first; the unindexed scan remains only for
-    // rows whose title is unset (a folder rename clears titles until reindex).
-    let lower = target.to_ascii_lowercase();
-    if !(target.contains('/') || lower.ends_with(".md")) {
+/// The note name a link target can only resolve to: its last path segment, without
+/// `.md`, lowercased. `[[Notes/Consent]]` and `[[consent.md]]` both give `consent`.
+fn link_stem(target: &str) -> String {
+    let base = target.strip_suffix(".md").unwrap_or(target);
+    base.rsplit('/').next().unwrap_or(base).to_lowercase()
+}
+
+fn parent_dir(path: &str) -> &str {
+    path.rsplit_once('/').map_or("", |(dir, _)| dir)
+}
+
+/// Where a wikilink written in a note in `source_dir` points. The single rule behind
+/// backlinks, click-to-follow, broken-link dimming and rename rewriting, so none of them
+/// can disagree about a link. In order:
+///   1. `[[folder/note]]` relative to a registered root, roots in sidebar order
+///   2. the note's name in the linking note's own folder (`[[sub/note]]` relative to it)
+///   3. any note with that name, the first path alphabetically
+///   4. `[[folder/note]]` as the tail of any path, first alphabetically
+/// Names match case-insensitively for ASCII letters, as SQLite's NOCASE does. Every
+/// candidate carries the link's last segment as its title, so the title index finds
+/// them and the rest is plain string comparison: no link text is ever a LIKE pattern.
+fn resolve_link(
+    conn: &Connection,
+    roots: &[String],
+    target: &str,
+    source_dir: &str,
+) -> Result<Option<(i64, String)>, String> {
+    let base = target.strip_suffix(".md").unwrap_or(target);
+    let stem = base.rsplit('/').next().unwrap_or(base);
+    if stem.is_empty() {
         return Ok(None);
     }
-    let last = target.rsplit('/').next().unwrap_or(target);
-    let stem = if last.to_ascii_lowercase().ends_with(".md") { &last[..last.len() - 3] } else { last };
-    let escaped = escape_like_literal(target);
-    let suffix_match = "(path LIKE '%/' || ?1 || '.md' ESCAPE '\\' OR path LIKE '%/' || ?1 ESCAPE '\\')";
-    let id: Option<i64> = conn.query_row(
-        &format!("SELECT id FROM files WHERE title = ?2 COLLATE NOCASE AND {suffix_match} ORDER BY path LIMIT 1"),
-        params![escaped, stem],
-        |row| row.get(0),
-    ).optional().map_err(|e| format!("Failed to resolve link target: {}", e))?;
-    if id.is_some() {
-        return Ok(id);
+    let candidates: Vec<(i64, String)> = {
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, path FROM files WHERE title = ?1 COLLATE NOCASE ORDER BY path",
+        ).map_err(|e| format!("Failed to resolve link target: {}", e))?;
+        let rows = stmt.query_map(params![stem], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(|e| format!("Failed to resolve link target: {}", e))?;
+        rows.collect::<Result<_, _>>().map_err(|e| format!("Failed to resolve link target: {}", e))?
+    };
+    let at = |path: &str| candidates.iter().find(|(_, p)| p.eq_ignore_ascii_case(path)).cloned();
+
+    let nested = base.contains('/');
+    if nested {
+        for root in roots {
+            if let Some(hit) = at(&format!("{}/{}.md", root.trim_end_matches('/'), base)) {
+                return Ok(Some(hit));
+            }
+        }
     }
-    conn.query_row(
-        &format!("SELECT id FROM files WHERE title IS NULL AND {suffix_match} ORDER BY path LIMIT 1"),
-        params![escaped],
-        |row| row.get(0),
-    ).optional().map_err(|e| format!("Failed to resolve link target: {}", e))
+    if let Some(hit) = at(&format!("{}/{}.md", source_dir, base)) {
+        return Ok(Some(hit));
+    }
+    if !nested {
+        return Ok(candidates.into_iter().next());
+    }
+    let tail = format!("/{}.md", base);
+    Ok(candidates.into_iter().find(|(_, p)| {
+        p.len() >= tail.len() && p[p.len() - tail.len()..].eq_ignore_ascii_case(&tail)
+    }))
+}
+
+/// Re-resolve every link whose name is `stem`, after a note with that name appeared,
+/// moved or went away. A link resolved earlier may now have a better target (the new
+/// note sorts first, or sits in the linking note's folder), not just a missing one.
+fn reresolve_links_named(conn: &Connection, roots: &[String], stem: &str) -> Result<(), String> {
+    let links: Vec<(i64, String, String, Option<i64>)> = {
+        let mut stmt = conn.prepare_cached(
+            "SELECT l.id, l.target, s.path, l.target_id
+             FROM links l JOIN files s ON s.id = l.source_id
+             WHERE l.target_stem = ?1",
+        ).map_err(|e| format!("Failed to find links to re-resolve: {}", e))?;
+        let rows = stmt.query_map(params![stem], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .map_err(|e| format!("Failed to find links to re-resolve: {}", e))?;
+        rows.collect::<Result<_, _>>().map_err(|e| format!("Failed to find links to re-resolve: {}", e))?
+    };
+    for (id, target, source_path, current) in links {
+        let resolved = resolve_link(conn, roots, &target, parent_dir(&source_path))?.map(|(id, _)| id);
+        if resolved != current {
+            conn.execute("UPDATE links SET target_id = ?1 WHERE id = ?2", params![resolved, id])
+                .map_err(|e| format!("Failed to update link target: {}", e))?;
+        }
+    }
+    Ok(())
 }
 
 fn replace_tags(conn: &Connection, file_id: i64, tags: &[String]) -> Result<(), String> {
@@ -121,15 +190,22 @@ fn replace_tags(conn: &Connection, file_id: i64, tags: &[String]) -> Result<(), 
     Ok(())
 }
 
-fn replace_links(conn: &Connection, file_id: i64, links: &[LinkRecord]) -> Result<(), String> {
+fn replace_links(
+    conn: &Connection,
+    roots: &[String],
+    file_id: i64,
+    source_path: &str,
+    links: &[LinkRecord],
+) -> Result<(), String> {
     conn.execute("DELETE FROM links WHERE source_id = ?1", params![file_id])
         .map_err(|e| format!("Failed to delete old links: {}", e))?;
+    let source_dir = parent_dir(source_path);
     for link in links {
-        let target_id = resolve_link_target(conn, &link.target)?;
+        let target_id = resolve_link(conn, roots, &link.target, source_dir)?.map(|(id, _)| id);
         conn.execute(
-            "INSERT INTO links (source_id, target, target_id, line_number, context)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![file_id, link.target, target_id, link.line_number, link.context],
+            "INSERT INTO links (source_id, target, target_stem, target_id, line_number, context)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![file_id, link.target, link_stem(&link.target), target_id, link.line_number, link.context],
         ).map_err(|e| format!("Failed to insert link: {}", e))?;
     }
     Ok(())
@@ -154,7 +230,7 @@ impl Database {
              PRAGMA foreign_keys = ON;"
         ).map_err(|e| format!("Failed to set pragmas: {}", e))?;
 
-        let db = Self { conn };
+        let db = Self { conn, roots: Vec::new() };
         db.run_migrations()?;
         Ok(db)
     }
@@ -215,10 +291,10 @@ impl Database {
         let version: usize = self.conn
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .map_err(|e| format!("Failed to read schema version: {}", e))? as usize;
-        for (i, sql) in SCHEMA_MIGRATIONS.iter().enumerate().skip(version) {
+        for (i, migrate) in SCHEMA_MIGRATIONS.iter().enumerate().skip(version) {
             let tx = self.conn.unchecked_transaction()
                 .map_err(|e| format!("Failed to begin migration {}: {}", i + 1, e))?;
-            tx.execute_batch(sql)
+            migrate(&tx)
                 .map_err(|e| format!("Failed to apply migration {}: {}", i + 1, e))?;
             tx.execute_batch(&format!("PRAGMA user_version = {}", i + 1))
                 .map_err(|e| format!("Failed to record migration {}: {}", i + 1, e))?;
@@ -268,10 +344,19 @@ impl Database {
             .file_stem()
             .map(|s| s.to_string_lossy().to_string());
 
-        self.conn.execute(
+        let old_title = Path::new(old_path).file_stem().map(|s| s.to_string_lossy().to_lowercase());
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+        tx.execute(
             "UPDATE files SET path = ?1, title = ?2 WHERE path = ?3",
             params![new_path, new_title, old_path],
         ).map_err(|e| format!("Failed to rename file in index: {}", e))?;
+        // Links to the old name may now point elsewhere; links to the new name may now
+        // point here.
+        for stem in [old_title, new_title.map(|t| t.to_lowercase())].into_iter().flatten() {
+            reresolve_links_named(&tx, &self.roots, &stem)?;
+        }
+        tx.commit().map_err(|e| format!("Failed to commit rename: {}", e))?;
         Ok(())
     }
 
@@ -319,8 +404,15 @@ impl Database {
     }
 
     pub fn delete_file(&self, path: &str) -> Result<(), String> {
-        self.conn.execute("DELETE FROM files WHERE path = ?1", params![path])
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+        tx.execute("DELETE FROM files WHERE path = ?1", params![path])
             .map_err(|e| format!("Failed to delete file: {}", e))?;
+        // Links that pointed here may have another note of the same name to go to
+        if let Some(stem) = Path::new(path).file_stem() {
+            reresolve_links_named(&tx, &self.roots, &stem.to_string_lossy().to_lowercase())?;
+        }
+        tx.commit().map_err(|e| format!("Failed to commit delete: {}", e))?;
         Ok(())
     }
 
@@ -341,24 +433,20 @@ impl Database {
         Ok(count as u32)
     }
 
-    pub fn set_links(&self, file_id: i64, links: &[LinkRecord]) -> Result<(), String> {
-        let tx = self.conn.unchecked_transaction()
-            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
-        replace_links(&tx, file_id, links)?;
-        tx.commit().map_err(|e| format!("Failed to commit links: {}", e))?;
-        Ok(())
+    /// Replace the registered roots used for root-relative links. Call whenever the
+    /// directory list changes; the order is the sidebar's.
+    pub fn set_roots(&mut self, roots: Vec<String>) {
+        self.roots = roots;
     }
 
-    pub fn set_tags(&self, file_id: i64, tags: &[String]) -> Result<(), String> {
-        let tx = self.conn.unchecked_transaction()
-            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
-        replace_tags(&tx, file_id, tags)?;
-        tx.commit().map_err(|e| format!("Failed to commit tags: {}", e))?;
-        Ok(())
+    /// Where a wikilink written in `source_path` points, as a path. Clicks use this, so
+    /// they follow exactly what backlinks and rename rewriting use.
+    pub fn resolve_link_path(&self, target: &str, source_path: &str) -> Result<Option<String>, String> {
+        Ok(resolve_link(&self.conn, &self.roots, target, parent_dir(source_path))?.map(|(_, p)| p))
     }
 
-    /// Index one parsed file: its row, links and tags, and any links elsewhere that were
-    /// waiting for it, in a single transaction, so a bulk reindex pays one commit per
+    /// Index one parsed file: its row, links and tags, and every link elsewhere that names
+    /// it (see `reresolve_links_named`), in a single transaction, so a bulk reindex pays one commit per
     /// file and readers never see its links without its row.
     pub fn index_file(
         &self,
@@ -373,10 +461,10 @@ impl Database {
         let tx = self.conn.unchecked_transaction()
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
         let file_id = self.upsert_file(path, dir_id, title, modified_at, frontmatter_json)?;
-        replace_links(&tx, file_id, links)?;
+        replace_links(&tx, &self.roots, file_id, path, links)?;
         replace_tags(&tx, file_id, tags)?;
         if let Some(t) = title {
-            self.resolve_pending_links(t, file_id, path)?;
+            reresolve_links_named(&tx, &self.roots, &t.to_lowercase())?;
         }
         tx.commit().map_err(|e| format!("Failed to commit index of {}: {}", path, e))?;
         Ok(file_id)
@@ -412,22 +500,18 @@ impl Database {
         Ok(results)
     }
 
+    /// Links that resolve to `path`, by the same rule as clicks (`resolve_link`).
     pub fn get_backlinks(&self, path: &str) -> Result<Vec<BacklinkRecord>, String> {
-        // Find the file's title (filename without .md) for matching
-        let filename = Path::new(path)
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
-
         let mut stmt = self.conn.prepare(
             "SELECT f.path, f.title, l.line_number, l.context
              FROM links l
              JOIN files f ON f.id = l.source_id
-             WHERE l.target = ?1 OR l.target = ?2
+             JOIN files t ON t.id = l.target_id
+             WHERE t.path = ?1
              ORDER BY f.title ASC"
         ).map_err(|e| format!("Failed to prepare backlinks query: {}", e))?;
 
-        let rows = stmt.query_map(params![filename, path], |row| {
+        let rows = stmt.query_map(params![path], |row| {
             Ok(BacklinkRecord {
                 source_path: row.get(0)?,
                 source_title: row.get(1)?,
@@ -475,25 +559,6 @@ impl Database {
         ).optional().map_err(|e| format!("Failed to get file id: {}", e))?;
 
         Ok(result)
-    }
-
-    /// Path a clicked wikilink opens: a title (file stem) match first, then a path
-    /// suffix for rows whose title is unset, ties going to the first path alphabetically.
-    /// Two lookups rather than one OR, so the common case uses the title index.
-    pub fn resolve_by_title(&self, title: &str) -> Result<Option<String>, String> {
-        let by_title: Option<String> = self.conn.query_row(
-            "SELECT path FROM files WHERE title = ?1 COLLATE NOCASE ORDER BY path LIMIT 1",
-            params![title],
-            |row| row.get(0),
-        ).optional().map_err(|e| format!("Failed to resolve wikilink: {}", e))?;
-        if by_title.is_some() {
-            return Ok(by_title);
-        }
-        self.conn.query_row(
-            "SELECT path FROM files WHERE path LIKE '%/' || ?1 || '.md' ESCAPE '\\' ORDER BY path LIMIT 1",
-            params![escape_like_literal(title)],
-            |row| row.get(0),
-        ).optional().map_err(|e| format!("Failed to resolve wikilink: {}", e))
     }
 
     pub fn add_bookmark(&self, file_id: i64, label: Option<&str>, position: Option<i32>) -> Result<(), String> {
@@ -684,25 +749,6 @@ impl Database {
 
     /// Resolve pending backlinks when a new file is created.
     /// Finds links with target_id = NULL that match the new file's title, and sets target_id.
-    /// Point links that were waiting for a note at it once it is indexed. A link waits
-    /// when its source is indexed before its target, which a full reindex does for about
-    /// half of all links. Matches the rules `resolve_link_target` uses: the title (file
-    /// stem), or a `[[folder/note]]` / `[[note.md]]` target that is a suffix of the path.
-    /// The suffix test only runs on waiting links whose target ends in this stem.
-    pub fn resolve_pending_links(&self, file_title: &str, file_id: i64, path: &str) -> Result<u32, String> {
-        let count = self.conn.execute(
-            "UPDATE links SET target_id = ?1
-             WHERE target_id IS NULL AND (
-               target = ?2 COLLATE NOCASE
-               OR ((target LIKE '%/' || ?3 ESCAPE '\\' OR target LIKE '%/' || ?3 || '.md' ESCAPE '\\'
-                    OR target LIKE ?3 || '.md' ESCAPE '\\')
-                   AND (lower(?4) LIKE '%/' || lower(target) || '.md' OR lower(?4) LIKE '%/' || lower(target)))
-             )",
-            params![file_id, file_title, escape_like_literal(file_title), path],
-        ).map_err(|e| format!("Failed to resolve pending links: {}", e))?;
-        Ok(count as u32)
-    }
-
     /// Get all indexed file paths with their indexed_at timestamps (for startup reconciliation).
     pub fn get_all_indexed_paths(&self) -> Result<Vec<(String, Option<i64>)>, String> {
         let mut stmt = self.conn.prepare(
@@ -803,98 +849,153 @@ mod tests {
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-    fn temp_db() -> (Database, std::path::PathBuf) {
+    /// A database file in a fresh temp dir, removed on drop.
+    struct TempDb {
+        db: Database,
+        dir: std::path::PathBuf,
+    }
+    impl Drop for TempDb {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+    impl std::ops::Deref for TempDb {
+        type Target = Database;
+        fn deref(&self) -> &Database { &self.db }
+    }
+
+    fn temp_db(roots: &[&str]) -> TempDb {
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("onyx-db-test-{}-{}", std::process::id(), n));
-        let db = Database::new(&dir.join("index.db")).unwrap();
-        (db, dir)
+        let mut db = Database::new(&dir.join("index.db")).unwrap();
+        db.set_roots(roots.iter().map(|r| r.to_string()).collect());
+        TempDb { db, dir }
     }
 
     fn link(target: &str) -> LinkRecord {
         LinkRecord { target: target.into(), line_number: Some(1), context: None }
     }
 
-    fn add(db: &Database, path: &str, links: &[LinkRecord]) -> i64 {
+    fn add(db: &Database, path: &str, links: &[&str]) -> i64 {
         let stem = Path::new(path).file_stem().unwrap().to_string_lossy().to_string();
-        db.index_file(path, "d", Some(&stem), Some(0), None, links, &[]).unwrap()
+        let links: Vec<LinkRecord> = links.iter().map(|t| link(t)).collect();
+        db.index_file(path, "d", Some(&stem), Some(0), None, &links, &[]).unwrap()
     }
 
-    fn target_of(db: &Database, source: i64) -> Option<i64> {
+    /// Where the index recorded `source`'s only link as pointing.
+    fn recorded(db: &Database, source: i64) -> Option<String> {
         db.conn.query_row(
-            "SELECT target_id FROM links WHERE source_id = ?1", params![source], |r| r.get(0),
+            "SELECT t.path FROM links l LEFT JOIN files t ON t.id = l.target_id WHERE l.source_id = ?1",
+            params![source], |r| r.get(0),
         ).unwrap()
+    }
+
+    /// Recorded target, click target and backlink membership must all name the same note.
+    fn assert_agree(db: &Database, source: i64, source_path: &str, target: &str, want: Option<&str>) {
+        assert_eq!(recorded(db, source).as_deref(), want, "recorded target");
+        assert_eq!(db.resolve_link_path(target, source_path).unwrap().as_deref(), want, "click target");
+        if let Some(w) = want {
+            let back = db.get_backlinks(w).unwrap();
+            assert!(back.iter().any(|b| b.source_path == source_path), "backlink on {w}");
+        }
     }
 
     #[test]
     fn migrations_record_the_schema_version_and_rerun_cleanly() {
-        let (db, dir) = temp_db();
-        let v: i64 = db.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        let t = temp_db(&[]);
+        let v: i64 = t.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert_eq!(v as usize, SCHEMA_MIGRATIONS.len());
-        drop(db);
-        let again = Database::new(&dir.join("index.db")).unwrap();
+        let again = Database::new(&t.dir.join("index.db")).unwrap();
         let v: i64 = again.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert_eq!(v as usize, SCHEMA_MIGRATIONS.len());
-        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn backlinks_and_clicks_pick_the_same_note_for_a_duplicate_name() {
-        let (db, dir) = temp_db();
-        add(&db, "/v/b/Idea.md", &[]);
-        let first = add(&db, "/v/a/Idea.md", &[]);
-        let src = add(&db, "/v/src.md", &[link("idea")]);
-        assert_eq!(target_of(&db, src), Some(first));
-        assert_eq!(db.resolve_by_title("idea").unwrap().as_deref(), Some("/v/a/Idea.md"));
-        std::fs::remove_dir_all(dir).unwrap();
+    fn a_duplicate_name_resolves_to_the_first_path_whichever_is_indexed_first() {
+        let t = temp_db(&[]);
+        add(&t, "/v/c/Idea.md", &[]);
+        let src = add(&t, "/v/src.md", &["idea"]);
+        assert_agree(&t, src, "/v/src.md", "idea", Some("/v/c/Idea.md"));
+        // An earlier-sorting duplicate indexed after the link takes it over
+        add(&t, "/v/a/Idea.md", &[]);
+        assert_agree(&t, src, "/v/src.md", "idea", Some("/v/a/Idea.md"));
+        // and the link moves on when that note goes away
+        t.delete_file("/v/a/Idea.md").unwrap();
+        assert_agree(&t, src, "/v/src.md", "idea", Some("/v/c/Idea.md"));
     }
 
     #[test]
-    fn subpath_and_extension_targets_resolve_by_suffix() {
-        let (db, dir) = temp_db();
-        add(&db, "/v/x/Note.md", &[]);
-        let wanted = add(&db, "/v/y/Note.md", &[]);
-        let src = add(&db, "/v/s.md", &[link("y/Note")]);
-        assert_eq!(target_of(&db, src), Some(wanted));
-        let src2 = add(&db, "/v/s2.md", &[link("y/Note.md")]);
-        assert_eq!(target_of(&db, src2), Some(wanted));
-        std::fs::remove_dir_all(dir).unwrap();
+    fn a_note_in_the_linking_notes_folder_wins_over_the_first_path() {
+        let t = temp_db(&[]);
+        add(&t, "/v/a/Idea.md", &[]);
+        add(&t, "/v/b/Idea.md", &[]);
+        let src = add(&t, "/v/b/src.md", &["Idea"]);
+        assert_agree(&t, src, "/v/b/src.md", "Idea", Some("/v/b/Idea.md"));
+        let back_a = t.get_backlinks("/v/a/Idea.md").unwrap();
+        assert!(back_a.is_empty(), "the other duplicate gets no backlink");
     }
 
     #[test]
-    fn a_pending_link_resolves_case_insensitively_when_its_note_appears() {
-        let (db, dir) = temp_db();
-        let src = add(&db, "/v/s.md", &[link("daily")]);
-        assert_eq!(target_of(&db, src), None);
-        let daily = add(&db, "/v/Daily.md", &[]);
-        assert_eq!(target_of(&db, src), Some(daily));
-        std::fs::remove_dir_all(dir).unwrap();
+    fn a_folder_path_resolves_from_a_root_before_any_other_tail_match() {
+        let t = temp_db(&["/v"]);
+        add(&t, "/v/x/Notes/Consent.md", &[]);
+        let wanted = "/v/Notes/Consent.md";
+        add(&t, wanted, &[]);
+        let src = add(&t, "/v/y/src.md", &["Notes/Consent"]);
+        assert_agree(&t, src, "/v/y/src.md", "Notes/Consent", Some(wanted));
     }
 
     #[test]
-    fn a_pending_folder_path_link_resolves_when_its_note_appears() {
-        let (db, dir) = temp_db();
-        let src = add(&db, "/v/Hub.md", &[link("Notes/Consent"), link("Consent.md"), link("Other/Consent")]);
-        let consent = add(&db, "/v/Notes/Consent.md", &[]);
-        let targets: Vec<(String, Option<i64>)> = {
-            let mut stmt = db.conn.prepare(
-                "SELECT target, target_id FROM links WHERE source_id = ?1 ORDER BY id").unwrap();
-            stmt.query_map(params![src], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
-                .map(|r| r.unwrap()).collect()
-        };
-        assert_eq!(targets, vec![
-            ("Notes/Consent".to_string(), Some(consent)),
-            ("Consent.md".to_string(), Some(consent)),
-            ("Other/Consent".to_string(), None),
-        ]);
-        std::fs::remove_dir_all(dir).unwrap();
+    fn a_folder_path_falls_back_to_any_path_ending_in_it() {
+        let t = temp_db(&["/elsewhere"]);
+        add(&t, "/v/y/Note.md", &[]);
+        let src = add(&t, "/v/s.md", &["y/Note.md"]);
+        assert_agree(&t, src, "/v/s.md", "y/Note.md", Some("/v/y/Note.md"));
     }
 
     #[test]
-    fn a_click_finds_a_note_whose_title_was_cleared_by_a_folder_rename() {
-        let (db, dir) = temp_db();
-        add(&db, "/v/old/Plan.md", &[]);
-        db.rename_dir_prefix("/v/old", "/v/new").unwrap();
-        assert_eq!(db.resolve_by_title("Plan").unwrap().as_deref(), Some("/v/new/Plan.md"));
-        std::fs::remove_dir_all(dir).unwrap();
+    fn a_waiting_link_resolves_when_its_note_appears_whatever_the_case_or_folder_form() {
+        let t = temp_db(&["/v"]);
+        let a = add(&t, "/v/a.md", &["daily"]);
+        let b = add(&t, "/v/b.md", &["Notes/Consent"]);
+        assert_eq!(recorded(&t, a), None);
+        assert_eq!(recorded(&t, b), None);
+        add(&t, "/v/Daily.md", &[]);
+        add(&t, "/v/Notes/Consent.md", &[]);
+        assert_agree(&t, a, "/v/a.md", "daily", Some("/v/Daily.md"));
+        assert_agree(&t, b, "/v/b.md", "Notes/Consent", Some("/v/Notes/Consent.md"));
+    }
+
+    #[test]
+    fn underscores_and_percents_in_a_link_are_literal() {
+        let t = temp_db(&[]);
+        add(&t, "/v/aXb/Consent.md", &[]);
+        add(&t, "/v/100X/Plan.md", &[]);
+        let s1 = add(&t, "/v/s1.md", &["a_b/Consent"]);
+        let s2 = add(&t, "/v/s2.md", &["100%/Plan"]);
+        assert_agree(&t, s1, "/v/s1.md", "a_b/Consent", None);
+        assert_agree(&t, s2, "/v/s2.md", "100%/Plan", None);
+    }
+
+    #[test]
+    fn renaming_a_note_moves_the_links_that_named_it() {
+        let t = temp_db(&[]);
+        add(&t, "/v/Old.md", &[]);
+        add(&t, "/v/z/New.md", &[]);
+        let to_old = add(&t, "/v/s1.md", &["Old"]);
+        let to_new = add(&t, "/v/s2.md", &["New"]);
+        t.rename_file("/v/Old.md", "/v/New.md").unwrap();
+        assert_agree(&t, to_old, "/v/s1.md", "Old", None);
+        assert_agree(&t, to_new, "/v/s2.md", "New", Some("/v/New.md"));
+    }
+
+    #[test]
+    fn re_resolution_uses_the_stem_index() {
+        let t = temp_db(&[]);
+        let plan: String = t.conn.query_row(
+            "EXPLAIN QUERY PLAN SELECT l.id FROM links l WHERE l.target_stem = 'x'", [],
+            |r| r.get(3),
+        ).unwrap();
+        assert!(plan.contains("idx_links_target_stem"), "{plan}");
     }
 }

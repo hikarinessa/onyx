@@ -72,7 +72,8 @@ pub fn run() {
         .join("cache")
         .join("index.db");
 
-    let database = db::Database::new(&db_path).expect("Failed to initialize database");
+    let mut database = db::Database::new(&db_path).expect("Failed to initialize database");
+    database.set_roots(dir_manager.list().iter().map(|d| d.path.to_string_lossy().to_string()).collect());
     let db = Arc::new(Mutex::new(database));
 
     // Initialize bookmark manager and migrate from legacy storage
