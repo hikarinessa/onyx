@@ -80,7 +80,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── embeds.ts             #  717 lines — CM6: ![[note]] embeds (StateField-based block decorations); images go to images.ts
 │   ├── htmlInline.ts         #  107 lines — CM6: allowlisted inline HTML in preview (coloured font/span, br, u, sup, links)
 │   ├── images.ts             #  152 lines — CM6: images in preview (![[photo.png|300]], ![alt](url)), inline anywhere on a line
-│   ├── heightSample.ts       #   54 lines — CM6: keeps short lines out of CM6's height-estimate sample (scroll stability)
+│   ├── heightSample.ts       #   59 lines — CM6: keeps short lines out of CM6's height-estimate sample (scroll stability)
 │   ├── headingFold.ts        #   71 lines — CM6: foldService for heading-based section folding
 │   ├── inlineSvgIcons.ts     #  133 lines — Compact SVG icon renderer for CM6 widgets (callouts, alt checkboxes)
 │   ├── symbolWrap.ts         #   61 lines — CM6: wrap selection with brackets/quotes/markdown on type
