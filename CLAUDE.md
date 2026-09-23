@@ -42,7 +42,10 @@ src/                          # Frontend (React + TypeScript)
 ├── components/
 │   ├── Titlebar.tsx          #    8 lines — Custom titlebar with traffic lights spacer
 │   ├── TabBar.tsx            #  213 lines — Per-pane tab strip with drag-to-reorder + overflow menu
-│   ├── Sidebar.tsx           #  910 lines — File tree, collapsible dirs, inline rename, orphan notes
+│   ├── Sidebar.tsx           #  726 lines — File tree roots, orphan notes, root menus, icon picker wiring
+│   ├── TreeNode.tsx          #  192 lines — One tree row (memoized): expand, rename input, icon/colour from TreeStylesContext
+│   ├── useFileDrag.ts        #  104 lines — Pointer drag-to-move for files (Tauri swallows HTML5 drag)
+│   ├── useDirReorder.ts      #  110 lines — Pointer drag to reorder registered roots
 │   ├── BookmarkStrip.tsx     #   90 lines — Bookmarks section pinned at sidebar bottom
 │   ├── SidebarContextMenu.tsx#  120 lines — Right-click context menu for file tree
 │   ├── ErrorBoundary.tsx     #   50 lines — React error boundary
