@@ -21,9 +21,9 @@ const storageKey = (ns: FrecencyNamespace) => `onyx-frecency-${ns}`;
 const cache = new Map<FrecencyNamespace, Record<string, Entry>>();
 
 function load(ns: FrecencyNamespace): Record<string, Entry> {
-  let table = cache.get(ns);
-  if (table) return table;
-  table = {};
+  const cached = cache.get(ns);
+  if (cached) return cached;
+  let table: Record<string, Entry> = {};
   try {
     const raw = localStorage.getItem(storageKey(ns));
     if (raw) table = JSON.parse(raw);
