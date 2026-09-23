@@ -20,8 +20,9 @@ interface ContentSearchResult {
   line_matches: LineMatch[];
 }
 
-export function SearchPanel() {
-  const [query, setQuery] = useState("");
+/** Remounted (by key) for each outside search request, so it starts on `initialQuery`. */
+export function SearchPanel({ initialQuery = "" }: { initialQuery?: string }) {
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<ContentSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());

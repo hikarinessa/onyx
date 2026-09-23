@@ -8,6 +8,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ### Added
 - **The command palette and Quick Open learn what you use** (#74). Commands you run and files you open often and lately rise to the top; a use counts half as much after a week. Everything you have never picked keeps its usual order
+- **Click a tag to search for it** (#102). Clicking a tag chip in Preview, or ⌘-clicking / ⌘Enter on a `#tag` in either mode, opens the Search tab on that tag
 
 ### Fixed
 - **One missing registered folder no longer stops file watching for all of them** (#116). A folder moved or deleted without being unregistered made the watcher fail to start, so external edits stopped reaching every folder. It is now skipped with a warning and the rest are watched

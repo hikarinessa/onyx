@@ -821,6 +821,7 @@ export function Sidebar() {
   };
 
   const sidebarTab = useAppStore((s) => s.sidebarTab);
+  const searchRequest = useAppStore((s) => s.searchRequest);
   const setSidebarTab = useAppStore((s) => s.setSidebarTab);
 
   return (
@@ -843,7 +844,7 @@ export function Sidebar() {
       </div>
 
       {sidebarTab === "search" ? (
-        <SearchPanel />
+        <SearchPanel key={searchRequest?.id ?? 0} initialQuery={searchRequest?.query ?? ""} />
       ) : (
       <TreeStylesContext.Provider value={treeStyles}>
       <div className="sidebar-toolbar">

@@ -89,7 +89,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── fileOps.ts            #  205 lines — Centralized file mutations (with link warnings, fs:change event-driven)
 │   ├── openFile.ts           #   91 lines — Shared open-file-in-editor utility (with nav stack, orphan detection)
 │   ├── periodicNotes.ts      #   37 lines — Create/open periodic notes utility
-│   ├── frecency.ts           #   87 lines — Frecency ranking (uses × 7-day half-life) for command palette + Quick Open
+│   ├── frecency.ts           #   79 lines — Frecency ranking (uses × 7-day half-life) for command palette + Quick Open
 │   ├── recentDocs.ts         #   68 lines — Recent documents tracking (localStorage ring buffer)
 │   ├── cursorPositions.ts    #   79 lines — Per-file cursor position persistence
 │   ├── session.ts            #  315 lines — Tab/panel/pane state persistence (~/.onyx/session.json)

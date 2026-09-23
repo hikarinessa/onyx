@@ -187,6 +187,10 @@ interface AppState {
   // Sidebar tabs
   sidebarTab: "files" | "search";
   setSidebarTab: (tab: "files" | "search") => void;
+  /** A search asked for from elsewhere (a tag click); `id` changes on every request. */
+  searchRequest: { query: string; id: number } | null;
+  /** Show the sidebar's Search tab running `query`. */
+  searchFor: (query: string) => void;
 
   // File tree sort order
   sortOrder: string;
@@ -757,6 +761,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   sidebarTab: "files",
   setSidebarTab: (tab) => set({ sidebarTab: tab }),
+  searchRequest: null,
+  searchFor: (query) =>
+    set((s) => ({
+      sidebarVisible: true,
+      sidebarTab: "search",
+      searchRequest: { query, id: (s.searchRequest?.id ?? 0) + 1 },
+    })),
 
   sortOrder: "name",
   setSortOrder: (order) => set({ sortOrder: order }),

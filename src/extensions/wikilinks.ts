@@ -9,6 +9,7 @@ import { RangeSetBuilder } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
 import { previewModeField } from "./livePreview";
 import { followFootnoteAt, jumpToDefinition, jumpToReference } from "./footnotes";
+import { useAppStore } from "../stores/app";
 
 /**
  * Link handling: wikilinks + URLs, plus footnote jumps within the note.
@@ -104,6 +105,24 @@ function wikilinkAtPos(doc: { lineAt(pos: number): { from: number; text: string 
   return null;
 }
 
+// Same shape as the tag highlighter and the preview chips: `#` at line start or after
+// whitespace, then a letter.
+const TAG_AT_RE = /(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
+
+/** The tag (without `#`) whose text covers pos, or null. */
+export function tagAtPos(doc: { lineAt(pos: number): { from: number; text: string } }, pos: number): string | null {
+  const line = doc.lineAt(pos);
+  const offset = pos - line.from;
+  TAG_AT_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TAG_AT_RE.exec(line.text)) !== null) {
+    if (offset >= m.index && offset < m.index + m[0].length) return m[1];
+  }
+  return null;
+}
+
+const searchTag = (tag: string) => useAppStore.getState().searchFor(`#${tag}`);
+
 /** Check if pos is inside a URL (markdown link or bare), return URL or null */
 function urlAtPos(doc: { lineAt(pos: number): { from: number; text: string } }, pos: number): string | null {
   const line = doc.lineAt(pos);
@@ -153,7 +172,7 @@ const linkDecorations = ViewPlugin.fromClass(
 
 // ── Click dispatch ──
 //
-// Single handler, priority chain: footnote → wikilink → URL.
+// Single handler, priority chain: footnote → wikilink → URL → tag (searches for it).
 // mousedown for preview mode (before CM6 moves cursor).
 // click for source mode (Cmd+click only).
 // All extraction via posAtCoords + regex against document text.
@@ -186,6 +205,14 @@ const linkClickHandler = EditorView.domEventHandlers({
       return moved;
     }
 
+    // Tag chip widgets carry their tag
+    const tagEl = target.closest("[data-tag]") as HTMLElement | null;
+    if (tagEl?.dataset.tag) {
+      event.preventDefault();
+      searchTag(tagEl.dataset.tag);
+      return true;
+    }
+
     // 2. Regular text: posAtCoords + regex against document text
     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
     if (pos == null) return false;
@@ -207,6 +234,9 @@ const linkClickHandler = EditorView.domEventHandlers({
       openExternalUrl(url);
       return true;
     }
+
+    // Raw `#tag` text is left alone here: in preview it only shows on the cursor's line,
+    // where a click means "edit this". The chip branch above handles rendered tags.
 
     return false;
   },
@@ -240,11 +270,18 @@ const linkClickHandler = EditorView.domEventHandlers({
       return true;
     }
 
+    const tag = tagAtPos(view.state.doc, pos);
+    if (tag) {
+      event.preventDefault();
+      searchTag(tag);
+      return true;
+    }
+
     return false;
   },
 });
 
-/** Cmd+Enter keymap — follow footnote or wikilink, or open URL, under cursor */
+/** Cmd+Enter keymap — follow footnote or wikilink, open URL, or search tag, under cursor */
 const linkKeymap = keymap.of([
   {
     key: "Mod-Enter",
@@ -262,6 +299,12 @@ const linkKeymap = keymap.of([
       const url = urlAtPos(view.state.doc, pos);
       if (url) {
         openExternalUrl(url);
+        return true;
+      }
+
+      const tag = tagAtPos(view.state.doc, pos);
+      if (tag) {
+        searchTag(tag);
         return true;
       }
 

@@ -515,6 +515,7 @@ function renderCellContent(el: HTMLElement, text: string): void {
       const span = document.createElement("span");
       span.className = "cm-preview-tag";
       span.textContent = match[9];
+      span.dataset.tag = match[9];
       el.appendChild(span);
     }
   }
@@ -715,9 +716,11 @@ class TagChipWidget extends WidgetType {
     const span = document.createElement("span");
     span.className = "cm-preview-tag";
     span.textContent = this.text;
+    span.dataset.tag = this.text;
     return span;
   }
   eq(other: TagChipWidget) { return this.text === other.text; }
+  ignoreEvent() { return false; }
 }
 
 // ── Pre-scan cache ──
