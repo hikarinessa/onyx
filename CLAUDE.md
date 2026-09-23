@@ -99,6 +99,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── calendarDates.ts      #   54 lines — Calendar date helpers (ISO keys, ISO weeks, month cells)
 │   ├── useToday.ts           #   28 lines — Today's date, refreshed on day change (minute poll + focus)
 │   ├── imageRefs.ts          #  101 lines — Image syntax, sizes, resolution (resolve_attachment + asset protocol), self-loading <img>
+│   ├── fileKinds.ts          #   17 lines — Markdown vs plain text (.txt/.json/.yaml, Source-only) by extension
 │   ├── frecency.ts           #   79 lines — Frecency ranking (uses × 7-day half-life) for command palette + Quick Open
 │   ├── recentDocs.ts         #   68 lines — Recent documents tracking (localStorage ring buffer)
 │   ├── cursorPositions.ts    #   79 lines — Per-file cursor position persistence

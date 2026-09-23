@@ -24,6 +24,8 @@ import { extractBlockToNote } from "../lib/blockExtract";
  * decorations stranded on top of Preview. One writer, so they cannot disagree again.
  */
 function syncEditorMode(view: EditorView, mode: EditorMode): void {
+  // Plain text files carry neither field: they only have Source
+  if (view.state.field(previewModeField, false) === undefined) return;
   const wantPreview = mode !== "source"; // Review renders on top of preview
   const wantReview = mode === "review";
   const effects = [];
@@ -144,16 +146,16 @@ export function EditorPane({ pane }: { pane: Pane }) {
         const hasKeymap = state.facet(keymap).length > 0;
         if (!hasKeymap) {
           const cursor = state.selection.main.head;
-          state = createStateWithExtensions(state.doc.toString(), cursor);
+          state = createStateWithExtensions(state.doc.toString(), cursor, activeTab.path);
           editorStateCache.set(activeTab.id, state);
         }
       } catch {
         const cursor = state.selection.main.head;
-        state = createStateWithExtensions(state.doc.toString(), cursor);
+        state = createStateWithExtensions(state.doc.toString(), cursor, activeTab.path);
         editorStateCache.set(activeTab.id, state);
       }
     } else {
-      state = createStateWithExtensions("");
+      state = createStateWithExtensions("", null, activeTab.path);
       editorStateCache.set(activeTab.id, state);
     }
 
@@ -271,6 +273,9 @@ export function EditorPane({ pane }: { pane: Pane }) {
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     const view = viewRef.current;
     if (!view || !view.contentDOM.contains(e.target as Node)) return;
+    // The editor menu's actions are markdown and suggestions; plain files keep the
+    // system menu (copy, paste, spelling).
+    if (view.state.field(previewModeField, false) === undefined) return;
     e.preventDefault();
     // A right-click outside the current selection moves the caret there first, so the
     // menu describes the place that was clicked rather than wherever the caret was.

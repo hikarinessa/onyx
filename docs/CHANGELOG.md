@@ -8,6 +8,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ### Added
 - **Images show in Preview** (#91). `![[photo.png]]` finds the file by name anywhere in your folders, as in Obsidian (the note's own folder first, then the first path alphabetically), and `![alt](url)` shows local paths and web images. They render wherever they sit: on their own line, in list items, side by side, after text, and in table cells. `![[photo.png|300]]` and `![caption|300](url)` set the width. The line holding the cursor shows the syntax for editing, and clicking an image puts the cursor there. Web images are fetched from their sites when the note is shown
+- **Open .txt, .json and .yaml files** (#77). They appear in the file tree and open in Source mode with line numbers and folding, and JSON and YAML are syntax-highlighted in theme colours. Note features stay out of them: no preview, lint autofix, slash commands, links or tags, and they are not indexed, so Quick Open does not find them. Changes made outside Onyx reload like notes do
 
 ## [0.11.10] — 2026-09-23
 

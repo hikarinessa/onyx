@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { type Pane, type PaneState, MAX_PANES, createPane, defaultPaneState } from "./panes";
 import { getDefaultEditorMode } from "../lib/configBridge";
+import { isMarkdownPath } from "../lib/fileKinds";
 
 export type EditorMode = "source" | "preview" | "review";
 
@@ -218,6 +219,11 @@ interface AppState {
   toggleLintPanel: () => void;
 }
 
+/** Notes open in the configured default mode; plain text files only have Source. */
+function initialEditorMode(path: string): EditorMode {
+  return isMarkdownPath(path) ? (getDefaultEditorMode() as EditorMode) : "source";
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   sidebarVisible: true,
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
@@ -367,7 +373,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     const id = path;
-    const tab: Tab = { id, path, name, modified: false, editorMode: getDefaultEditorMode() as EditorMode, navBack: [], navForward: [] };
+    const tab: Tab = { id, path, name, modified: false, editorMode: initialEditorMode(path), navBack: [], navForward: [] };
     set({
       paneState: {
         ...paneState,
@@ -391,7 +397,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     const id = path;
     const newTab: Tab = {
       id, path, name, modified: false,
-      editorMode: oldTab?.editorMode ?? "preview",
+      // A note replacing a note keeps its mode; anything else starts from the default
+      editorMode: oldTab && isMarkdownPath(oldTab.path) && isMarkdownPath(path)
+        ? oldTab.editorMode
+        : initialEditorMode(path),
       navBack: oldTab?.navBack ?? [],
       navForward: oldTab?.navForward ?? [],
     };
@@ -546,6 +555,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   toggleEditorMode: (id, canReview = false) => {
+    if (!isMarkdownPath(id)) return; // plain text files have only Source (tab id = path)
     const { paneState } = get();
     // source → preview → review → source. Review is skipped when the document has no
     // suggestions, so the cycle never parks on a mode with nothing to show.
@@ -566,6 +576,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setEditorMode: (id, mode) => {
+    if (!isMarkdownPath(id)) return;
     const { paneState } = get();
     set({
       paneState: {

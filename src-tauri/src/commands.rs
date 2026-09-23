@@ -184,8 +184,8 @@ pub fn list_directory(path: String, sort_order: Option<String>, state: State<App
             let path = entry.path();
             let is_dir = path.is_dir();
 
-            // Only show directories and .md files
-            if !is_dir && path.extension().and_then(|e| e.to_str()) != Some("md") {
+            // Directories, notes, and the plain text files the editor opens
+            if !is_dir && !crate::skip::is_listed_file(&path) {
                 return None;
             }
 

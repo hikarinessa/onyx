@@ -43,6 +43,16 @@ pub fn is_skipped_entry(name: &str, parent: Option<&str>) -> bool {
     name.starts_with('.') && name != ".claude"
 }
 
+/// Files the tree lists and the watcher reports: notes, plus the plain text kinds the
+/// editor opens in Source mode (see src/lib/fileKinds.ts). Only notes are indexed.
+pub const LISTED_EXTENSIONS: &[&str] = &["md", "txt", "json", "yaml", "yml"];
+
+pub fn is_listed_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| LISTED_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
+}
+
 /// Whether any component of `relative` — a path below a registered root — is skipped.
 pub fn is_skipped_path(relative: &Path) -> bool {
     let names: Vec<&str> = relative.iter().filter_map(|c| c.to_str()).collect();

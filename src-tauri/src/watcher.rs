@@ -200,10 +200,11 @@ impl FileWatcher {
                 }
 
                 for path in &event.paths {
-                    // Skip non-markdown files for change events
+                    // Report what the tree lists (notes and plain text files); only notes
+                    // are reindexed below
                     let is_dir = path.is_dir();
                     let is_md = path.extension().map_or(false, |e| e == "md");
-                    if !is_dir && !is_md {
+                    if !is_dir && !skip::is_listed_file(path) {
                         continue;
                     }
 

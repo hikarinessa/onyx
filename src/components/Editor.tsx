@@ -1,11 +1,13 @@
 import { useEffect, useRef, useCallback } from "react";
-import { EditorState, EditorSelection, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, EditorSelection, type Extension } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, drawSelection } from "@codemirror/view";
 import { defaultKeymap, historyKeymap, history, indentWithTab } from "@codemirror/commands";
 import { searchKeymap } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import {
+  LanguageDescription,
+  type LanguageSupport,
   syntaxHighlighting,
   HighlightStyle,
   codeFolding,
@@ -38,6 +40,7 @@ import { lintingExtension, autofixContent, applyLintFix } from "../extensions/li
 import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
 import { embedExtension } from "../extensions/embeds";
+import { isMarkdownPath, isPlainTextPath } from "../lib/fileKinds";
 import { imageExtension } from "../extensions/images";
 import { lintKeymap } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
@@ -154,7 +157,54 @@ function tabIdForView(view: EditorView): string | null {
   return activeTabIdBox.current; // fallback for single-pane
 }
 
-function buildExtensions(): Extension[] {
+/** Tokens of plain-text languages (JSON, YAML), in theme colours. */
+const plainHighlightStyle = HighlightStyle.define([
+  { tag: tags.propertyName, color: "var(--accent)" },
+  { tag: [tags.string, tags.special(tags.string)], color: "var(--text-primary)" },
+  { tag: [tags.number, tags.bool, tags.null, tags.atom, tags.keyword], color: "var(--syntax-list-marker)" },
+  { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "var(--syntax-comment)", fontStyle: "italic" },
+  { tag: [tags.punctuation, tags.separator, tags.bracket, tags.meta], color: "var(--syntax-meta)" },
+  { tag: tags.definition(tags.propertyName), color: "var(--accent)" },
+]);
+
+/** The language of a plain-text tab; reconfigured once the language has loaded. */
+const plainLanguage = new Compartment();
+const loadedLanguages = new Map<string, LanguageSupport>();
+
+function languageDescription(path: string): LanguageDescription | null {
+  return LanguageDescription.matchFilename(languages, path.slice(path.lastIndexOf("/") + 1));
+}
+
+/**
+ * The loaded language for `path`, or none yet. Languages load on first use; when one
+ * arrives, every open or cached tab of that language is reconfigured to use it.
+ */
+function plainLanguageFor(path: string): Extension {
+  const desc = languageDescription(path);
+  if (!desc) return [];
+  const loaded = loadedLanguages.get(desc.name);
+  if (loaded) return loaded;
+  desc.load().then((support) => {
+    if (loadedLanguages.has(desc.name)) return;
+    loadedLanguages.set(desc.name, support);
+    const effect = plainLanguage.reconfigure(support);
+    for (const [id, state] of editorStateCache) {
+      if (isPlainTextPath(id) && languageDescription(id)?.name === desc.name) {
+        editorStateCache.set(id, state.update({ effects: effect }).state);
+      }
+    }
+    for (const pane of useAppStore.getState().paneState.panes) {
+      const view = paneViews.get(pane.id);
+      const id = pane.activeTabId;
+      if (view && id && isPlainTextPath(id) && languageDescription(id)?.name === desc.name) {
+        view.dispatch({ effects: effect });
+      }
+    }
+  }).catch((err) => console.warn(`Could not load ${desc.name} highlighting:`, err));
+  return [];
+}
+
+function buildExtensions(): { markdown: Extension[]; plain: Extension[] } {
   const updateListener = EditorView.updateListener.of((update) => {
     const tabId = tabIdForView(update.view);
     if (!tabId) return;
@@ -195,7 +245,8 @@ function buildExtensions(): Extension[] {
           saveTimer = setTimeout(async () => {
             try {
               let saveContent = content;
-              if (isAutofixOnSave()) {
+              // Lint fixes are markdown rules: on JSON or YAML they would corrupt the file
+              if (isAutofixOnSave() && isMarkdownPath(tab.path)) {
                 const fixed = autofixContent(content);
                 if (fixed !== content) {
                   saveContent = fixed;
@@ -250,7 +301,27 @@ function buildExtensions(): Extension[] {
     },
   ]);
 
-  return [
+  // Editing and saving shared by every file kind
+  const core: Extension[] = [
+    history(),
+    ...(getShowLineNumbers() ? [lineNumbers()] : []),
+    indentUnit.of(" ".repeat(getTabSize())),
+    onyxTheme,
+    drawSelection(),
+    EditorView.lineWrapping,
+    updateListener,
+  ];
+
+  // Plain text (.txt, .json, .yaml): Source only, no note features
+  const plain: Extension[] = [
+    keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...foldKeymap, ...searchKeymap]),
+    ...core,
+    syntaxHighlighting(plainHighlightStyle),
+    codeFolding(),
+    foldGutter(),
+  ];
+
+  const markdownSet: Extension[] = [
     editorModeKeymap,
     keymap.of(formattingKeymap),
     ...tableEditorExtension(),
@@ -318,6 +389,7 @@ function buildExtensions(): Extension[] {
     ...lintingExtension(),
     ...spellcheckExtension(),
   ];
+  return { markdown: markdownSet, plain };
 }
 
 // ---------------------------------------------------------------------------
@@ -326,14 +398,17 @@ function buildExtensions(): Extension[] {
 
 /** Shared extensions ref — initialized on first Editor mount */
 let sharedExtensions: Extension[] | null = null;
+let plainExtensions: Extension[] | null = null;
 export const sharedExtensionsRef = { get: () => sharedExtensions };
 
-/** Create an EditorState with the shared extensions.
+/** Create an EditorState with the shared extensions: the note editor for markdown, the
+ * plain-text set (with its language) when `path` is a .txt/.json/.yaml file.
  * `cursor` may be a single offset (caret) or `{head, anchor}` for a selection.
  * Both are clamped to doc length. */
 export function createStateWithExtensions(
   doc: string,
   cursor?: number | { head: number; anchor: number } | null,
+  path?: string,
 ): EditorState {
   let selection: { anchor: number; head?: number } | undefined;
   if (typeof cursor === "number") {
@@ -342,6 +417,13 @@ export function createStateWithExtensions(
     const anchor = Math.max(0, Math.min(cursor.anchor, doc.length));
     const head = Math.max(0, Math.min(cursor.head, doc.length));
     selection = { anchor, head };
+  }
+  if (path && isPlainTextPath(path) && plainExtensions) {
+    return EditorState.create({
+      doc,
+      selection,
+      extensions: [plainExtensions, plainLanguage.of(plainLanguageFor(path))],
+    });
   }
   if (!sharedExtensions) {
     return EditorState.create({ doc, selection });
@@ -355,7 +437,7 @@ export function loadFileIntoCache(
   content: string,
   cursor?: number | { head: number; anchor: number } | null,
 ) {
-  editorStateCache.set(id, createStateWithExtensions(content, cursor));
+  editorStateCache.set(id, createStateWithExtensions(content, cursor, id));
   lastSavedContent.set(id, content);
 }
 
@@ -539,7 +621,9 @@ export function Editor() {
 
   // Initialize shared extensions once
   if (!sharedExtensions) {
-    sharedExtensions = buildExtensions();
+    const built = buildExtensions();
+    sharedExtensions = built.markdown;
+    plainExtensions = built.plain;
   }
 
   // Register hooks
