@@ -4,7 +4,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
-## [Unreleased]
+## [0.11.11] — 2026-09-23
 
 ### Added
 - **Images show in Preview** (#91). `![[photo.png]]` finds the file by name anywhere in your folders, as in Obsidian (the note's own folder first, then the first path alphabetically), and `![alt](url)` shows local paths and web images. They render wherever they sit: on their own line, in list items, side by side, after text, and in table cells. `![[photo.png|300]]` and `![caption|300](url)` set the width. The line holding the cursor shows the syntax for editing, and clicking an image puts the cursor there. Web images are fetched from their sites when the note is shown
