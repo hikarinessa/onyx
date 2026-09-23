@@ -84,6 +84,7 @@ src/                          # Frontend (React + TypeScript)
 │   └── tableEditor.ts        #  175 lines — CM6: table keymap (Tab/Enter) + TSV paste + command palette
 ├── lib/
 │   ├── criticMarkup.ts       #   359 lines — CriticMarkup parser + decision operations (accept/reject/dismiss/reply)
+│   ├── codeRanges.ts         #    66 lines — Fenced-block and inline-code ranges, so syntax parsers skip examples
 │   ├── footnotes.ts          #   189 lines — Footnote parser (references, multi-line definitions, first-reference numbering)
 │   ├── fileOps.ts            #  205 lines — Centralized file mutations (with link warnings, fs:change event-driven)
 │   ├── openFile.ts           #   91 lines — Shared open-file-in-editor utility (with nav stack, orphan detection)

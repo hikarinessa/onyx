@@ -3,7 +3,7 @@ import { useAppStore, selectActiveTab } from "../stores/app";
 import { loadFileIntoCache, scrollCache } from "../components/Editor";
 import { recordRecentDoc } from "./recentDocs";
 import { getCursorPosition } from "./cursorPositions";
-import { hasCriticMarkup } from "./criticMarkup";
+import { needsReview } from "./criticMarkup";
 
 /** Check if a file path is under any registered directory */
 async function isUnderRegisteredDir(filePath: string): Promise<boolean> {
@@ -71,7 +71,7 @@ export async function openFileInEditor(
   // A note carrying suggestions is asking to be reviewed, so open it in Review rather
   // than making the mode something to go looking for. It retires itself: the last
   // decision removes the last marker, and the note reverts to the default mode.
-  if (hasCriticMarkup(content)) {
+  if (needsReview(content)) {
     const after = useAppStore.getState();
     const tab = selectActiveTab(after);
     if (tab?.path === path) after.setEditorMode(tab.id, "review");

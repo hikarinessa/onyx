@@ -4,6 +4,7 @@ import {
   applyChanges,
   attachedRationales,
   dismissChange,
+  needsReview,
   parseCriticMarkup,
   proposeComment,
   proposeDeletion,
@@ -21,6 +22,47 @@ const only = (doc: string): Suggestion => {
   expect(suggestions).toHaveLength(1);
   return suggestions[0];
 };
+
+describe("markup inside code", () => {
+  it("ignores examples in inline code and fenced blocks, with no warnings", () => {
+    const doc = [
+      "Putting the marker inside, like `{~~### Old~>### New~~}`, reads badly.",
+      "",
+      "```md",
+      "a {--deleted--} word and a stray {++ opener",
+      "```",
+      "",
+      "Double backticks: ``{>>note<<}``.",
+    ].join("\n");
+    expect(parseCriticMarkup(doc)).toEqual({ suggestions: [], warnings: [] });
+    expect(needsReview(doc)).toBe(false);
+  });
+
+  it("still finds a real suggestion after an example the regex would have swallowed", () => {
+    const doc = "Syntax: `{--` opens it. Now {--really delete--} this.";
+    expect(at(doc, only(doc).original)).toBe("really delete");
+  });
+
+  it("keeps a suggestion whose text contains inline code", () => {
+    const doc = "Call {~~`foo()`~>`bar()`~~} instead.";
+    const s = only(doc);
+    expect(s.type).toBe("substitution");
+    expect(at(doc, s.original)).toBe("`foo()`");
+  });
+
+  it("treats an unclosed fence as code to the end", () => {
+    expect(parseCriticMarkup("```\n{--x--}\n").suggestions).toHaveLength(0);
+  });
+
+  it("does not pair backticks across a paragraph break", () => {
+    const doc = "a ` tick\n\n{--gone--} and ` another";
+    expect(at(doc, only(doc).original)).toBe("gone");
+  });
+
+  it("marks a note with real suggestions as needing review", () => {
+    expect(needsReview("see `{--x--}` and {++this++}")).toBe(true);
+  });
+});
 
 describe("parseCriticMarkup", () => {
   it("spans a deletion's token and its original text", () => {

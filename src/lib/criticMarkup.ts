@@ -14,7 +14,12 @@
  *   {~~old~>new~~}          replace old with new
  *   {==text==}{>>comment<<} comment anchored to text
  *   {>>comment<<}           point comment
+ *
+ * Markup inside fenced code or inline code is an example of the syntax, not a
+ * suggestion, and is skipped (see codeRanges.ts).
  */
+
+import { codeRanges, inCode } from "./codeRanges";
 
 export type SuggestionType = "deletion" | "addition" | "substitution" | "comment";
 
@@ -68,10 +73,18 @@ const OPENERS = ["{--", "{++", "{~~", "{==", "{>>"];
 
 /**
  * Cheap check for whether a document is worth parsing. Most notes carry no annotations,
- * and this keeps the regex scan off the hot path for all of them.
+ * and this keeps the regex scan off the hot path for all of them. It also passes notes
+ * whose only markers sit in code; `needsReview` is the exact answer.
  */
 export const hasCriticMarkup = (text: string): boolean =>
   OPENERS.some((m) => text.includes(m));
+
+/** Whether a note carries suggestions, or malformed markup, outside code. */
+export function needsReview(text: string): boolean {
+  if (!hasCriticMarkup(text)) return false;
+  const { suggestions, warnings } = parseCriticMarkup(text);
+  return suggestions.length > 0 || warnings.length > 0;
+}
 
 const AUTHOR = /^@([A-Za-z0-9_-]+):\s*/;
 
@@ -103,11 +116,20 @@ const point = (at: number): Span => ({ from: at, to: at });
 export function parseCriticMarkup(doc: string): ParseResult {
   const suggestions: Suggestion[] = [];
   const covered: Span[] = [];
+  const code = codeRanges(doc);
   let n = 0;
 
-  for (const m of doc.matchAll(TOKEN)) {
+  const tokenRe = new RegExp(TOKEN.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = tokenRe.exec(doc)) !== null) {
     const start = m.index;
     const end = start + m[0].length;
+    // An opener or closer inside code is an example, not markup. Resume one character on
+    // so a real construct that the example's match swallowed is still found.
+    if (inCode(code, start) || inCode(code, end - 1)) {
+      tokenRe.lastIndex = start + 1;
+      continue;
+    }
     const token: Span = { from: start, to: end };
     // The substitution's replacement half is derived from offsets, not its capture group.
     const [del, add, subOld, , hlText, hlComment, hlOnly, pointComment] = m.slice(1);
@@ -185,7 +207,7 @@ export function parseCriticMarkup(doc: string): ParseResult {
   const warnings: ParseWarning[] = [];
   const inside = (i: number) => covered.some((c) => i >= c.from && i < c.to);
   for (const m of doc.matchAll(STRAY)) {
-    if (inside(m.index)) continue;
+    if (inside(m.index) || inCode(code, m.index)) continue;
     warnings.push({
       message: `Stray CriticMarkup marker "${m[0]}" — the annotation is malformed and was left as plain text`,
       line: lineAt(doc, m.index),
