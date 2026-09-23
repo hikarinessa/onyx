@@ -4,7 +4,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
-## [Unreleased]
+## [0.11.12] — 2026-09-23
 
 ### Fixed
 - **Scrolling long notes no longer jumps back up.** CodeMirror estimates the height of every line it hasn't drawn from one short sample line, and which line that was depended on what was on screen: a monospace frontmatter line, a line of two spaces, or body text. Each time it changed, the estimated height of the whole note moved by thousands of pixels at once, throwing the view back (Preconquest Consciousness jumped from line 264 to 142). Short lines are now never sampled, so the estimate stays fixed while you scroll
