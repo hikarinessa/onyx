@@ -4,6 +4,7 @@ import { useAppStore, selectActiveTabPath, selectActiveTabName, selectAllTabs, t
 import { openFileInEditor } from "../lib/openFile";
 import { replaceTabContent } from "./Editor";
 import { Calendar } from "./Calendar";
+import { DatePropertyField } from "./DatePropertyField";
 import { createOrOpenPeriodicNote } from "../lib/periodicNotes";
 import { getCached, setCache } from "../lib/ipcCache";
 import { Icon } from "./Icon";
@@ -97,14 +98,7 @@ function PropertyField({
       );
 
     case "date":
-      return (
-        <input
-          type="date"
-          className="prop-input prop-input-date"
-          value={typeof value === "string" ? value : ""}
-          onChange={(e) => onChange(e.target.value || null)}
-        />
-      );
+      return <DatePropertyField value={typeof value === "string" ? value : null} onChange={onChange} />;
 
     case "number":
       return (
