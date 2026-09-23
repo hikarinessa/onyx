@@ -24,7 +24,9 @@ export default defineConfig({
         }
       : undefined,
     watch: {
-      ignored: ["**/src-tauri/**"],
+      // Agent worktrees are full checkouts inside the repo; edits there must not
+      // hot-reload the running app (same reason skip.rs keeps them out of the index).
+      ignored: ["**/src-tauri/**", "**/.claude/worktrees/**"],
     },
   },
   envPrefix: ["VITE_", "TAURI_"],
