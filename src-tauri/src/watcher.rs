@@ -259,11 +259,16 @@ impl FileWatcher {
         )
         .map_err(|e| format!("Failed to create watcher: {}", e))?;
 
+        // A registered folder that was moved or deleted must not stop the others from
+        // being watched: skip it with a warning and keep going.
+        let mut watched = 0;
         for path in paths {
-            watcher
-                .watch(path, RecursiveMode::Recursive)
-                .map_err(|e| format!("Failed to watch {}: {}", path.display(), e))?;
+            match watcher.watch(path, RecursiveMode::Recursive) {
+                Ok(()) => watched += 1,
+                Err(e) => log::warn!("Not watching {}: {}", path.display(), e),
+            }
         }
+        log::info!("File watcher started for {} of {} directories", watched, paths.len());
 
         Ok(Self {
             _watcher: watcher,

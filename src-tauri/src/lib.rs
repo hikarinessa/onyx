@@ -235,7 +235,6 @@ pub fn run() {
                     Ok(fw) => {
                         let mut w = state.watcher.lock().unwrap();
                         *w = Some(fw);
-                        log::info!("File watcher started for {} directories", paths.len());
                     }
                     Err(e) => log::error!("Failed to start file watcher: {}", e),
                 }

@@ -4,6 +4,11 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **One missing registered folder no longer stops file watching for all of them** (#116). A folder moved or deleted without being unregistered made the watcher fail to start, so external edits stopped reaching every folder. It is now skipped with a warning and the rest are watched
+
 ## [0.11.8] — 2026-09-23
 
 ### Added
