@@ -52,7 +52,9 @@ src/                          # Frontend (React + TypeScript)
 │   ├── Editor.tsx            #  705 lines — CM6 editor, inline title, live preview sync, split pane layout
 │   ├── EditorPane.tsx        #  252 lines — Single pane wrapper (tab bar + editor mount)
 │   ├── ContextPanel.tsx      #  938 lines — Calendar, backlinks, properties, outline, recent docs
-│   ├── Calendar.tsx          #  287 lines — Month-grid calendar with week numbers
+│   ├── Calendar.tsx          #  109 lines — Context-panel calendar: month navigation + note dots around MonthGrid
+│   ├── MonthGrid.tsx         #  227 lines — Presentational month grid with week numbers (Calendar + date pop-up)
+│   ├── DatePropertyField.tsx #  259 lines — Date property: region-ordered text entry + themed pop-up calendar
 │   ├── StatusBar.tsx         #  110 lines — Cursor, word count, lint status, editor mode, file path, conflict/deleted indicators
 │   ├── QuickOpen.tsx         #  264 lines — Cmd+O fuzzy search + type: prefix queries
 │   ├── CommandPalette.tsx    #  139 lines — Cmd+P fuzzy command search
@@ -92,6 +94,9 @@ src/                          # Frontend (React + TypeScript)
 │   ├── fileOps.ts            #  205 lines — Centralized file mutations (with link warnings, fs:change event-driven)
 │   ├── openFile.ts           #   91 lines — Shared open-file-in-editor utility (with nav stack, orphan detection)
 │   ├── periodicNotes.ts      #   37 lines — Create/open periodic notes utility
+│   ├── dateFormat.ts         #  109 lines — Date order from the macOS region pattern; parse/format display ↔ ISO
+│   ├── calendarDates.ts      #   54 lines — Calendar date helpers (ISO keys, ISO weeks, month cells)
+│   ├── useToday.ts           #   28 lines — Today's date, refreshed on day change (minute poll + focus)
 │   ├── frecency.ts           #   79 lines — Frecency ranking (uses × 7-day half-life) for command palette + Quick Open
 │   ├── recentDocs.ts         #   68 lines — Recent documents tracking (localStorage ring buffer)
 │   ├── cursorPositions.ts    #   79 lines — Per-file cursor position persistence
