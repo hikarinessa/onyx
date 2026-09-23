@@ -1,6 +1,6 @@
 # Onyx — Context for AI Assistants
 
-Lightweight, offline-first markdown note-taking app. Tauri 2 + React 18 + CodeMirror 6 + SQLite.
+Lightweight, offline-first markdown note-taking app. Tauri 2 + React 19 + CodeMirror 6 + SQLite.
 
 ## Key Documents
 
@@ -186,6 +186,8 @@ npm test                 # Vitest (pure-logic suites; node environment, no jsdom
 
 Every issue must have a **Type** label (Bug or Task, default: Task). **Priority** is managed via the GitHub Project board field (P0/P1/P2), not labels. Status is tracked by GitHub open/closed state and the project board. See `docs/ISSUES.md` for details.
 
+The repo is **public**: commit messages, issues, comments and release notes are visible to anyone. Describe behaviour, not notes — never name a note, quote its content or include a path from the user's vault; say "a long note" or "a note with an image in a table cell".
+
 ## Gotchas
 
 - **Kill `cargo tauri dev` before making Rust changes.** The dev server watches Rust files and auto-rebuilds + relaunches the app on every save, causing repeated open/close cycles during multi-file edits. Stop the dev process first, make all backend changes, verify with `cargo check`, then relaunch once when ready to test.
@@ -219,3 +221,4 @@ Every issue must have a **Type** label (Bug or Task, default: Task). **Priority*
 - **Hanging indent metrics are cached at module level.** `hangMetrics` in `livePreview.ts` measures space/digit/bullet/checkbox widths via DOM. Cache is invalidated on font config changes via `resetHangMetrics()` called from the remeasure hook. If widget CSS (`.cm-preview-bullet`, `.cm-preview-alt-cb`) changes margins/sizing, the cache must be invalidated too.
 - **Sync Tauri commands run on the main thread, and the main thread also drains WebKit's IPC.** If it stays busy long enough for 50,000 page→host messages to queue, WebKit clears the queue and discards every later message from the page for the life of the process: invokes never resolve and mouse/keyboard events are never acknowledged, while the window keeps painting (#115). Anything that can run for seconds per call, or many times per burst, must be async or batched.
 - **`dir_has_markdown` uses SQLite, not filesystem.** The `list_directory` command checks for empty folders via `db.has_files_under()` — a `SELECT 1 FROM files WHERE path LIKE ?1 LIMIT 1` query. This replaced a recursive filesystem traversal that caused 100% CPU after sleep wake. If the index is stale (e.g. before initial reconciliation), some folders may appear empty temporarily.
+- **A schema migration is frozen once any build containing it exists.** The user installs builds as soon as they finish, so a migration in a finished build has already run on the real index (`~/.onyx/cache/index.db`). Fix a shipped migration by appending a new one to `SCHEMA_MIGRATIONS`, never by editing it; edit freely only while it exists in uncommitted or dev-only code. Test an upgrade on a copy (`sqlite3 ~/.onyx/cache/index.db ".backup '<scratch>/index.db'"`), never on the live file.
