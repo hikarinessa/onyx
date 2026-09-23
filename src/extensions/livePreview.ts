@@ -184,6 +184,7 @@ import { headingFoldRange } from "./headingFold";
 import { listFoldRange } from "./outliner";
 import { wikilinkFollowRef } from "./wikilinks";
 import { createImageElement, parseSize, splitAlt } from "../lib/imageRefs";
+import { findHtmlSegments, renderHtmlSnippet } from "../lib/inlineHtml";
 import { useAppStore, selectActiveTabPath } from "../stores/app";
 
 class HeadingFoldWidget extends WidgetType {
@@ -458,9 +459,20 @@ const tableParseOpts: Options = optionsWithDefaults({
 /**
  * Render cell text with inline markdown formatting into a DOM element.
  * Supports: bold, italic, bold+italic, strikethrough, highlight, inline code, wikilinks,
- * tags, and images (`![[photo.png]]`, `![alt](url)`; see lib/imageRefs.ts).
+ * tags, images (`![[photo.png]]`, `![alt](url)`; see lib/imageRefs.ts), and allowlisted
+ * inline HTML such as coloured `<font>` and `<br>` (lib/inlineHtml.ts).
  */
 function renderCellContent(el: HTMLElement, text: string): void {
+  let last = 0;
+  for (const seg of findHtmlSegments(text)) {
+    if (seg.from > last) renderCellMarkdown(el, text.slice(last, seg.from));
+    el.appendChild(renderHtmlSnippet(text.slice(seg.from, seg.to)));
+    last = seg.to;
+  }
+  if (last < text.length || last === 0) renderCellMarkdown(el, text.slice(last));
+}
+
+function renderCellMarkdown(el: HTMLElement, text: string): void {
   // Groups: 1=inline code, 2=bold+italic, 3=bold, 4=italic, 5=strikethrough, 6=highlight, 7=wikilink target, 8=wikilink alias, 9=tag,
   // 10=image embed reference, 11=image embed option, 12=markdown image alt, 13=markdown image url
   const CELL_RE = /(`[^`]+`)|(\*{3}.+?\*{3})|(\*{2}.+?\*{2})|(\*[^*]+\*)|(~~.+?~~)|(==.+?==)|(?<!!)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(?<=^|\s)#([a-zA-Z][\w/-]*)|!\[\[([^\]|]+?\.(?:png|jpe?g|gif|webp|svg|avif|bmp|heic))(?:\|([^\]]*))?\]\]|!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/gi;

@@ -78,6 +78,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── footnotes.ts          #   215 lines — CM6: footnote numbers in preview, hover text, jump targets (clicks routed via wikilinks.ts)
 │   ├── livePreview.ts        # 1579 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, URLs, callouts, tag chips, fold, hanging indent, indent guides)
 │   ├── embeds.ts             #  717 lines — CM6: ![[note]] embeds (StateField-based block decorations); images go to images.ts
+│   ├── htmlInline.ts         #  109 lines — CM6: allowlisted inline HTML in preview (coloured font/span, br, u, sup, links)
 │   ├── images.ts             #  152 lines — CM6: images in preview (![[photo.png|300]], ![alt](url)), inline anywhere on a line
 │   ├── headingFold.ts        #   71 lines — CM6: foldService for heading-based section folding
 │   ├── inlineSvgIcons.ts     #  133 lines — Compact SVG icon renderer for CM6 widgets (callouts, alt checkboxes)
@@ -98,6 +99,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── dateFormat.ts         #  109 lines — Date order from the macOS region pattern; parse/format display ↔ ISO
 │   ├── calendarDates.ts      #   54 lines — Calendar date helpers (ISO keys, ISO weeks, month cells)
 │   ├── useToday.ts           #   28 lines — Today's date, refreshed on day change (minute poll + focus)
+│   ├── inlineHtml.ts         #  131 lines — Balanced-HTML finder + allowlist rebuild (DOMParser, colour/href filters)
 │   ├── imageRefs.ts          #  101 lines — Image syntax, sizes, resolution (resolve_attachment + asset protocol), self-loading <img>
 │   ├── fileKinds.ts          #   17 lines — Markdown vs plain text (.txt/.json/.yaml, Source-only) by extension
 │   ├── frecency.ts           #   79 lines — Frecency ranking (uses × 7-day half-life) for command palette + Quick Open

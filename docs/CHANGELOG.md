@@ -4,6 +4,11 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Inline HTML shows formatted in Preview** (#122). Coloured text (`<font style="color:…">`, `<span style="color:…">`), `<br>`, `<u>`, `<sup>`/`<sub>`, bold/italic tags, links and `<p>` render in paragraphs and table cells, including `class="font-mono"`. The HTML is rebuilt from an allowlist, so only a text colour, a web or mail link and that one class survive; scripts, styles and embeds are dropped and other tags show as their text. Markdown inside HTML stays literal, as in Obsidian. Tags that span several lines (`<div>` blocks) and YouTube embeds are not rendered
+
 ## [0.11.11] — 2026-09-23
 
 ### Added

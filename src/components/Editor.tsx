@@ -42,6 +42,7 @@ import { spellcheckExtension } from "../extensions/spellcheck";
 import { embedExtension } from "../extensions/embeds";
 import { isMarkdownPath, isPlainTextPath } from "../lib/fileKinds";
 import { imageExtension } from "../extensions/images";
+import { htmlInlineExtension } from "../extensions/htmlInline";
 import { lintKeymap } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
 import { getAutoSaveMs, setRemeasureHook, isAutofixOnSave, getShowLineNumbers, getTabSize } from "../lib/configBridge";
@@ -384,6 +385,7 @@ function buildExtensions(): { markdown: Extension[]; plain: Extension[] } {
     ...brokenLinksExtension(),
     ...embedExtension(),
     imageExtension(),
+    htmlInlineExtension(),
     ...blocksExtension(),
     keymap.of(lintKeymap),
     ...lintingExtension(),
