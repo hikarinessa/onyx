@@ -205,9 +205,10 @@ const linkClickHandler = EditorView.domEventHandlers({
       return moved;
     }
 
-    // Tag chip widgets carry their tag. Primary button only: a right-click keeps its menu.
+    // Tag chip widgets carry their tag. A plain primary click only: right-click and
+    // Ctrl-click (the macOS context-menu click) keep their menu.
     const tagEl = target.closest("[data-tag]") as HTMLElement | null;
-    if (tagEl?.dataset.tag && event.button === 0) {
+    if (tagEl?.dataset.tag && event.button === 0 && !event.ctrlKey) {
       event.preventDefault();
       searchTag(tagEl.dataset.tag);
       return true;

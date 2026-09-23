@@ -70,33 +70,65 @@ pub struct BookmarkRecord {
 /// Schema changes on top of the base tables, oldest first (see `run_migrations`).
 /// Entry n brings the database to version n + 1. Once released, append; never edit.
 const SCHEMA_MIGRATIONS: &[fn(&Connection) -> Result<(), String>] = &[
-    add_link_target_stem,
+    add_name_keys,
 ];
 
-/// 1: `links.target_stem`, the lowercased note name a link can resolve to, indexed so
-/// every link naming a note is one lookup away when that note is indexed or removed.
-fn add_link_target_stem(conn: &Connection) -> Result<(), String> {
+/// 1: case-folded name keys, indexed, so wikilink resolution never compares text with
+/// SQLite's ASCII-only NOCASE or treats link text as a LIKE pattern:
+///   files.name_key   — the note's title (file stem), `name_key`-folded
+///   links.target_stem — the note name a link can resolve to (`link_stem`)
+fn add_name_keys(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
-        "ALTER TABLE links ADD COLUMN target_stem TEXT;
+        "ALTER TABLE files ADD COLUMN name_key TEXT;
+         ALTER TABLE links ADD COLUMN target_stem TEXT;
+         CREATE INDEX IF NOT EXISTS idx_files_name_key ON files(name_key);
          CREATE INDEX IF NOT EXISTS idx_links_target_stem ON links(target_stem);",
     ).map_err(|e| e.to_string())?;
-    let rows: Vec<(i64, String)> = {
-        let mut stmt = conn.prepare("SELECT id, target FROM links").map_err(|e| e.to_string())?;
-        let mapped = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).map_err(|e| e.to_string())?;
-        mapped.collect::<Result<_, _>>().map_err(|e| e.to_string())?
-    };
-    for (id, target) in rows {
+    let files: Vec<(i64, Option<String>)> = query_all(conn, "SELECT id, title FROM files", [])?;
+    for (id, title) in files {
+        conn.execute("UPDATE files SET name_key = ?1 WHERE id = ?2", params![title.as_deref().map(name_key), id])
+            .map_err(|e| e.to_string())?;
+    }
+    let links: Vec<(i64, String)> = query_all(conn, "SELECT id, target FROM links", [])?;
+    for (id, target) in links {
         conn.execute("UPDATE links SET target_stem = ?1 WHERE id = ?2", params![link_stem(&target), id])
             .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
+fn query_all<T: rusqlite::types::FromSql, U: rusqlite::types::FromSql>(
+    conn: &Connection,
+    sql: &str,
+    params: impl rusqlite::Params,
+) -> Result<Vec<(T, U)>, String> {
+    let mut stmt = conn.prepare_cached(sql).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(params, |r| Ok((r.get(0)?, r.get(1)?))).map_err(|e| e.to_string())?;
+    rows.collect::<Result<_, _>>().map_err(|e| e.to_string())
+}
+
+/// Case folding for note names and paths in link resolution: full Unicode lowercase, so
+/// `[[élan]]` finds `Élan.md` the way the macOS filesystem would.
+fn name_key(s: &str) -> String {
+    s.to_lowercase()
+}
+
+/// `target` without a trailing `.md` in any case. The suffix is ASCII, so the cut is
+/// always on a character boundary.
+fn strip_md(target: &str) -> &str {
+    let n = target.len();
+    if n >= 3 && target.as_bytes()[n - 3..].eq_ignore_ascii_case(b".md") {
+        &target[..n - 3]
+    } else {
+        target
+    }
+}
+
 /// The note name a link target can only resolve to: its last path segment, without
-/// `.md`, lowercased. `[[Notes/Consent]]` and `[[consent.md]]` both give `consent`.
+/// `.md`, case-folded. `[[Notes/Consent]]` and `[[consent.MD]]` both give `consent`.
 fn link_stem(target: &str) -> String {
-    let base = target.strip_suffix(".md").unwrap_or(target);
-    base.rsplit('/').next().unwrap_or(base).to_lowercase()
+    let base = strip_md(target);
+    name_key(base.rsplit('/').next().unwrap_or(base))
 }
 
 fn parent_dir(path: &str) -> &str {
@@ -110,64 +142,57 @@ fn parent_dir(path: &str) -> &str {
 ///   2. the note's name in the linking note's own folder (`[[sub/note]]` relative to it)
 ///   3. any note with that name, the first path alphabetically
 ///   4. `[[folder/note]]` as the tail of any path, first alphabetically
-/// Names match case-insensitively for ASCII letters, as SQLite's NOCASE does. Every
-/// candidate carries the link's last segment as its title, so the title index finds
-/// them and the rest is plain string comparison: no link text is ever a LIKE pattern.
+/// Names and paths compare `name_key`-folded. Every candidate carries the link's last
+/// segment as its name, so the name index finds them and the rest is string comparison:
+/// no link text is ever a LIKE pattern.
 fn resolve_link(
     conn: &Connection,
     roots: &[String],
     target: &str,
     source_dir: &str,
 ) -> Result<Option<(i64, String)>, String> {
-    let base = target.strip_suffix(".md").unwrap_or(target);
-    let stem = base.rsplit('/').next().unwrap_or(base);
+    let base = strip_md(target);
+    let stem = link_stem(target);
     if stem.is_empty() {
         return Ok(None);
     }
-    let candidates: Vec<(i64, String)> = {
-        let mut stmt = conn.prepare_cached(
-            "SELECT id, path FROM files WHERE title = ?1 COLLATE NOCASE ORDER BY path",
-        ).map_err(|e| format!("Failed to resolve link target: {}", e))?;
-        let rows = stmt.query_map(params![stem], |r| Ok((r.get(0)?, r.get(1)?)))
-            .map_err(|e| format!("Failed to resolve link target: {}", e))?;
-        rows.collect::<Result<_, _>>().map_err(|e| format!("Failed to resolve link target: {}", e))?
+    let candidates: Vec<(i64, String)> = query_all(
+        conn,
+        "SELECT id, path FROM files WHERE name_key = ?1 ORDER BY path",
+        params![stem],
+    ).map_err(|e| format!("Failed to resolve link target: {}", e))?;
+    let folded: Vec<String> = candidates.iter().map(|(_, p)| name_key(p)).collect();
+    let pick = |i: usize| Some(candidates[i].clone());
+    let at = |path: String| {
+        let want = name_key(&path);
+        folded.iter().position(|p| *p == want)
     };
-    let at = |path: &str| candidates.iter().find(|(_, p)| p.eq_ignore_ascii_case(path)).cloned();
 
     let nested = base.contains('/');
     if nested {
         for root in roots {
-            if let Some(hit) = at(&format!("{}/{}.md", root.trim_end_matches('/'), base)) {
-                return Ok(Some(hit));
+            if let Some(i) = at(format!("{}/{}.md", root.trim_end_matches('/'), base)) {
+                return Ok(pick(i));
             }
         }
     }
-    if let Some(hit) = at(&format!("{}/{}.md", source_dir, base)) {
-        return Ok(Some(hit));
+    if let Some(i) = at(format!("{}/{}.md", source_dir, base)) {
+        return Ok(pick(i));
     }
     if !nested {
         return Ok(candidates.into_iter().next());
     }
-    let tail = format!("/{}.md", base);
-    Ok(candidates.into_iter().find(|(_, p)| {
-        p.len() >= tail.len() && p[p.len() - tail.len()..].eq_ignore_ascii_case(&tail)
-    }))
+    let tail = name_key(&format!("/{}.md", base));
+    Ok(folded.iter().position(|p| p.ends_with(&tail)).and_then(pick))
 }
 
-/// Re-resolve every link whose name is `stem`, after a note with that name appeared,
-/// moved or went away. A link resolved earlier may now have a better target (the new
-/// note sorts first, or sits in the linking note's folder), not just a missing one.
-fn reresolve_links_named(conn: &Connection, roots: &[String], stem: &str) -> Result<(), String> {
-    let links: Vec<(i64, String, String, Option<i64>)> = {
-        let mut stmt = conn.prepare_cached(
-            "SELECT l.id, l.target, s.path, l.target_id
-             FROM links l JOIN files s ON s.id = l.source_id
-             WHERE l.target_stem = ?1",
-        ).map_err(|e| format!("Failed to find links to re-resolve: {}", e))?;
-        let rows = stmt.query_map(params![stem], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
-            .map_err(|e| format!("Failed to find links to re-resolve: {}", e))?;
-        rows.collect::<Result<_, _>>().map_err(|e| format!("Failed to find links to re-resolve: {}", e))?
-    };
+/// Re-resolve the given links (id, target, source path, current target id), writing
+/// only those whose answer changed.
+fn reresolve(
+    conn: &Connection,
+    roots: &[String],
+    links: Vec<(i64, String, String, Option<i64>)>,
+) -> Result<(), String> {
     for (id, target, source_path, current) in links {
         let resolved = resolve_link(conn, roots, &target, parent_dir(&source_path))?.map(|(id, _)| id);
         if resolved != current {
@@ -176,6 +201,53 @@ fn reresolve_links_named(conn: &Connection, roots: &[String], stem: &str) -> Res
         }
     }
     Ok(())
+}
+
+fn links_where(conn: &Connection, condition: &str, arg: &dyn rusqlite::ToSql)
+    -> Result<Vec<(i64, String, String, Option<i64>)>, String>
+{
+    let mut stmt = conn.prepare_cached(&format!(
+        "SELECT l.id, l.target, s.path, l.target_id
+         FROM links l JOIN files s ON s.id = l.source_id
+         WHERE {condition}"
+    )).map_err(|e| format!("Failed to find links to re-resolve: {}", e))?;
+    let rows = stmt.query_map([arg], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .map_err(|e| format!("Failed to find links to re-resolve: {}", e))?;
+    rows.collect::<Result<_, _>>().map_err(|e| format!("Failed to find links to re-resolve: {}", e))
+}
+
+/// Re-resolve every link whose name is `stem` (a `link_stem`), after a note with that
+/// name appeared, moved or went away. A link resolved earlier may now have a better
+/// target (the new note sorts first, or sits in the linking note's folder), not just
+/// a missing one.
+fn reresolve_links_named(conn: &Connection, roots: &[String], stem: &str) -> Result<(), String> {
+    let links = links_where(conn, "l.target_stem = ?1", &stem)?;
+    reresolve(conn, roots, links)
+}
+
+/// Re-resolve every link written in `source_id`, after that note moved folder: its
+/// same-folder and relative links now start somewhere else.
+fn reresolve_links_from(conn: &Connection, roots: &[String], source_id: i64) -> Result<(), String> {
+    let links = links_where(conn, "l.source_id = ?1", &source_id)?;
+    reresolve(conn, roots, links)
+}
+
+/// Delete the files a WHERE clause selects, then re-resolve the links that named them:
+/// another note of the same name may take them over. Returns the number deleted.
+fn delete_files_where(conn: &Connection, roots: &[String], condition: &str, arg: &dyn rusqlite::ToSql)
+    -> Result<u32, String>
+{
+    let stems: Vec<(i64, Option<String>)> =
+        query_all(conn, &format!("SELECT id, name_key FROM files WHERE {condition}"), [arg])?;
+    let count = conn.execute(&format!("DELETE FROM files WHERE {condition}"), [arg])
+        .map_err(|e| format!("Failed to delete files: {}", e))?;
+    let mut done = std::collections::HashSet::new();
+    for stem in stems.into_iter().filter_map(|(_, s)| s) {
+        if done.insert(stem.clone()) {
+            reresolve_links_named(conn, roots, &stem)?;
+        }
+    }
+    Ok(count as u32)
 }
 
 fn replace_tags(conn: &Connection, file_id: i64, tags: &[String]) -> Result<(), String> {
@@ -318,15 +390,16 @@ impl Database {
             .as_secs() as i64;
 
         self.conn.execute(
-            "INSERT INTO files (path, dir_id, title, modified_at, indexed_at, frontmatter)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "INSERT INTO files (path, dir_id, title, name_key, modified_at, indexed_at, frontmatter)
+             VALUES (?1, ?2, ?3, ?7, ?4, ?5, ?6)
              ON CONFLICT(path) DO UPDATE SET
                 dir_id = excluded.dir_id,
                 title = excluded.title,
+                name_key = excluded.name_key,
                 modified_at = excluded.modified_at,
                 indexed_at = excluded.indexed_at,
                 frontmatter = excluded.frontmatter",
-            params![path, dir_id, title, modified_at, now, frontmatter_json],
+            params![path, dir_id, title, modified_at, now, frontmatter_json, title.map(name_key)],
         ).map_err(|e| format!("Failed to upsert file: {}", e))?;
 
         // Return the file id
@@ -339,22 +412,28 @@ impl Database {
         Ok(file_id)
     }
 
+    /// Re-key a renamed file. Links that named the old name keep pointing at it: the
+    /// rename command reads them (`get_link_targets_to`) to rewrite `[[Old]]` to
+    /// `[[New]]` in the notes that contain them, and those notes' reindex then resolves
+    /// the rewritten text. Links that already named the new name may point here now.
     pub fn rename_file(&self, old_path: &str, new_path: &str) -> Result<(), String> {
-        let new_title = std::path::Path::new(new_path)
+        let new_title = Path::new(new_path)
             .file_stem()
             .map(|s| s.to_string_lossy().to_string());
-
-        let old_title = Path::new(old_path).file_stem().map(|s| s.to_string_lossy().to_lowercase());
         let tx = self.conn.unchecked_transaction()
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
         tx.execute(
-            "UPDATE files SET path = ?1, title = ?2 WHERE path = ?3",
-            params![new_path, new_title, old_path],
+            "UPDATE files SET path = ?1, title = ?2, name_key = ?3 WHERE path = ?4",
+            params![new_path, new_title, new_title.as_deref().map(name_key), old_path],
         ).map_err(|e| format!("Failed to rename file in index: {}", e))?;
-        // Links to the old name may now point elsewhere; links to the new name may now
-        // point here.
-        for stem in [old_title, new_title.map(|t| t.to_lowercase())].into_iter().flatten() {
-            reresolve_links_named(&tx, &self.roots, &stem)?;
+        if let Some(t) = &new_title {
+            reresolve_links_named(&tx, &self.roots, &name_key(t))?;
+        }
+        // A move to another folder also changes where this note's own links start from
+        if let Some(id) = tx.query_row("SELECT id FROM files WHERE path = ?1", params![new_path], |r| r.get::<_, i64>(0))
+            .optional().map_err(|e| e.to_string())?
+        {
+            reresolve_links_from(&tx, &self.roots, id)?;
         }
         tx.commit().map_err(|e| format!("Failed to commit rename: {}", e))?;
         Ok(())
@@ -394,9 +473,22 @@ impl Database {
                 .file_stem()
                 .map(|s| s.to_string_lossy().to_string());
             tx.execute(
-                "UPDATE files SET title = ?1 WHERE id = ?2",
-                params![title, id],
+                "UPDATE files SET title = ?1, name_key = ?2 WHERE id = ?3",
+                params![title, title.as_deref().map(name_key), id],
             ).map_err(|e| format!("Failed to update title: {}", e))?;
+        }
+
+        // Moved notes may now win or lose same-folder and root-relative lookups, and
+        // their own links start from a new folder.
+        let mut stems = std::collections::HashSet::new();
+        for (id, path) in &rows {
+            if let Some(stem) = Path::new(path).file_stem() {
+                stems.insert(name_key(&stem.to_string_lossy()));
+            }
+            reresolve_links_from(&tx, &self.roots, *id)?;
+        }
+        for stem in stems {
+            reresolve_links_named(&tx, &self.roots, &stem)?;
         }
 
         tx.commit().map_err(|e| format!("Failed to commit dir rename: {}", e))?;
@@ -406,12 +498,7 @@ impl Database {
     pub fn delete_file(&self, path: &str) -> Result<(), String> {
         let tx = self.conn.unchecked_transaction()
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
-        tx.execute("DELETE FROM files WHERE path = ?1", params![path])
-            .map_err(|e| format!("Failed to delete file: {}", e))?;
-        // Links that pointed here may have another note of the same name to go to
-        if let Some(stem) = Path::new(path).file_stem() {
-            reresolve_links_named(&tx, &self.roots, &stem.to_string_lossy().to_lowercase())?;
-        }
+        delete_files_where(&tx, &self.roots, "path = ?1", &path)?;
         tx.commit().map_err(|e| format!("Failed to commit delete: {}", e))?;
         Ok(())
     }
@@ -420,23 +507,39 @@ impl Database {
     pub fn delete_by_prefix(&self, prefix: &str) -> Result<u32, String> {
         let escaped = escape_like_literal(prefix);
         let pattern = if escaped.ends_with('/') { format!("{}%", escaped) } else { format!("{}/%", escaped) };
-        let count = self.conn.execute(
-            "DELETE FROM files WHERE path LIKE ?1 ESCAPE '\\'",
-            params![pattern],
-        ).map_err(|e| format!("Failed to delete files by prefix: {}", e))?;
-        Ok(count as u32)
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+        let count = delete_files_where(&tx, &self.roots, "path LIKE ?1 ESCAPE '\\'", &pattern)?;
+        tx.commit().map_err(|e| format!("Failed to commit prefix delete: {}", e))?;
+        Ok(count)
     }
 
     pub fn delete_by_dir(&self, dir_id: &str) -> Result<u32, String> {
-        let count = self.conn.execute("DELETE FROM files WHERE dir_id = ?1", params![dir_id])
-            .map_err(|e| format!("Failed to delete files for directory: {}", e))?;
-        Ok(count as u32)
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+        let count = delete_files_where(&tx, &self.roots, "dir_id = ?1", &dir_id)?;
+        tx.commit().map_err(|e| format!("Failed to commit directory delete: {}", e))?;
+        Ok(count)
     }
 
-    /// Replace the registered roots used for root-relative links. Call whenever the
-    /// directory list changes; the order is the sidebar's.
-    pub fn set_roots(&mut self, roots: Vec<String>) {
+    /// Replace the registered roots used for root-relative links (sidebar order), and
+    /// re-resolve the `[[folder/note]]` links whose answer depends on them. Call whenever
+    /// the directory list or its order changes.
+    pub fn set_roots(&mut self, roots: Vec<String>) -> Result<(), String> {
+        if self.roots == roots {
+            return Ok(());
+        }
         self.roots = roots;
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+        let nested = links_where(&tx, "instr(l.target, '/') > ?1", &0)?;
+        reresolve(&tx, &self.roots, nested)?;
+        tx.commit().map_err(|e| format!("Failed to commit root change: {}", e))
+    }
+
+    /// Whether `path` is in the index.
+    pub fn is_indexed(&self, path: &str) -> Result<bool, String> {
+        Ok(self.get_file_id(path)?.is_some())
     }
 
     /// Where a wikilink written in `source_path` points, as a path. Clicks use this, so
@@ -464,7 +567,7 @@ impl Database {
         replace_links(&tx, &self.roots, file_id, path, links)?;
         replace_tags(&tx, file_id, tags)?;
         if let Some(t) = title {
-            reresolve_links_named(&tx, &self.roots, &t.to_lowercase())?;
+            reresolve_links_named(&tx, &self.roots, &name_key(t))?;
         }
         tx.commit().map_err(|e| format!("Failed to commit index of {}: {}", path, e))?;
         Ok(file_id)
@@ -812,9 +915,8 @@ impl Database {
 
         let mut total = 0u32;
         for path in paths {
-            let count = tx.execute("DELETE FROM files WHERE path = ?1", params![path])
+            total += delete_files_where(&tx, &self.roots, "path = ?1", path)
                 .map_err(|e| format!("Failed to delete file {}: {}", path, e))?;
-            total += count as u32;
         }
 
         tx.commit().map_err(|e| format!("Failed to commit batch delete: {}", e))?;
@@ -868,7 +970,7 @@ mod tests {
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("onyx-db-test-{}-{}", std::process::id(), n));
         let mut db = Database::new(&dir.join("index.db")).unwrap();
-        db.set_roots(roots.iter().map(|r| r.to_string()).collect());
+        db.set_roots(roots.iter().map(|r| r.to_string()).collect()).unwrap();
         TempDb { db, dir }
     }
 
@@ -978,24 +1080,87 @@ mod tests {
     }
 
     #[test]
-    fn renaming_a_note_moves_the_links_that_named_it() {
+    fn a_renamed_note_keeps_the_links_the_rename_command_will_rewrite() {
         let t = temp_db(&[]);
-        add(&t, "/v/Old.md", &[]);
+        let old = add(&t, "/v/Old.md", &[]);
         add(&t, "/v/z/New.md", &[]);
-        let to_old = add(&t, "/v/s1.md", &["Old"]);
+        add(&t, "/v/s1.md", &["Old"]);
         let to_new = add(&t, "/v/s2.md", &["New"]);
         t.rename_file("/v/Old.md", "/v/New.md").unwrap();
-        assert_agree(&t, to_old, "/v/s1.md", "Old", None);
+        // propagate_rename_to_wikilinks reads this to rewrite [[Old]] in s1; it only
+        // rewrites link text naming the old note, so s2's [[New]] listed here is untouched.
+        let pairs = t.get_link_targets_to(old).unwrap();
+        assert!(pairs.contains(&("/v/s1.md".to_string(), "Old".to_string())), "{pairs:?}");
+        assert!(pairs.iter().all(|(p, target)| target != "Old" || p == "/v/s1.md"), "{pairs:?}");
+        // [[New]] from the same folder now finds the renamed note first
         assert_agree(&t, to_new, "/v/s2.md", "New", Some("/v/New.md"));
     }
 
     #[test]
-    fn re_resolution_uses_the_stem_index() {
+    fn non_ascii_names_and_folders_resolve_without_panicking() {
         let t = temp_db(&[]);
-        let plan: String = t.conn.query_row(
-            "EXPLAIN QUERY PLAN SELECT l.id FROM links l WHERE l.target_stem = 'x'", [],
-            |r| r.get(3),
-        ).unwrap();
-        assert!(plan.contains("idx_links_target_stem"), "{plan}");
+        add(&t, "/v/Año/Plan.md", &[]);
+        add(&t, "/v/Élan.md", &[]);
+        let s1 = add(&t, "/v/s1.md", &["b/Plan"]);
+        let s2 = add(&t, "/v/s2.md", &["élan"]);
+        let s3 = add(&t, "/v/s3.md", &["año/plan.MD"]);
+        assert_agree(&t, s1, "/v/s1.md", "b/Plan", None);
+        assert_agree(&t, s2, "/v/s2.md", "élan", Some("/v/Élan.md"));
+        assert_agree(&t, s3, "/v/s3.md", "año/plan.MD", Some("/v/Año/Plan.md"));
+    }
+
+    #[test]
+    fn deleting_a_folder_hands_its_links_to_another_note_of_the_same_name() {
+        let t = temp_db(&[]);
+        add(&t, "/v/a/Idea.md", &[]);
+        add(&t, "/v/b/Idea.md", &[]);
+        let src = add(&t, "/v/src.md", &["Idea"]);
+        assert_agree(&t, src, "/v/src.md", "Idea", Some("/v/a/Idea.md"));
+        t.delete_by_prefix("/v/a").unwrap();
+        assert_agree(&t, src, "/v/src.md", "Idea", Some("/v/b/Idea.md"));
+        t.delete_files_batch(&["/v/b/Idea.md".to_string()]).unwrap();
+        assert_agree(&t, src, "/v/src.md", "Idea", None);
+    }
+
+    #[test]
+    fn moving_a_folder_re_resolves_links_from_and_to_the_moved_notes() {
+        let t = temp_db(&[]);
+        add(&t, "/v/a/Idea.md", &[]);
+        add(&t, "/v/b/Idea.md", &[]);
+        // Written in b, so its same-folder Idea is b's
+        let src = add(&t, "/v/b/src.md", &["Idea"]);
+        assert_agree(&t, src, "/v/b/src.md", "Idea", Some("/v/b/Idea.md"));
+        // b's notes move together to c: src's same-folder Idea moves with it
+        t.rename_dir_prefix("/v/b", "/v/c").unwrap();
+        assert_agree(&t, src, "/v/c/src.md", "Idea", Some("/v/c/Idea.md"));
+        // Only src moves out: its folder has no Idea, so the first path wins
+        t.rename_file("/v/c/src.md", "/v/d/src.md").unwrap();
+        assert_agree(&t, src, "/v/d/src.md", "Idea", Some("/v/a/Idea.md"));
+    }
+
+    #[test]
+    fn reordering_roots_re_resolves_root_relative_links() {
+        let mut t = temp_db(&["/one", "/two"]);
+        add(&t, "/one/Notes/Plan.md", &[]);
+        add(&t, "/two/Notes/Plan.md", &[]);
+        let src = add(&t, "/two/s.md", &["Notes/Plan"]);
+        assert_agree(&t, src, "/two/s.md", "Notes/Plan", Some("/one/Notes/Plan.md"));
+        t.db.set_roots(vec!["/two".into(), "/one".into()]).unwrap();
+        assert_agree(&t, src, "/two/s.md", "Notes/Plan", Some("/two/Notes/Plan.md"));
+    }
+
+    #[test]
+    fn re_resolution_and_candidate_lookup_use_their_indexes() {
+        let t = temp_db(&[]);
+        let plan = |sql: &str| -> String {
+            let mut stmt = t.conn.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
+            let rows = stmt.query_map([], |r| r.get::<_, String>(3)).unwrap();
+            rows.map(|r| r.unwrap()).collect::<Vec<_>>().join(" | ")
+        };
+        let links = plan("SELECT l.id, l.target, s.path, l.target_id
+             FROM links l JOIN files s ON s.id = l.source_id WHERE l.target_stem = 'x'");
+        assert!(links.contains("idx_links_target_stem"), "{links}");
+        let files = plan("SELECT id, path FROM files WHERE name_key = 'x' ORDER BY path");
+        assert!(files.contains("idx_files_name_key"), "{files}");
     }
 }

@@ -452,8 +452,7 @@ pub fn sync_index_roots(state: &State<AppState>) -> Result<(), String> {
         let dirs = state.directories.lock().map_err(|e| e.to_string())?;
         dirs.list().iter().map(|d| d.path.to_string_lossy().to_string()).collect()
     };
-    state.db.lock().map_err(|e| e.to_string())?.set_roots(roots);
-    Ok(())
+    state.db.lock().map_err(|e| e.to_string())?.set_roots(roots)
 }
 
 #[tauri::command]
@@ -826,24 +825,28 @@ fn resolve_link_target(
     }
 
     // A note not indexed yet (just created, or indexing still running) is found on disk,
-    // in the same order: root-relative folder path, then the linking note's folder.
+    // in the same order: root-relative folder path, then the linking note's folder. A
+    // file the index already knows is not taken from disk: the index has ruled on it,
+    // and a click must not open what backlinks and rename rewriting say is not the target.
     let base = link.strip_suffix(".md").unwrap_or(link);
+    let mut candidates: Vec<PathBuf> = Vec::new();
     if base.contains('/') {
         let dirs = state.directories.lock().map_err(|e| e.to_string())?;
-        for dir in dirs.list() {
-            let candidate = dir.path.join(format!("{}.md", base));
-            if candidate.exists() {
-                let canonical = candidate.canonicalize().map_err(|e| e.to_string())?;
-                return Ok(Some(canonical.to_string_lossy().to_string()));
-            }
-        }
+        candidates.extend(dirs.list().iter().map(|dir| dir.path.join(format!("{}.md", base))));
     }
     let context_dir = context_path.parent().map(PathBuf::from).unwrap_or_default();
-    let same_dir_candidate = context_dir.join(format!("{}.md", base));
-    if same_dir_candidate.exists() {
-        let canonical = same_dir_candidate.canonicalize().map_err(|e| e.to_string())?;
+    candidates.push(context_dir.join(format!("{}.md", base)));
+    for candidate in candidates {
+        if !candidate.exists() {
+            continue;
+        }
+        let canonical = candidate.canonicalize().map_err(|e| e.to_string())?;
+        let path = canonical.to_string_lossy().to_string();
+        if state.db.lock().map_err(|e| e.to_string())?.is_indexed(&path)? {
+            continue;
+        }
         validate_path(&canonical, state)?;
-        return Ok(Some(canonical.to_string_lossy().to_string()));
+        return Ok(Some(path));
     }
     Ok(None)
 }
