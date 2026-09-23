@@ -1798,6 +1798,53 @@ pub fn check_spelling(_text: String) -> Vec<SpellingError> {
     Vec::new()
 }
 
+// ── Region date pattern (macOS only) ──
+
+/// The macOS region's numeric date pattern, e.g. `dd.MM.yyyy` for Germany.
+///
+/// WKWebView exposes only the UI language (`en-US` for `en_US@rg=dezzzz`), so
+/// `Intl` in the page formats dates US-style whatever the region. Foundation's
+/// current locale keeps the `rg` region override, so the pattern is read here.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+#[allow(deprecated, unexpected_cfgs)] // cocoa/objc 0.x macros and types, as used elsewhere in this file
+pub fn get_region_date_pattern() -> Option<String> {
+    use cocoa::base::{id, nil};
+    use cocoa::foundation::{NSAutoreleasePool, NSString};
+    use objc::{class, msg_send, sel, sel_impl};
+
+    unsafe {
+        let pool = NSAutoreleasePool::new(nil);
+        let locale: id = msg_send![class!(NSLocale), autoupdatingCurrentLocale];
+        let template = NSString::alloc(nil).init_str("ddMMyyyy");
+        let pattern: id = msg_send![
+            class!(NSDateFormatter),
+            dateFormatFromTemplate: template
+            options: 0usize
+            locale: locale
+        ];
+        let result = if pattern == nil {
+            None
+        } else {
+            let cstr: *const std::os::raw::c_char = msg_send![pattern, UTF8String];
+            if cstr.is_null() {
+                None
+            } else {
+                Some(std::ffi::CStr::from_ptr(cstr).to_string_lossy().into_owned())
+            }
+        };
+        let _: () = msg_send![template, release];
+        pool.drain();
+        result
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn get_region_date_pattern() -> Option<String> {
+    None
+}
+
 /// Trigger the native print dialog for the current webview.
 #[tauri::command]
 pub fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
@@ -1942,6 +1989,16 @@ mod tests {
 
     fn targets(items: &[&str]) -> HashSet<String> {
         items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn region_date_pattern_has_day_month_and_year() {
+        let pattern = get_region_date_pattern().expect("macOS returns a date pattern");
+        println!("region date pattern: {pattern}");
+        assert!(pattern.contains('d'), "{pattern}");
+        assert!(pattern.contains('M'), "{pattern}");
+        assert!(pattern.contains('y'), "{pattern}");
     }
 
     fn mtime_map(keys: &[&str]) -> HashMap<String, std::time::SystemTime> {

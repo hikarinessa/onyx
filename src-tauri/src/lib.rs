@@ -321,6 +321,7 @@ pub fn run() {
             plugins::mac_rounded_corners::reposition_traffic_lights,
             commands::list_templates,
             commands::check_spelling,
+            commands::get_region_date_pattern,
             commands::print_page,
             commands::drain_pending_open_files,
             commands::get_folder_rules,
