@@ -59,6 +59,21 @@ describe("markup inside code", () => {
     expect(at(doc, only(doc).original)).toBe("gone");
   });
 
+  it("reads a line opening with a backtick run that closes on the same line as prose", () => {
+    const doc = "```js``` is how you write it\n\nthen {--remove this--}";
+    expect(at(doc, only(doc).original)).toBe("remove this");
+    expect(needsReview(doc)).toBe(true);
+  });
+
+  it("does not open inline code at an escaped backtick", () => {
+    const doc = "a \\` b {--x--} c ` d";
+    expect(at(doc, only(doc).original)).toBe("x");
+  });
+
+  it("still opens a tilde fence whatever follows it", () => {
+    expect(parseCriticMarkup("~~~ `lang`\n{--x--}\n~~~").suggestions).toHaveLength(0);
+  });
+
   it("marks a note with real suggestions as needing review", () => {
     expect(needsReview("see `{--x--}` and {++this++}")).toBe(true);
   });

@@ -16,7 +16,9 @@
  *   {>>comment<<}           point comment
  *
  * Markup inside fenced code or inline code is an example of the syntax, not a
- * suggestion, and is skipped (see codeRanges.ts).
+ * suggestion, and is skipped (see codeRanges.ts). One known limit: a construct whose
+ * closing marker sits inside inline code (`{--a `--}` b--}`) is not recovered; its
+ * markers then surface as stray-marker warnings rather than disappearing.
  */
 
 import { codeRanges, inCode } from "./codeRanges";

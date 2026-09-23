@@ -16,8 +16,9 @@ export interface Span {
 const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/;
 
 // A backtick run, its content, and a closing run of the same length. The lookarounds
-// stop a run of three from pairing with part of a run of four.
-const INLINE_CODE_RE = /(?<!`)(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g;
+// stop a run of three from pairing with part of a run of four; a backslash-escaped
+// backtick does not open a span.
+const INLINE_CODE_RE = /(?<![`\\])(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g;
 
 /** Offsets of every code range in `doc`, in document order. */
 export function codeRanges(doc: string): Span[] {
@@ -37,7 +38,9 @@ export function codeRanges(doc: string): Span[] {
         fence = null;
         proseFrom = lineTo + 1;
       }
-    } else if (m) {
+    } else if (m && !(m[1][0] === "`" && text.slice(text.indexOf(m[1]) + m[1].length).includes("`"))) {
+      // A backtick fence's info string can't contain a backtick (CommonMark), so
+      // "```js``` inline" is a code span on a prose line, not an opening fence.
       inlineRanges(doc, proseFrom, lineFrom, ranges);
       fence = { marker: m[1], from: lineFrom };
     }
