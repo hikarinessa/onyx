@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
+import { useState, useEffect, useCallback, useRef, useContext } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -10,10 +10,7 @@ import type { DirEntry } from "../types";
 import { BookmarkStrip } from "./BookmarkStrip";
 import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
 import { TreeIcon } from "./TreeIcon";
-import { defaultDirColor, resolveColor, type TreeStyle } from "../lib/treeStyles";
-
-/** Icon and colour per path (~/.onyx/tree-styles.json), read by every TreeNode. */
-const TreeStylesContext = createContext<Record<string, TreeStyle>>({});
+import { defaultDirColor, resolveColor, TreeStylesContext, type TreeStyle } from "../lib/treeStyles";
 
 /** What the icon picker is styling: a registered root (by id) or a tree entry (by path). */
 type PickerTarget = { kind: "root"; id: string } | { kind: "entry"; path: string; isDir: boolean };

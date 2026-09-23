@@ -6,6 +6,7 @@
  * theme.css), so every hue reads equally bright and follows a theme switch; a custom
  * colour is used exactly as picked.
  */
+import { createContext } from "react";
 import { TREE_ICON_MAP } from "./treeIconCatalog";
 
 /** Per-path style, as stored in ~/.onyx/tree-styles.json. */
@@ -13,6 +14,9 @@ export interface TreeStyle {
   icon?: string | null;
   color?: string | null;
 }
+
+/** Styles by path, provided by the sidebar to the tree and the bookmark strip. */
+export const TreeStylesContext = createContext<Record<string, TreeStyle>>({});
 
 export const PALETTE: { name: string; hue: number }[] = [
   { name: "red", hue: 25 },
