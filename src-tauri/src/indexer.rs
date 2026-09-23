@@ -251,22 +251,15 @@ fn index_single_file(path: &Path, dir_id: &str, db: &Mutex<Database>) -> Result<
     let path_str = path.to_string_lossy().to_string();
 
     let db = db.lock().map_err(|e| e.to_string())?;
-
-    let file_id = db.upsert_file(
+    db.index_file(
         &path_str,
         dir_id,
         title.as_deref(),
         modified_at,
         frontmatter_json.as_deref(),
+        &links,
+        &tags,
     )?;
-
-    db.set_links(file_id, &links)?;
-    db.set_tags(file_id, &tags)?;
-
-    // Resolve any pending backlinks that point to this newly-indexed file
-    if let Some(ref t) = title {
-        let _ = db.resolve_pending_links(t, file_id);
-    }
 
     Ok(())
 }
