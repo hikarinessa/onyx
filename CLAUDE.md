@@ -77,7 +77,8 @@ src/                          # Frontend (React + TypeScript)
 │   ├── criticMarkup.ts       #   439 lines — CM6: CriticMarkup decorations, Review mode field, decisions
 │   ├── footnotes.ts          #   215 lines — CM6: footnote numbers in preview, hover text, jump targets (clicks routed via wikilinks.ts)
 │   ├── livePreview.ts        # 1579 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, URLs, callouts, tag chips, fold, hanging indent, indent guides)
-│   ├── embeds.ts             #  712 lines — CM6: ![[...]] note/image embeds (StateField-based block decorations)
+│   ├── embeds.ts             #  717 lines — CM6: ![[note]] embeds (StateField-based block decorations); images go to images.ts
+│   ├── images.ts             #  152 lines — CM6: images in preview (![[photo.png|300]], ![alt](url)), inline anywhere on a line
 │   ├── headingFold.ts        #   71 lines — CM6: foldService for heading-based section folding
 │   ├── inlineSvgIcons.ts     #  133 lines — Compact SVG icon renderer for CM6 widgets (callouts, alt checkboxes)
 │   ├── symbolWrap.ts         #   61 lines — CM6: wrap selection with brackets/quotes/markdown on type
@@ -97,6 +98,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── dateFormat.ts         #  109 lines — Date order from the macOS region pattern; parse/format display ↔ ISO
 │   ├── calendarDates.ts      #   54 lines — Calendar date helpers (ISO keys, ISO weeks, month cells)
 │   ├── useToday.ts           #   28 lines — Today's date, refreshed on day change (minute poll + focus)
+│   ├── imageRefs.ts          #  101 lines — Image syntax, sizes, resolution (resolve_attachment + asset protocol), self-loading <img>
 │   ├── frecency.ts           #   79 lines — Frecency ranking (uses × 7-day half-life) for command palette + Quick Open
 │   ├── recentDocs.ts         #   68 lines — Recent documents tracking (localStorage ring buffer)
 │   ├── cursorPositions.ts    #   79 lines — Per-file cursor position persistence
@@ -134,6 +136,7 @@ src-tauri/                    # Backend (Rust)
     ├── scripts.rs            #  159 lines — User scripts (~/.onyx/scripts/): discovery, sidecar config, timeout-killed execution
     ├── folder_rules.rs       #   73 lines — Per-folder new-note rules (template or script) (~/.onyx/folder-rules.json)
     ├── bookmarks.rs          #  182 lines — Bookmark persistence (~/.onyx/bookmarks.json), migration from legacy storage
+    ├── attachments.rs        #  176 lines — Image references: folder/name resolution, file-name lookup built from a skip-rule walk
     ├── tree_styles.rs        #  182 lines — Per-path icon + colour for tree entries (~/.onyx/tree-styles.json), follows rename/trash
     ├── paths.rs              #   25 lines — Onyx data directory resolution
     └── plugins/

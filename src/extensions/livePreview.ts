@@ -183,6 +183,8 @@ import { iconSvg } from "./inlineSvgIcons";
 import { headingFoldRange } from "./headingFold";
 import { listFoldRange } from "./outliner";
 import { wikilinkFollowRef } from "./wikilinks";
+import { createImageElement, parseSize, splitAlt } from "../lib/imageRefs";
+import { useAppStore, selectActiveTabPath } from "../stores/app";
 
 class HeadingFoldWidget extends WidgetType {
   lineStart: number;
@@ -455,11 +457,13 @@ const tableParseOpts: Options = optionsWithDefaults({
 
 /**
  * Render cell text with inline markdown formatting into a DOM element.
- * Supports: bold, italic, bold+italic, strikethrough, highlight, inline code, wikilinks, tags.
+ * Supports: bold, italic, bold+italic, strikethrough, highlight, inline code, wikilinks,
+ * tags, and images (`![[photo.png]]`, `![alt](url)`; see lib/imageRefs.ts).
  */
 function renderCellContent(el: HTMLElement, text: string): void {
-  // Groups: 1=inline code, 2=bold+italic, 3=bold, 4=italic, 5=strikethrough, 6=highlight, 7=wikilink target, 8=wikilink alias, 9=tag
-  const CELL_RE = /(`[^`]+`)|(\*{3}.+?\*{3})|(\*{2}.+?\*{2})|(\*[^*]+\*)|(~~.+?~~)|(==.+?==)|(?<!!)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
+  // Groups: 1=inline code, 2=bold+italic, 3=bold, 4=italic, 5=strikethrough, 6=highlight, 7=wikilink target, 8=wikilink alias, 9=tag,
+  // 10=image embed reference, 11=image embed option, 12=markdown image alt, 13=markdown image url
+  const CELL_RE = /(`[^`]+`)|(\*{3}.+?\*{3})|(\*{2}.+?\*{2})|(\*[^*]+\*)|(~~.+?~~)|(==.+?==)|(?<!!)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(?<=^|\s)#([a-zA-Z][\w/-]*)|!\[\[([^\]|]+?\.(?:png|jpe?g|gif|webp|svg|avif|bmp|heic))(?:\|([^\]]*))?\]\]|!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/gi;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -517,6 +521,12 @@ function renderCellContent(el: HTMLElement, text: string): void {
       span.textContent = match[9];
       span.dataset.tag = match[9];
       el.appendChild(span);
+    } else if (match[10] || match[13]) {
+      // Image: ![[photo.png|300]] or ![alt|300](url)
+      const contextPath = selectActiveTabPath(useAppStore.getState()) || "";
+      const size = match[10] ? parseSize(match[11]) : splitAlt(match[12]).size;
+      const alt = match[10] ? (size ? "" : match[11] ?? "") : splitAlt(match[12]).alt;
+      el.appendChild(createImageElement(match[10] ?? match[13], contextPath, alt, size));
     }
   }
 
@@ -677,7 +687,8 @@ const INLINE_CODE_RE = /`([^`]+)`/g;
 const TAG_RE = /(?<=^|\s)#([a-zA-Z][\w/-]*)/g;
 const CALLOUT_RE = /^(\s*>)\s*\[!(\w+)\]([+-])?\s*(.*)/;
 const BARE_URL_RE = /(?<![(\[])https?:\/\/[^\s<>\[\])(]+(?:\([^\s<>]*\))*[^\s<>\[\])("',.:;!?]/g;
-const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+// Not after "!": `![alt](url)` is an image (extensions/images.ts)
+const MD_LINK_RE = /(?<!!)\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
 const COMMENT_RE = /%%(.+?)%%/g;
 
 // ── Hoisted decoration objects (immutable, reused across calls) ──

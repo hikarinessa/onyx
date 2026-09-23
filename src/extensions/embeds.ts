@@ -19,7 +19,8 @@ import { useAppStore, selectActiveTabPath } from "../stores/app";
 
 // ── Regex ──
 
-const EMBED_RE = /^!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]\s*$/;
+// Note embeds only: an image name (![[photo.png]]) is left to the images extension.
+const EMBED_RE = /^!\[\[(?![^\]|]+\.(?:png|jpe?g|gif|webp|svg|avif|bmp|heic)(?:[|\]]))([^\]|]+)(?:\|([^\]]+))?\]\]\s*$/i;
 
 
 // ── Embed cache ──

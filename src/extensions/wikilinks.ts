@@ -31,7 +31,8 @@ export const wikilinkFollowRef = { current: null as ((link: string, newTab: bool
 
 const WIKILINK_RE = /(?<!!)\[\[([^\]]+)\]\]/g;
 const BARE_URL_RE = /(?<![(\[])https?:\/\/[^\s<>\[\])(]+(?:\([^\s<>]*\))*[^\s<>\[\])("',.:;!?]/g;
-const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+// Not after "!": `![alt](url)` is an image (extensions/images.ts)
+const MD_LINK_RE = /(?<!!)\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
 
 // ── Decoration builder ──
 
@@ -182,6 +183,10 @@ const linkClickHandler = EditorView.domEventHandlers({
     // Preview mode only: single click follows wikilinks, opens URLs
     if (!view.state.field(previewModeField)) return false;
     const target = event.target as HTMLElement;
+
+    // A click on an image goes to the editor, which shows its syntax for editing; its
+    // URL is not a link to follow.
+    if (target.closest(".cm-image-embed")) return false;
 
     // 1. Replace widget (MdLinkWidget): read URL from data attribute
     const urlEl = target.closest("[data-url]") as HTMLElement | null;

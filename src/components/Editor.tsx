@@ -38,6 +38,7 @@ import { lintingExtension, autofixContent, applyLintFix } from "../extensions/li
 import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
 import { embedExtension } from "../extensions/embeds";
+import { imageExtension } from "../extensions/images";
 import { lintKeymap } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
 import { getAutoSaveMs, setRemeasureHook, isAutofixOnSave, getShowLineNumbers, getTabSize } from "../lib/configBridge";
@@ -311,6 +312,7 @@ function buildExtensions(): Extension[] {
     ...footnotesExtension(),
     ...brokenLinksExtension(),
     ...embedExtension(),
+    imageExtension(),
     ...blocksExtension(),
     keymap.of(lintKeymap),
     ...lintingExtension(),
