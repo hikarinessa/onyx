@@ -56,7 +56,8 @@ src/                          # Frontend (React + TypeScript)
 │   ├── Settings.tsx          # 2058 lines — Settings modal (config, keybindings, themes, templates, periodic notes, about)
 │   ├── ThemePreview.tsx      #   97 lines — Live CM6 preview pane for Appearance settings
 │   ├── Icon.tsx              #   20 lines — Lucide icon wrapper: <Icon name="folder" size={16} />
-│   ├── IconPicker.tsx        #  105 lines — Modal icon picker with search + categories
+│   ├── IconPicker.tsx        #  176 lines — Icon & colour picker for tree entries (Phosphor duotone, OKLCH palette, custom colour)
+│   ├── TreeIcon.tsx          #   18 lines — File-tree icon: Phosphor duotone tinted by the entry's colour
 │   ├── SearchPanel.tsx       #  247 lines — Full-text search panel (sidebar tab)
 │   └── LintPanel.tsx         #   98 lines — Lint diagnostics panel (toggle from status bar)
 ├── extensions/
@@ -97,7 +98,9 @@ src/                          # Frontend (React + TypeScript)
 │   ├── themes.ts             #   82 lines — Theme system (20 built-in themes, data-theme attribute switching)
 │   ├── configBridge.ts       #  337 lines — Config bridge: loads Rust config → CSS custom properties, remeasure hook
 │   ├── configTypes.ts        #   93 lines — Typed config schema + defaults
-│   └── iconCatalog.ts        #  367 lines — Curated ~250 Lucide icons + category metadata
+│   ├── iconCatalog.ts        #  367 lines — Curated ~250 Lucide icons for app chrome + category metadata
+│   ├── treeIconCatalog.ts    #  419 lines — Curated ~290 Phosphor icons offered for tree entries
+│   └── treeStyles.ts         #   91 lines — Tree palette (OKLCH hues), colour resolution, Lucide→Phosphor name aliases
 └── styles/
     ├── reset.css             #   67 lines — CSS reset (@layer reset, prefers-reduced-motion)
     ├── theme.css             #  446 lines — CSS layer order + custom properties (themes via data-theme)
@@ -121,6 +124,7 @@ src-tauri/                    # Backend (Rust)
     ├── scripts.rs            #  159 lines — User scripts (~/.onyx/scripts/): discovery, sidecar config, timeout-killed execution
     ├── folder_rules.rs       #   73 lines — Per-folder new-note rules (template or script) (~/.onyx/folder-rules.json)
     ├── bookmarks.rs          #  182 lines — Bookmark persistence (~/.onyx/bookmarks.json), migration from legacy storage
+    ├── tree_styles.rs        #  182 lines — Per-path icon + colour for tree entries (~/.onyx/tree-styles.json), follows rename/trash
     ├── paths.rs              #   25 lines — Onyx data directory resolution
     └── plugins/
         └── mac_rounded_corners.rs # 217 lines — macOS window corner radius fix
@@ -143,6 +147,7 @@ For full architecture details, see `docs/ARCHITECTURE.md`. Key patterns an AI as
 - **CSS layers vs CM6:** `@layer reset, tokens, base, layout, components` for specificity control. Editor styles are **unlayered** (must compete with CM6's unlayered runtime styles). Theming via `data-theme` attribute on `:root`.
 - **Type-only imports:** CM6 types like `Extension`, `DecorationSet` must use `import type` or `type` keyword — they don't exist at runtime.
 - **Hook injection pattern:** When module A needs to call into module B but importing B from A would create a circular import, A exports `setXHook(fn)`, B calls it during init. Used for `setFlushSaveHook`, `setSnapshotEditorHook`, `setRemeasureHook`.
+- **Tree icons and colours:** Two icon sets with separate jobs. Lucide (`Icon`, `iconCatalog.ts`) draws app chrome; Phosphor duotone (`TreeIcon`, `treeIconCatalog.ts`) draws file-tree entries and is what the picker offers. A stored colour is a palette name (`"teal"` → `var(--tree-color-teal)`, lightness/chroma per theme in `theme.css`) or a custom `#rrggbb`. Roots keep icon + colour in `directories.json` (by id); every other entry in `tree_styles.rs` (by path, moved by `rename_file`, dropped by `trash_file`).
 - **Bookmarks:** Stored in `~/.onyx/bookmarks.json` via `BookmarkManager` (path-based, decoupled from SQLite index). File renames/deletes update bookmark paths automatically.
 - **No Tailwind.** Plain CSS with custom properties.
 

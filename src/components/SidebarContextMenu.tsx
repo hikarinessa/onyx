@@ -16,6 +16,7 @@ export function SidebarContextMenu({
   onNewFolder,
   onDuplicate,
   onRename,
+  onStyle,
   onDelete,
   onReveal,
 }: {
@@ -25,6 +26,7 @@ export function SidebarContextMenu({
   onNewFolder: (entry: DirEntry) => void;
   onDuplicate: (entry: DirEntry) => void;
   onRename: (entry: DirEntry) => void;
+  onStyle: (entry: DirEntry) => void;
   onDelete: (entry: DirEntry) => void;
   onReveal: (entry: DirEntry) => void;
 }) {
@@ -109,6 +111,15 @@ export function SidebarContextMenu({
         }}
       >
         Rename
+      </div>
+      <div
+        className="context-menu-item"
+        onClick={() => {
+          onStyle(menu.entry);
+          onClose();
+        }}
+      >
+        Icon & Colour…
       </div>
       <div
         className="context-menu-item"

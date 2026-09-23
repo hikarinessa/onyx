@@ -3354,6 +3354,89 @@
     border-bottom: 1px solid var(--border-subtle);
   }
 
+  .icon-picker-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .icon-picker-colors {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  .icon-picker-swatch {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--border-default);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform var(--transition-fast);
+  }
+
+  .icon-picker-swatch:hover {
+    transform: scale(1.12);
+  }
+
+  .icon-picker-swatch.selected {
+    box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 3.5px var(--text-primary);
+  }
+
+  /* "No colour": an empty ring crossed by a diagonal */
+  .icon-picker-swatch-none {
+    background: linear-gradient(
+      to top right,
+      transparent calc(50% - 0.75px),
+      var(--text-tertiary) calc(50% - 0.75px),
+      var(--text-tertiary) calc(50% + 0.75px),
+      transparent calc(50% + 0.75px)
+    );
+  }
+
+  /* Custom: a hue wheel until a custom colour is chosen, then that colour */
+  .icon-picker-swatch-custom {
+    background: conic-gradient(
+      oklch(0.74 0.125 25), oklch(0.74 0.125 85), oklch(0.74 0.125 150),
+      oklch(0.74 0.125 215), oklch(0.74 0.125 295), oklch(0.74 0.125 25)
+    );
+    overflow: hidden;
+  }
+
+  .icon-picker-swatch-custom input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .icon-picker-reset {
+    margin-left: auto;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: var(--font-ui);
+    color: var(--text-tertiary);
+    background: none;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .icon-picker-reset:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
+
   .icon-picker-search {
     width: 100%;
     padding: 6px 10px;
@@ -3452,6 +3535,13 @@
     background: var(--accent-muted);
     color: var(--text-accent);
     border-color: var(--accent);
+  }
+
+  /* With a colour chosen, every glyph previews in it */
+  .icon-picker-item.tinted,
+  .icon-picker-item.tinted:hover,
+  .icon-picker-item.tinted.selected {
+    color: inherit;
   }
 
   .icon-picker-empty {

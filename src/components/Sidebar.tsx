@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -9,6 +9,14 @@ import * as fileOps from "../lib/fileOps";
 import type { DirEntry } from "../types";
 import { BookmarkStrip } from "./BookmarkStrip";
 import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
+import { TreeIcon } from "./TreeIcon";
+import { defaultDirColor, resolveColor, type TreeStyle } from "../lib/treeStyles";
+
+/** Icon and colour per path (~/.onyx/tree-styles.json), read by every TreeNode. */
+const TreeStylesContext = createContext<Record<string, TreeStyle>>({});
+
+/** What the icon picker is styling: a registered root (by id) or a tree entry (by path). */
+type PickerTarget = { kind: "root"; id: string } | { kind: "entry"; path: string; isDir: boolean };
 // Pointer-based drag state (HTML5 drag-drop doesn't work in Tauri — native handler intercepts drops)
 let dragState: {
   sourcePath: string;
@@ -27,11 +35,12 @@ let dirDragState: {
 } | null = null;
 let dirDropIndex: number | null = null;
 
-function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder, onReveal, onUnregister }: {
+function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder, onStyle, onReveal, onUnregister }: {
   x: number; y: number;
   onClose: () => void;
   onNewNote: () => void;
   onNewFolder: () => void;
+  onStyle: () => void;
   onReveal: () => void;
   onUnregister: () => void;
 }) {
@@ -55,6 +64,7 @@ function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder, onReveal, o
       <div className="context-menu-item" onClick={onNewNote}>New Note</div>
       <div className="context-menu-item" onClick={onNewFolder}>New Folder</div>
       <div className="context-menu-separator" />
+      <div className="context-menu-item" onClick={onStyle}>Icon & Colour…</div>
       <div className="context-menu-item" onClick={onReveal}>Reveal in Finder</div>
       <div className="context-menu-separator" />
       <div className="context-menu-item destructive" onClick={onUnregister}>Unregister Directory</div>
@@ -187,6 +197,7 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, flashPath, fileT
 
   const isActive = entry.path === activeFilePath;
   const isMarkdown = entry.extension === "md";
+  const style = useContext(TreeStylesContext)[entry.path];
   const isRenaming = renamingPath === entry.path;
 
   return (
@@ -211,9 +222,12 @@ function TreeNode({ entry, depth, activeFilePath, renamingPath, flashPath, fileT
             : null}
         </span>
         <span className="tree-item-icon">
-          {entry.is_dir
-            ? <Icon name="folder" size={14} />
-            : <Icon name={isMarkdown ? "file-text" : "file"} size={14} />}
+          <TreeIcon
+            name={style?.icon}
+            fallback={entry.is_dir ? "folder" : isMarkdown ? "file-text" : "file"}
+            color={style?.color}
+            size={15}
+          />
         </span>
         {isRenaming ? (
           <RenameInput
@@ -258,6 +272,77 @@ const SORT_OPTIONS: Array<{ key: string; label: string; icon: string }> = [
   { key: "created-asc", label: "Created (oldest)", icon: "calendar" },
 ];
 
+/**
+ * The icon picker bound to what it styles. A root keeps its icon and colour in
+ * directories.json and always has a colour (its stripe); a tree entry keeps both in
+ * tree-styles.json, and clearing both removes its entry.
+ */
+function StylePicker({ target, directories, treeStyles, onDirsChanged, onStylesChanged, onClose }: {
+  target: PickerTarget;
+  directories: RegisteredDirectory[];
+  treeStyles: Record<string, TreeStyle>;
+  onDirsChanged: () => void;
+  onStylesChanged: (update: (prev: Record<string, TreeStyle>) => Record<string, TreeStyle>) => void;
+  onClose: () => void;
+}) {
+  const report = (err: unknown) => fileOps.reportFailure("Could not change the icon", err);
+
+  if (target.kind === "root") {
+    const dir = directories.find((d) => d.id === target.id);
+    if (!dir) return null;
+    return (
+      <IconPicker
+        title={dir.label}
+        icon={dir.icon}
+        color={dir.color}
+        fallbackIcon="folder"
+        allowNoColor={false}
+        onIconChange={(icon) => {
+          invoke("update_directory_icon", { id: dir.id, icon })
+            .then(onDirsChanged, report);
+          onClose();
+        }}
+        onColorChange={(color) => {
+          if (!color) return;
+          invoke("update_directory_color", { id: dir.id, color })
+            .then(onDirsChanged, report);
+        }}
+        onClose={onClose}
+      />
+    );
+  }
+
+  const { path, isDir } = target;
+  const current = treeStyles[path] ?? {};
+  const name = path.split("/").pop() || path;
+  // Each write sends the whole style, so read the latest rather than the render's copy.
+  const latest = { ...current };
+  const save = (next: TreeStyle) => {
+    Object.assign(latest, next);
+    const style = { icon: latest.icon ?? null, color: latest.color ?? null };
+    invoke("set_tree_style", { path, ...style })
+      .then(() => onStylesChanged((prev) => {
+        const updated = { ...prev };
+        if (style.icon || style.color) updated[path] = style;
+        else delete updated[path];
+        return updated;
+      }), report);
+  };
+  return (
+    <IconPicker
+      title={name}
+      icon={current.icon ?? null}
+      color={current.color ?? null}
+      fallbackIcon={isDir ? "folder" : name.endsWith(".md") ? "file-text" : "file"}
+      allowNoColor
+      onIconChange={(icon) => { save({ icon }); onClose(); }}
+      onColorChange={(color) => save({ color })}
+      onReset={() => { save({ icon: null, color: null }); onClose(); }}
+      onClose={onClose}
+    />
+  );
+}
+
 export function Sidebar() {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const activeTabPath = useAppStore(selectActiveTabPath);
@@ -274,12 +359,11 @@ export function Sidebar() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [rootDirMenu, setRootDirMenu] = useState<{ x: number; y: number; dirPath: string; dirId: string } | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
-  const [iconPickerDirId, setIconPickerDirId] = useState<string | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
+  const [treeStyles, setTreeStyles] = useState<Record<string, TreeStyle>>({});
   const [orphansCollapsed, setOrphansCollapsed] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
-  const iconPickerDirIdRef = useRef(iconPickerDirId);
-  iconPickerDirIdRef.current = iconPickerDirId;
 
   // ── Reveal a file in the tree ──
   // Expanding is state; the nodes appear only after each level's children arrive over
@@ -368,8 +452,7 @@ export function Sidebar() {
     const dirPath = typeof selected === "string" ? selected : selected[0];
     if (!dirPath) return;
     const label = dirPath.split("/").pop() || dirPath;
-    const colors = ["#6b9eff", "#ff6b9e", "#9eff6b", "#ffc46b", "#c46bff", "#6bffc4"];
-    const color = colors[directories.length % colors.length];
+    const color = defaultDirColor(directories.length);
     try {
       await invoke("register_directory", { path: dirPath, label, color });
       loadDirectories();
@@ -448,6 +531,17 @@ export function Sidebar() {
   useEffect(() => {
     loadDirectories();
   }, [loadDirectories]);
+
+  // Renames and deletes move or drop styles in Rust, and both bump fileTreeVersion.
+  const loadTreeStyles = useCallback(() => {
+    invoke<Record<string, TreeStyle>>("get_tree_styles")
+      .then(setTreeStyles)
+      .catch((err) => console.error("Failed to load tree styles:", err));
+  }, []);
+
+  useEffect(() => {
+    loadTreeStyles();
+  }, [fileTreeVersion, loadTreeStyles]);
 
   // Refresh root entries when fileTreeVersion bumps (file mutation happened)
   useEffect(() => {
@@ -717,6 +811,10 @@ export function Sidebar() {
     }
   };
 
+  const handleStyle = (entry: DirEntry) => {
+    setPickerTarget({ kind: "entry", path: entry.path, isDir: entry.is_dir });
+  };
+
   const handleReveal = async (entry: DirEntry) => {
     try {
       await fileOps.revealInFinder(entry.path);
@@ -750,7 +848,7 @@ export function Sidebar() {
       {sidebarTab === "search" ? (
         <SearchPanel />
       ) : (
-      <>
+      <TreeStylesContext.Provider value={treeStyles}>
       <div className="sidebar-toolbar">
         <button
           className="sidebar-add-folder-btn"
@@ -808,7 +906,7 @@ export function Sidebar() {
             <div key={dir.id} className="sidebar-directory">
               <div
                 className="sidebar-header"
-                style={{ borderLeft: `2px solid ${dir.color}` }}
+                style={{ borderLeft: `2px solid ${resolveColor(dir.color) ?? "var(--text-tertiary)"}` }}
                 data-dir-id={dir.id}
                 data-dir-idx={idx}
                 onClick={() => toggleDirCollapsed(dir.id)}
@@ -832,13 +930,13 @@ export function Sidebar() {
                 </span>
                 <span
                   className="sidebar-header-icon"
-                  title="Change icon"
+                  title="Change icon and colour"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setIconPickerDirId(dir.id);
+                    setPickerTarget({ kind: "root", id: dir.id });
                   }}
                 >
-                  <Icon name={dir.icon || "folder"} size={14} />
+                  <TreeIcon name={dir.icon} fallback="folder" color={dir.color} size={15} />
                 </span>
                 <span className="sidebar-header-label">{dir.label}</span>
                 <div className="sidebar-header-actions" />
@@ -895,7 +993,7 @@ export function Sidebar() {
                   data-tree-path={p}
                 >
                   <span className="tree-item-chevron" />
-                  <span className="tree-item-icon"><Icon name="file-text" size={14} /></span>
+                  <span className="tree-item-icon"><TreeIcon fallback="file-text" size={15} /></span>
                   <span className="tree-item-label">{name}</span>
                   <button
                     className="tab-close"
@@ -929,24 +1027,17 @@ export function Sidebar() {
       </div>
 
       <BookmarkStrip />
-      </>
+      </TreeStylesContext.Provider>
       )}
 
-      {iconPickerDirId && (
-        <IconPicker
-          currentIcon={directories.find((d) => d.id === iconPickerDirId)?.icon || "folder"}
-          onSelect={async (icon) => {
-            const dirId = iconPickerDirIdRef.current;
-            if (!dirId) return;
-            try {
-              await invoke("update_directory_icon", { id: dirId, icon });
-              loadDirectories();
-            } catch (err) {
-              console.error("Failed to update directory icon:", err);
-            }
-            setIconPickerDirId(null);
-          }}
-          onClose={() => setIconPickerDirId(null)}
+      {pickerTarget && (
+        <StylePicker
+          target={pickerTarget}
+          directories={directories}
+          treeStyles={treeStyles}
+          onDirsChanged={loadDirectories}
+          onStylesChanged={setTreeStyles}
+          onClose={() => setPickerTarget(null)}
         />
       )}
 
@@ -958,6 +1049,7 @@ export function Sidebar() {
           onNewFolder={handleNewFolder}
           onDuplicate={handleDuplicate}
           onRename={handleRename}
+          onStyle={handleStyle}
           onDelete={handleDelete}
           onReveal={handleReveal}
         />
@@ -978,6 +1070,7 @@ export function Sidebar() {
             }
             setRootDirMenu(null);
           }}
+          onStyle={() => { setPickerTarget({ kind: "root", id: rootDirMenu.dirId }); setRootDirMenu(null); }}
           onReveal={() => { fileOps.revealInFinder(rootDirMenu.dirPath); setRootDirMenu(null); }}
           onUnregister={() => { removeDirectory(rootDirMenu.dirId); setRootDirMenu(null); }}
         />

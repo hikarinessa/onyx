@@ -4,6 +4,15 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Icons and colours for any file or folder in the tree.** Right-click → *Icon & Colour…*, or click a root folder's icon. Icons are Phosphor duotone (about 290, searchable by name and grouped by theme); every tree icon now draws in that style. Colours come from a ten-hue OKLCH palette that shares one lightness and chroma, so every hue reads equally bright; light themes use a darker pair so the colours stay legible. A custom colour is kept exactly as picked. A root's colour also draws its stripe. Styles live in `~/.onyx/tree-styles.json` and follow renames, moves and deletes made in Onyx
+- Root folders registered with the earlier six-colour cycle move to the matching palette colour, and icons chosen from the earlier Lucide picker map to their Phosphor equivalents
+
+### Fixed
+- **Renaming a note from its title no longer blanks the body.** The rename event reached the editor before the rename finished, and moved the note's stale cached copy (empty, for a new note) to the new name; the body came back only after switching away and back. Onyx now saves the note and snapshots the editor before renaming, so the order no longer matters. Edits typed just before a rename are saved rather than dropped
+
 ## [0.11.7] — 2026-09-13
 
 ### Added
