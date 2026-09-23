@@ -11,31 +11,12 @@ import { BookmarkStrip } from "./BookmarkStrip";
 import { SidebarContextMenu, type ContextMenuState } from "./SidebarContextMenu";
 import { TreeIcon } from "./TreeIcon";
 import { TreeNode } from "./TreeNode";
+import { useFileDrag } from "./useFileDrag";
+import { useDirReorder } from "./useDirReorder";
 import { defaultDirColor, resolveColor, TreeStylesContext, type TreeStyle } from "../lib/treeStyles";
 
 /** What the icon picker is styling: a registered root (by id) or a tree entry (by path). */
 type PickerTarget = { kind: "root"; id: string } | { kind: "entry"; path: string; isDir: boolean };
-// Pointer-based drag state (HTML5 drag-drop doesn't work in Tauri — native handler intercepts drops)
-let dragState: {
-  sourcePath: string;
-  sourceEl: HTMLElement;
-  startY: number;
-  active: boolean;
-} | null = null;
-let currentDropTarget: string | null = null;
-
-function startFileDrag(sourcePath: string, sourceEl: HTMLElement, startY: number) {
-  dragState = { sourcePath, sourceEl, startY, active: false };
-}
-
-// Directory reorder drag state
-let dirDragState: {
-  dirId: string;
-  sourceEl: HTMLElement;
-  startY: number;
-  active: boolean;
-} | null = null;
-let dirDropIndex: number | null = null;
 
 function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder, onStyle, onReveal, onUnregister }: {
   x: number; y: number;
@@ -390,164 +371,8 @@ export function Sidebar() {
     };
   }, [loadDirectories]);
 
-  // Pointer-based drag-and-drop for moving files into folders
-  useEffect(() => {
-    const DRAG_THRESHOLD = 5;
-
-    const handlePointerMove = (e: PointerEvent) => {
-      if (!dragState) return;
-
-      // Activate drag after threshold
-      if (!dragState.active) {
-        if (Math.abs(e.clientY - dragState.startY) < DRAG_THRESHOLD) return;
-        dragState.active = true;
-        dragState.sourceEl.style.opacity = "0.4";
-        document.body.classList.add("dragging");
-      }
-
-      // Hit-test: find the folder element under the pointer
-      const els = document.elementsFromPoint(e.clientX, e.clientY);
-      const folderEl = els.find(
-        (el) => el instanceof HTMLElement && el.dataset.treeDir === "true"
-      ) as HTMLElement | undefined;
-
-      const newTarget = folderEl?.dataset.treePath ?? null;
-
-      // Don't allow dropping into the file's own parent
-      if (newTarget && dragState.sourcePath.startsWith(newTarget + "/")) {
-        if (currentDropTarget) {
-          document.querySelector(`[data-tree-path="${CSS.escape(currentDropTarget)}"]`)?.classList.remove("drop-target");
-          currentDropTarget = null;
-        }
-        return;
-      }
-
-      if (newTarget !== currentDropTarget) {
-        // Remove old highlight
-        if (currentDropTarget) {
-          document.querySelector(`[data-tree-path="${CSS.escape(currentDropTarget)}"]`)?.classList.remove("drop-target");
-        }
-        // Add new highlight
-        if (newTarget) {
-          folderEl?.classList.add("drop-target");
-        }
-        currentDropTarget = newTarget;
-      }
-    };
-
-    const handlePointerUp = () => {
-      if (!dragState) return;
-      const wasActive = dragState.active;
-      const sourcePath = dragState.sourcePath;
-
-      // Reset visual state
-      dragState.sourceEl.style.opacity = "";
-      document.body.classList.remove("dragging");
-      if (currentDropTarget) {
-        document.querySelector(`[data-tree-path="${CSS.escape(currentDropTarget)}"]`)?.classList.remove("drop-target");
-      }
-
-      // Perform the move
-      if (wasActive && currentDropTarget) {
-        const targetDir = currentDropTarget;
-        const fileName = sourcePath.split("/").pop();
-        if (fileName) {
-          const newPath = `${targetDir}/${fileName}`;
-          fileOps.renameFile(sourcePath, newPath).catch((err) =>
-            console.error("Failed to move file:", err)
-          );
-        }
-      }
-
-      dragState = null;
-      currentDropTarget = null;
-    };
-
-    document.addEventListener("pointermove", handlePointerMove);
-    document.addEventListener("pointerup", handlePointerUp);
-    return () => {
-      document.removeEventListener("pointermove", handlePointerMove);
-      document.removeEventListener("pointerup", handlePointerUp);
-    };
-  }, []);
-
-  // Directory reorder via pointer drag
-  useEffect(() => {
-    const DRAG_THRESHOLD = 5;
-
-    const handlePointerMove = (e: PointerEvent) => {
-      if (!dirDragState) return;
-
-      if (!dirDragState.active) {
-        if (Math.abs(e.clientY - dirDragState.startY) < DRAG_THRESHOLD) return;
-        dirDragState.active = true;
-        dirDragState.sourceEl.classList.add("dragging");
-        document.body.classList.add("dragging");
-      }
-
-      // Hit-test: find directory header under pointer
-      const els = document.elementsFromPoint(e.clientX, e.clientY);
-      const headerEl = els.find(
-        (el) => el instanceof HTMLElement && el.dataset.dirId && el.dataset.dirId !== dirDragState!.dirId
-      ) as HTMLElement | undefined;
-
-      const newIdx = headerEl ? Number(headerEl.dataset.dirIdx) : null;
-
-      if (newIdx !== dirDropIndex) {
-        // Remove old indicator
-        document.querySelectorAll(".sidebar-header.dir-drop-above, .sidebar-header.dir-drop-below").forEach(
-          (el) => { el.classList.remove("dir-drop-above", "dir-drop-below"); }
-        );
-        // Add new indicator
-        if (headerEl && newIdx !== null) {
-          const sourceIdx = directories.findIndex((d) => d.id === dirDragState!.dirId);
-          headerEl.classList.add(newIdx < sourceIdx ? "dir-drop-above" : "dir-drop-below");
-        }
-        dirDropIndex = newIdx;
-      }
-    };
-
-    const handlePointerUp = () => {
-      if (!dirDragState) return;
-      const wasActive = dirDragState.active;
-      const sourceId = dirDragState.dirId;
-
-      // Reset visual state
-      dirDragState.sourceEl.classList.remove("dragging");
-      document.body.classList.remove("dragging");
-      document.querySelectorAll(".sidebar-header.dir-drop-above, .sidebar-header.dir-drop-below").forEach(
-        (el) => { el.classList.remove("dir-drop-above", "dir-drop-below"); }
-      );
-
-      if (wasActive && dirDropIndex !== null) {
-        const fromIdx = directories.findIndex((d) => d.id === sourceId);
-        const toIdx = dirDropIndex;
-        if (fromIdx !== -1 && fromIdx !== toIdx) {
-          const reordered = [...directories];
-          const [moved] = reordered.splice(fromIdx, 1);
-          reordered.splice(toIdx, 0, moved);
-          // Optimistic UI update
-          setDirectories(reordered);
-          // Persist
-          invoke("reorder_directories", { orderedIds: reordered.map((d) => d.id) })
-            .catch((err) => {
-              console.error("Failed to reorder directories:", err);
-              loadDirectories(); // rollback on failure
-            });
-        }
-      }
-
-      dirDragState = null;
-      dirDropIndex = null;
-    };
-
-    document.addEventListener("pointermove", handlePointerMove);
-    document.addEventListener("pointerup", handlePointerUp);
-    return () => {
-      document.removeEventListener("pointermove", handlePointerMove);
-      document.removeEventListener("pointerup", handlePointerUp);
-    };
-  }, [directories, loadDirectories]);
+  const startFileDrag = useFileDrag();
+  const startDirDrag = useDirReorder(directories, setDirectories, loadDirectories);
 
   // The handlers below are passed to every TreeNode, so they keep one identity for
   // the sidebar's lifetime; a fresh function per render would defeat TreeNode's memo.
@@ -738,12 +563,7 @@ export function Sidebar() {
                 onClick={() => toggleDirCollapsed(dir.id)}
                 onPointerDown={(e) => {
                   if (e.button !== 0) return;
-                  dirDragState = {
-                    dirId: dir.id,
-                    sourceEl: e.currentTarget,
-                    startY: e.clientY,
-                    active: false,
-                  };
+                  startDirDrag(dir.id, e.currentTarget, e.clientY);
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
