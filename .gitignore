@@ -9,8 +9,10 @@ src-tauri/target/
 .vscode/
 .idea/
 
-# AI agent workspace (worktrees can be huge)
-.claude/
+# AI agent workspace (worktrees can be huge); project skills and the /gg checklist are shared
+.claude/*
+!.claude/skills/
+!.claude/gg-project.md
 
 # OS
 .DS_Store
