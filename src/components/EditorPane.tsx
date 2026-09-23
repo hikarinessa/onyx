@@ -46,6 +46,60 @@ import {
   getAllPaneViews,
 } from "./Editor";
 
+/**
+ * The note's name as an editable heading. Only the draft lives here; committing renames
+ * the file, which changes the tab id and so remounts this with the new name.
+ */
+function InlineTitle({ path, name }: { path: string; name: string }) {
+  const saved = name.replace(/\.md$/, "");
+  const [draft, setDraft] = useState(saved);
+  const ref = useRef<HTMLInputElement>(null);
+  // Escape blurs in the same event that resets the draft, before the reset renders, so
+  // the blur would commit the stale draft; this makes that blur a no-op instead.
+  const cancelled = useRef(false);
+
+  const commit = async () => {
+    if (cancelled.current) {
+      cancelled.current = false;
+      return;
+    }
+    const trimmed = draft.trim().replace(/[/\0:]/g, "");
+    if (!trimmed || trimmed === saved) {
+      setDraft(saved);
+      return;
+    }
+    const dir = path.substring(0, path.lastIndexOf("/"));
+    try {
+      await renameFile(path, `${dir}/${trimmed}.md`);
+    } catch (err) {
+      console.error("Failed to rename:", err);
+      setDraft(saved);
+    }
+  };
+
+  return (
+    <input
+      ref={ref}
+      className="editor-inline-title"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          ref.current?.blur();
+        }
+        if (e.key === "Escape") {
+          cancelled.current = true;
+          setDraft(saved);
+          ref.current?.blur();
+        }
+      }}
+      spellCheck={false}
+    />
+  );
+}
+
 export function EditorPane({ pane }: { pane: Pane }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -232,34 +286,6 @@ export function EditorPane({ pane }: { pane: Pane }) {
     });
   }, []);
 
-  // ── Inline title ──
-  const [titleValue, setTitleValue] = useState("");
-  const titleRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (activeTab) {
-      setTitleValue(activeTab.name.replace(/\.md$/, ""));
-    }
-  }, [activeTab?.id, activeTab?.name]); // eslint-disable-line
-
-  const handleTitleCommit = useCallback(async () => {
-    if (!activeTab) return;
-    const trimmed = titleValue.trim().replace(/[/\0:]/g, "");
-    const oldName = activeTab.name.replace(/\.md$/, "");
-    if (!trimmed || trimmed === oldName) {
-      setTitleValue(oldName);
-      return;
-    }
-    const dir = activeTab.path.substring(0, activeTab.path.lastIndexOf("/"));
-    const newPath = `${dir}/${trimmed}.md`;
-    try {
-      await renameFile(activeTab.path, newPath);
-    } catch (err) {
-      console.error("Failed to rename:", err);
-      setTitleValue(oldName);
-    }
-  }, [titleValue, activeTab]);
-
   if (!activeTab) {
     return (
       <div className="editor-pane" onPointerDown={handlePointerDown}>
@@ -278,24 +304,8 @@ export function EditorPane({ pane }: { pane: Pane }) {
       onPointerDown={handlePointerDown}
     >
       <div className="editor-area">
-        <input
-          ref={titleRef}
-          className="editor-inline-title"
-          value={titleValue}
-          onChange={(e) => setTitleValue(e.target.value)}
-          onBlur={handleTitleCommit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              titleRef.current?.blur();
-            }
-            if (e.key === "Escape") {
-              setTitleValue(activeTab.name.replace(/\.md$/, ""));
-              titleRef.current?.blur();
-            }
-          }}
-          spellCheck={false}
-        />
+        {/* Keyed by tab id (the path), so a tab switch or a rename starts a fresh draft */}
+        <InlineTitle key={activeTab.id} path={activeTab.path} name={activeTab.name} />
         <div className="editor-body">
           <div
             className={`editor-container ${modeClass}`}
