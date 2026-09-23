@@ -290,7 +290,7 @@ Patch increments (`0.X.PATCH`) are for fixes and additions within a phase.
 - Natural seam: bookmarks are already a visually distinct section pinned at the bottom
 
 4.6.5 **Verify & smoke test**
-- `cargo check`, `cargo test`, `npx tsc --noEmit` — all must pass
+- `cargo check`, `cargo test`, `npx tsc -b` — all must pass
 - Launch with `cargo tauri dev`, confirm: session restores from `~/.onyx/session.json`, error boundary catches a simulated throw, file watcher thread exits cleanly on directory unregister
 
 **Milestone:** The foundation is hardened. No thread leaks, no white-screen risk, no fragile persistence. Ready to build periodic notes on a solid base.

@@ -166,7 +166,7 @@ All Tauri commands are defined in `src-tauri/src/commands.rs`. See that file for
 cargo tauri dev          # Dev server (Vite HMR + Rust hot reload)
 cargo check              # Rust type check (use instead of full build to save RAM)
 cargo test               # Rust unit tests
-npx tsc --noEmit         # TypeScript type check
+npx tsc -b               # TypeScript type check (not `tsc --noEmit`: the root tsconfig lists no files, so that checks nothing)
 npm test                 # Vitest (pure-logic suites; node environment, no jsdom)
 ```
 

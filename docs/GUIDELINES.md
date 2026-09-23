@@ -65,7 +65,7 @@ Never add a button or shortcut for something that isn't also in the menu bar. Wh
 
 - Rust: unit tests for extractors, parsers, DB operations, and template logic. Write tests for new pure-function code as it's built — especially the template engine, date path generation, and indexer extractors. These are high-ROI tests: well-defined inputs/outputs, no mocking needed.
 - Frontend: manual testing via dev server for now. Automated frontend tests remain a Tier 2 goal, but React error boundaries must be in place to prevent white-screen crashes (see Phase 4.6).
-- Always run `cargo check`, `cargo test`, and `npx tsc --noEmit` before committing.
+- Always run `cargo check`, `cargo test`, and `npx tsc -b` before committing.
 
 ## 10. Post-Phase Review Loop
 
@@ -76,6 +76,6 @@ Run this after completing each phase, before moving on. Execute independently �
 3. **`/team` review** — Assemble the relevant specialist team to review the current state.
 4. **`/linus` evaluates team feedback** — Linus triages team findings into "fix now" vs "document for later."
 5. **Fix** all "fix now" items. **Document** "later" items in ARCHITECTURE.md §18 (Known Technical Debt).
-6. **Compile check** — `cargo check`, `cargo test`, `npx tsc --noEmit`. All must pass.
+6. **Compile check** — `cargo check`, `cargo test`, `npx tsc -b`. All must pass.
 7. **Build and launch** — Run `cargo tauri dev`, check for runtime errors (white screen, console errors, panics). Fix anything that surfaces.
 8. **Commit and report** — Summarize what was fixed, what was documented, and any gotchas discovered. Include a numbered list of verification steps the user should test manually.
