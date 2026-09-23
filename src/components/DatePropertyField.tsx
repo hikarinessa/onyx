@@ -99,9 +99,11 @@ export function DatePropertyField({
   const invalid = draft !== null && draft.trim() !== "" && draftISO === null;
   const selectedISO = draftISO ?? (parseISODate(stored) ? stored : null);
 
-  // Keep the pop-up attached to the field while the context panel scrolls or the window resizes.
+  // Keep the pop-up attached to the field while the context panel scrolls or the window
+  // resizes. Keyed on open/closed, not the position, so moving it doesn't re-subscribe.
+  const popupOpen = popup !== null;
   useEffect(() => {
-    if (!popup) return;
+    if (!popupOpen) return;
     const place = () => {
       if (wrapRef.current) setPopup(positionBelow(wrapRef.current.getBoundingClientRect()));
     };
@@ -111,7 +113,7 @@ export function DatePropertyField({
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
     };
-  }, [popup]);
+  }, [popupOpen]);
 
   const open = () => {
     if (!wrapRef.current) return;
@@ -141,19 +143,23 @@ export function DatePropertyField({
     close();
   };
 
-  const pick = (iso: string) => {
-    if (iso !== stored) onChange(iso);
+  /** Leave the field without committing the draft. Focus may be on a day cell inside
+   *  the pop-up (keyboard use), which is about to unmount: bring it back to the input
+   *  first so blurring leaves focus somewhere sensible instead of on the page. */
+  const leaveWithoutCommit = () => {
     skipCommitRef.current = true;
     close();
+    inputRef.current?.focus();
     inputRef.current?.blur();
   };
 
-  /** Leave the field without writing (Escape). */
-  const cancel = () => {
-    skipCommitRef.current = true;
-    close();
-    inputRef.current?.blur();
+  const pick = (iso: string) => {
+    if (iso !== stored) onChange(iso);
+    leaveWithoutCommit();
   };
+
+  /** Leave the field without writing (Escape). */
+  const cancel = leaveWithoutCommit;
 
   const handleBlur = (e: React.FocusEvent) => {
     // Focus moving into the pop-up (keyboard users tabbing to a day) keeps the field open.

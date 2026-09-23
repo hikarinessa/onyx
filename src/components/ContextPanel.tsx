@@ -889,7 +889,10 @@ export function ContextPanel() {
 
       {/* Properties section */}
       {activeTabPath && (
+        // Keyed by file: a field's unsaved text (a half-typed date) must not survive a
+        // tab switch, or leaving the field would save it into the next file.
         <PropertiesSection
+          key={activeTabPath}
           path={activeTabPath}
           expanded={propsExpanded}
           onToggle={toggleProps}
