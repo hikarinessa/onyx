@@ -4,7 +4,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
-## [Unreleased]
+## [0.11.9] — 2026-09-23
 
 ### Added
 - **Date properties use a themed calendar pop-up and your region's date order** (#26, #96, #97). The native macOS picker ignored the theme and showed US month-first order, because the web view only sees the UI language. Onyx now reads the date pattern from macOS, so a German region shows and accepts DD/MM/YYYY; frontmatter still stores `YYYY-MM-DD`. Typing works in the displayed order, an ISO date pastes in any region, Enter saves, Escape cancels, and invalid text is flagged rather than saved
