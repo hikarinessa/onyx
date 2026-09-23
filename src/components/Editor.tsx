@@ -43,6 +43,7 @@ import { embedExtension } from "../extensions/embeds";
 import { isMarkdownPath, isPlainTextPath } from "../lib/fileKinds";
 import { imageExtension } from "../extensions/images";
 import { htmlInlineExtension } from "../extensions/htmlInline";
+import { heightSampleExtension } from "../extensions/heightSample";
 import { lintKeymap } from "@codemirror/lint";
 import { openFileInEditor } from "../lib/openFile";
 import { getAutoSaveMs, setRemeasureHook, isAutofixOnSave, getShowLineNumbers, getTabSize } from "../lib/configBridge";
@@ -302,14 +303,14 @@ function buildExtensions(): { markdown: Extension[]; plain: Extension[] } {
     },
   ]);
 
-  // Editing and saving shared by every file kind
+  // Editing, saving and layout shared by every file kind; both sets below include it
   const core: Extension[] = [
     history(),
-    ...(getShowLineNumbers() ? [lineNumbers()] : []),
     indentUnit.of(" ".repeat(getTabSize())),
     onyxTheme,
     drawSelection(),
     EditorView.lineWrapping,
+    heightSampleExtension(),
     updateListener,
   ];
 
@@ -320,6 +321,7 @@ function buildExtensions(): { markdown: Extension[]; plain: Extension[] } {
     syntaxHighlighting(plainHighlightStyle),
     codeFolding(),
     foldGutter(),
+    ...(getShowLineNumbers() ? [lineNumbers()] : []),
   ];
 
   const markdownSet: Extension[] = [
@@ -334,7 +336,7 @@ function buildExtensions(): { markdown: Extension[]; plain: Extension[] } {
       ...foldKeymap.filter((b) => b.mac !== "Cmd-Alt-[" && b.mac !== "Cmd-Alt-]"),
       ...searchKeymap,
     ]),
-    history(),
+    ...core,
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     syntaxHighlighting(onyxHighlightStyle),
     codeFolding({
@@ -366,11 +368,6 @@ function buildExtensions(): { markdown: Extension[]; plain: Extension[] } {
     }),
     foldGutter(),
     ...(getShowLineNumbers() ? [lineNumbers()] : []),
-    indentUnit.of(" ".repeat(getTabSize())),
-    onyxTheme,
-    drawSelection(),
-    EditorView.lineWrapping,
-    updateListener,
     frontmatterExtension(),
     headingFoldExtension(),
     listFoldExtension(),
