@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/app";
 import { openFileInEditor } from "../lib/openFile";
 import { insertAtCursor } from "./Editor";
+import { rankByFrecency, recordUse } from "../lib/frecency";
 
 interface RustSearchResult {
   path: string;
@@ -113,8 +114,10 @@ export function QuickOpen() {
             query: query.trim(),
           });
           if (!cancelled) {
+            // Files opened often and lately rise above other matches; the rest keep
+            // the fuzzy-match order. Ranked before the cut so a favourite isn't dropped.
             setResults(
-              hits.slice(0, 10).map((f) => ({
+              rankByFrecency("files", hits, (f) => f.path).slice(0, 10).map((f) => ({
                 name: f.title ? f.title + ".md" : f.path.split("/").pop() || f.path,
                 path: f.path,
               }))
@@ -143,11 +146,13 @@ export function QuickOpen() {
         setQuery(`type:${item.name}`);
         inputRef.current?.focus();
       } else if (mode === "insert-wikilink") {
+        recordUse("files", item.path);
         const title = item.name.replace(/\.md$/, "");
         insertAtCursor(`[[${title}]]`);
         onClose();
       } else {
         onClose();
+        recordUse("files", item.path);
         openFileInEditor(item.path, item.name, { replaceActive: !newTab });
       }
     },

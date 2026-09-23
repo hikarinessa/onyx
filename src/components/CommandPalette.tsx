@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAppStore } from "../stores/app";
 import { getAllCommands, fuzzyMatch, type Command } from "../lib/commands";
+import { rankByFrecency, recordUse } from "../lib/frecency";
 
 export function CommandPalette() {
   const visible = useAppStore((s) => s.commandPaletteVisible);
@@ -16,7 +17,7 @@ export function CommandPalette() {
     if (visible) {
       setQuery("");
       setSelectedIndex(0);
-      setFiltered(getAllCommands());
+      setFiltered(rankByFrecency("commands", getAllCommands(), (c) => c.id));
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [visible]);
@@ -24,11 +25,8 @@ export function CommandPalette() {
   useEffect(() => {
     if (!visible) return;
     const all = getAllCommands();
-    if (query.trim() === "") {
-      setFiltered(all);
-    } else {
-      setFiltered(all.filter((c) => fuzzyMatch(query, c.label)));
-    }
+    const matches = query.trim() === "" ? all : all.filter((c) => fuzzyMatch(query, c.label));
+    setFiltered(rankByFrecency("commands", matches, (c) => c.id));
     setSelectedIndex(0);
   }, [query, visible]);
 
@@ -43,6 +41,7 @@ export function CommandPalette() {
   const execute = useCallback(
     (cmd: Command) => {
       close();
+      recordUse("commands", cmd.id);
       // Defer execution so the palette closes first
       requestAnimationFrame(() => cmd.execute());
     },
