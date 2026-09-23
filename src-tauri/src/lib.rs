@@ -11,6 +11,7 @@ mod periodic;
 mod plugins;
 mod scripts;
 mod skip;
+mod tree_styles;
 mod watcher;
 
 use std::sync::{Arc, Mutex};
@@ -45,6 +46,7 @@ fn disable_app_nap() {
 pub struct AppState {
     pub bookmarks: Mutex<bookmarks::BookmarkManager>,
     pub directories: Mutex<dirs::DirectoryManager>,
+    pub tree_styles: Mutex<tree_styles::TreeStyleManager>,
     pub watcher: Mutex<Option<watcher::FileWatcher>>,
     pub db: Arc<Mutex<db::Database>>,
     /// Tracks last-read mtime per file path to detect external modifications before write.
@@ -61,6 +63,8 @@ pub struct AppState {
 pub fn run() {
     let dir_manager = dirs::DirectoryManager::new().expect("Failed to initialize directory manager");
     let app_config = config::load_config();
+    let tree_style_manager = tree_styles::TreeStyleManager::new()
+        .expect("Failed to initialize tree style manager");
 
     // Initialize SQLite database at <onyx_dir>/cache/index.db
     let db_path = paths::onyx_dir()
@@ -252,6 +256,7 @@ pub fn run() {
         .manage(AppState {
             bookmarks: Mutex::new(bookmark_manager),
             directories: Mutex::new(dir_manager),
+            tree_styles: Mutex::new(tree_style_manager),
             watcher: Mutex::new(None),
             db,
             last_read_mtimes: Mutex::new(std::collections::HashMap::new()),
@@ -269,6 +274,9 @@ pub fn run() {
             commands::register_directory,
             commands::unregister_directory,
             commands::update_directory_icon,
+            commands::update_directory_color,
+            commands::get_tree_styles,
+            commands::set_tree_style,
             commands::reorder_directories,
             commands::search_files,
             commands::search_content,

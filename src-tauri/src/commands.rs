@@ -454,6 +454,37 @@ pub fn update_directory_icon(
 }
 
 #[tauri::command]
+pub fn update_directory_color(
+    id: String,
+    color: String,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let mut dirs = state.directories.lock().map_err(|e| e.to_string())?;
+    dirs.update_color(&id, &color)
+}
+
+#[tauri::command]
+pub fn get_tree_styles(
+    state: State<AppState>,
+) -> Result<std::collections::BTreeMap<String, crate::tree_styles::TreeStyle>, String> {
+    let styles = state.tree_styles.lock().map_err(|e| e.to_string())?;
+    Ok(styles.all().clone())
+}
+
+/// Set the icon and colour of a file or folder in the tree; both unset clears it.
+#[tauri::command]
+pub fn set_tree_style(
+    path: String,
+    icon: Option<String>,
+    color: Option<String>,
+    state: State<AppState>,
+) -> Result<(), String> {
+    validate_path(&PathBuf::from(&path), &state)?;
+    let mut styles = state.tree_styles.lock().map_err(|e| e.to_string())?;
+    styles.set(&path, crate::tree_styles::TreeStyle { icon, color })
+}
+
+#[tauri::command]
 pub fn reorder_directories(
     ordered_ids: Vec<String>,
     state: State<AppState>,
@@ -1004,6 +1035,10 @@ pub fn rename_file(
         }
     }
 
+    if let Ok(mut styles) = state.tree_styles.lock() {
+        let _ = styles.rename(&old_path, &new_path);
+    }
+
     // Rewrite wikilinks in every file that resolved to the renamed note.
     // Folder rename is intentionally out of scope for v1 — links inside a
     // renamed folder still resolve by basename, and the link rewrite for
@@ -1061,6 +1096,9 @@ pub fn trash_file(path: String, state: State<AppState>, app: tauri::AppHandle) -
     // Remove bookmark for deleted file
     if let Ok(mut bm) = state.bookmarks.lock() {
         let _ = bm.remove_path(&path);
+    }
+    if let Ok(mut styles) = state.tree_styles.lock() {
+        let _ = styles.remove(&path);
     }
 
     // Emit fs:change remove event before returning

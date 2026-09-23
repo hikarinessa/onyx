@@ -34,7 +34,7 @@ impl DirectoryManager {
 
         let config_path = config_dir.join("directories.json");
 
-        let directories = if config_path.exists() {
+        let mut directories: Vec<RegisteredDirectory> = if config_path.exists() {
             let data = fs::read_to_string(&config_path)
                 .map_err(|e| format!("Failed to read directories.json: {}", e))?;
             serde_json::from_str(&data)
@@ -43,10 +43,22 @@ impl DirectoryManager {
             Vec::new()
         };
 
-        Ok(Self {
+        let mut migrated = false;
+        for dir in &mut directories {
+            if let Some(name) = palette_name_for_legacy(&dir.color) {
+                dir.color = name.to_string();
+                migrated = true;
+            }
+        }
+
+        let manager = Self {
             config_path,
             directories,
-        })
+        };
+        if migrated {
+            manager.save()?;
+        }
+        Ok(manager)
     }
 
     pub fn list(&self) -> &[RegisteredDirectory] {
@@ -60,6 +72,7 @@ impl DirectoryManager {
     }
 
     pub fn register(&mut self, path: PathBuf, label: String, color: String) -> Result<RegisteredDirectory, String> {
+        crate::tree_styles::validate_color(&color)?;
         let canonical = path.canonicalize()
             .map_err(|e| format!("Invalid path: {}", e))?;
 
@@ -123,15 +136,18 @@ impl DirectoryManager {
     }
 
     pub fn update_icon(&mut self, id: &str, icon: &str) -> Result<(), String> {
-        // Reject anything that isn't a reasonable kebab-case icon name
-        if icon.is_empty() || icon.len() > 64
-            || !icon.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-        {
-            return Err(format!("Invalid icon name: {}", icon));
-        }
+        crate::tree_styles::validate_icon(icon)?;
         let dir = self.directories.iter_mut().find(|d| d.id == id)
             .ok_or("Directory not found")?;
         dir.icon = icon.to_string();
+        self.save()
+    }
+
+    pub fn update_color(&mut self, id: &str, color: &str) -> Result<(), String> {
+        crate::tree_styles::validate_color(color)?;
+        let dir = self.directories.iter_mut().find(|d| d.id == id)
+            .ok_or("Directory not found")?;
+        dir.color = color.to_string();
         self.save()
     }
 
@@ -147,6 +163,20 @@ impl DirectoryManager {
             let _ = fs::remove_file(&temp_path);
             format!("Failed to rename directories temp file: {}", e)
         })
+    }
+}
+
+/// Palette name for a colour from the six-colour cycle that registration used before the
+/// OKLCH palette, so existing roots follow the theme like new ones.
+fn palette_name_for_legacy(color: &str) -> Option<&'static str> {
+    match color.to_ascii_lowercase().as_str() {
+        "#6b9eff" => Some("blue"),
+        "#ff6b9e" => Some("pink"),
+        "#9eff6b" => Some("lime"),
+        "#ffc46b" => Some("amber"),
+        "#c46bff" => Some("violet"),
+        "#6bffc4" => Some("teal"),
+        _ => None,
     }
 }
 
