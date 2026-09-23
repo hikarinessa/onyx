@@ -760,7 +760,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   setInternalDrag: (active) => set({ internalDrag: active }),
 
   sidebarTab: "files",
-  setSidebarTab: (tab) => set({ sidebarTab: tab }),
+  // Leaving the Search tab ends the requested search, so coming back opens a fresh panel
+  // rather than the last tag clicked.
+  setSidebarTab: (tab) => set(tab === "search" ? { sidebarTab: tab } : { sidebarTab: tab, searchRequest: null }),
   searchRequest: null,
   searchFor: (query) =>
     set((s) => ({

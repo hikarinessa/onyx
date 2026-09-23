@@ -205,9 +205,9 @@ const linkClickHandler = EditorView.domEventHandlers({
       return moved;
     }
 
-    // Tag chip widgets carry their tag
+    // Tag chip widgets carry their tag. Primary button only: a right-click keeps its menu.
     const tagEl = target.closest("[data-tag]") as HTMLElement | null;
-    if (tagEl?.dataset.tag) {
+    if (tagEl?.dataset.tag && event.button === 0) {
       event.preventDefault();
       searchTag(tagEl.dataset.tag);
       return true;
@@ -244,6 +244,8 @@ const linkClickHandler = EditorView.domEventHandlers({
   click(event, view) {
     // Source mode: Cmd+click only
     if (!event.metaKey) return false;
+    // A tag chip already ran its search on mousedown
+    if ((event.target as HTMLElement).closest("[data-tag]")) return true;
 
     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
     if (pos == null) return false;
