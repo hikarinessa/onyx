@@ -524,6 +524,9 @@ pub struct ContentSearchResult {
     pub match_count: u32,
     pub title_match: bool,
     pub line_matches: Vec<LineMatch>,
+    /// Matches on heading lines, which rank a note above one matching only in body text.
+    #[serde(skip)]
+    heading_hits: u32,
 }
 
 #[tauri::command]
@@ -562,55 +565,96 @@ fn search_content_blocking(
     dir_roots: Vec<PathBuf>,
     orphan_paths: Vec<String>,
 ) -> Vec<ContentSearchResult> {
-    let mut results: Vec<ContentSearchResult> = Vec::new();
-    let mut seen_paths = std::collections::HashSet::new();
+    use ignore::WalkState;
 
-    // Walk registered directories
-    for root in &dir_roots {
-        let walker = ignore::WalkBuilder::new(root)
-            .hidden(true) // skip hidden files
-            .build();
-
-        for entry in walker.flatten() {
-            let path = entry.path();
-            if !path.is_file() { continue; }
-            if path.extension().and_then(|e| e.to_str()) != Some("md") { continue; }
-
-            let path_str = path.to_string_lossy().to_string();
-            if !seen_paths.insert(path_str.clone()) { continue; }
-
-            if let Some(result) = search_file(path, &path_str, &query_lower) {
-                results.push(result);
-            }
+    // Registered directories are read in parallel; reading files dominates the cost.
+    let found = std::sync::Mutex::new(Vec::new());
+    if let Some((first, rest)) = dir_roots.split_first() {
+        let mut builder = ignore::WalkBuilder::new(first);
+        for root in rest {
+            builder.add(root);
         }
+        builder.hidden(true); // skip hidden files
+        builder.build_parallel().run(|| {
+            let found = &found;
+            let query_lower = &query_lower;
+            Box::new(move |entry| {
+                let Ok(entry) = entry else { return WalkState::Continue };
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("md") || !path.is_file() {
+                    return WalkState::Continue;
+                }
+                if let Some(result) = search_file(path, &path.to_string_lossy(), query_lower) {
+                    found.lock().unwrap().push(result);
+                }
+                WalkState::Continue
+            })
+        });
     }
+    let mut results = found.into_inner().unwrap_or_default();
 
     // Search orphan files
     for orphan in &orphan_paths {
         let path = std::path::Path::new(orphan);
         if !path.is_file() { continue; }
         if path.extension().and_then(|e| e.to_str()) != Some("md") { continue; }
-        if !seen_paths.insert(orphan.clone()) { continue; }
-
         if let Some(result) = search_file(path, orphan, &query_lower) {
             results.push(result);
         }
     }
 
-    // Sort: title matches first (shorter title = better match), then by match count desc
+    // Overlapping roots, or an orphan inside a root, can report a file twice
+    results.sort_by(|a, b| a.path.cmp(&b.path));
+    results.dedup_by(|a, b| a.path == b.path);
+
+    rank_results(&mut results);
+    results.truncate(500);
+    results
+}
+
+/// Title matches first (shorter title = closer match), then notes matching in a
+/// heading, then by match count. Path breaks ties, so the parallel walk's arrival
+/// order never shows through.
+fn rank_results(results: &mut [ContentSearchResult]) {
     results.sort_by(|a, b| {
         b.title_match.cmp(&a.title_match)
             .then_with(|| {
                 if a.title_match && b.title_match {
                     a.title.len().cmp(&b.title.len())
                 } else {
-                    b.match_count.cmp(&a.match_count)
+                    (b.heading_hits > 0).cmp(&(a.heading_hits > 0))
+                        .then_with(|| b.match_count.cmp(&a.match_count))
                 }
             })
+            .then_with(|| a.path.cmp(&b.path))
     });
+}
 
-    results.truncate(500);
-    results
+const SNIPPET_BYTES: usize = 200;
+const SNIPPET_LEAD: usize = 60;
+
+/// A line cut to about SNIPPET_BYTES, keeping the first match in view: long lines are
+/// windowed from a little before it rather than cut from the start, where the match
+/// could fall outside the snippet entirely.
+fn snippet(line: &str, match_at: Option<usize>) -> String {
+    if line.len() <= SNIPPET_BYTES {
+        return line.to_string();
+    }
+    let floor = |mut i: usize| { while !line.is_char_boundary(i) { i -= 1; } i };
+    let start = floor(match_at.map_or(0, |m| m.saturating_sub(SNIPPET_LEAD)));
+    let end = floor((start + SNIPPET_BYTES).min(line.len()));
+    format!(
+        "{}{}{}",
+        if start > 0 { "…" } else { "" },
+        &line[start..end],
+        if end < line.len() { "…" } else { "" },
+    )
+}
+
+/// `#` to `######` then a space: an ATX heading.
+fn is_heading(line: &str) -> bool {
+    let hashes = line.bytes().take_while(|&b| b == b'#').count();
+    (1..=6).contains(&hashes) && line[hashes..].starts_with(' ')
 }
 
 fn search_file(
@@ -631,24 +675,25 @@ fn search_file(
 
     let mut line_matches: Vec<LineMatch> = Vec::new();
     let mut match_count: u32 = 0;
+    let mut heading_hits: u32 = 0;
 
     for (i, line) in content.lines().enumerate() {
         let line_lower = line.to_lowercase();
         let hits = line_lower.matches(query_lower).count() as u32;
         if hits > 0 {
             match_count += hits;
+            if is_heading(line) {
+                heading_hits += hits;
+            }
             if line_matches.len() < 10 {
-                let text = if line.len() > 200 {
-                    // Find a char boundary at or before byte 200
-                    let mut end = 200;
-                    while !line.is_char_boundary(end) { end -= 1; }
-                    format!("{}…", &line[..end])
-                } else {
-                    line.to_string()
-                };
+                // Lowercasing can change byte lengths outside ASCII; only trust the
+                // match offset when it can't have moved.
+                let match_at = (line_lower.len() == line.len())
+                    .then(|| line_lower.find(query_lower))
+                    .flatten();
                 line_matches.push(LineMatch {
                     line_number: (i + 1) as u32,
-                    line_text: text,
+                    line_text: snippet(line, match_at),
                 });
             }
         }
@@ -664,7 +709,60 @@ fn search_file(
         match_count,
         title_match,
         line_matches,
+        heading_hits,
     })
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+
+    fn result(path: &str, title_match: bool, heading_hits: u32, match_count: u32) -> ContentSearchResult {
+        ContentSearchResult {
+            path: path.into(),
+            title: path.trim_end_matches(".md").into(),
+            match_count,
+            title_match,
+            line_matches: vec![],
+            heading_hits,
+        }
+    }
+
+    #[test]
+    fn ranks_title_then_heading_then_body_with_path_breaking_ties() {
+        let mut r = vec![
+            result("b-body.md", false, 0, 9),
+            result("a-body.md", false, 0, 9),
+            result("heading.md", false, 1, 1),
+            result("title.md", true, 0, 0),
+        ];
+        rank_results(&mut r);
+        let order: Vec<&str> = r.iter().map(|x| x.path.as_str()).collect();
+        assert_eq!(order, ["title.md", "heading.md", "a-body.md", "b-body.md"]);
+    }
+
+    #[test]
+    fn a_long_line_is_windowed_around_its_match() {
+        let line = format!("{}needle{}", "x".repeat(300), "y".repeat(300));
+        let s = snippet(&line, Some(300));
+        assert!(s.starts_with('…') && s.ends_with('…'));
+        assert!(s.contains("needle"));
+        assert_eq!(snippet("short line", Some(0)), "short line");
+    }
+
+    #[test]
+    fn a_snippet_never_splits_a_character() {
+        let line = "é".repeat(150); // 300 bytes, every char two bytes
+        let s = snippet(&line, Some(101));
+        assert!(s.trim_matches('…').chars().all(|c| c == 'é'));
+    }
+
+    #[test]
+    fn headings_need_a_space_after_one_to_six_hashes() {
+        assert!(is_heading("## Plan"));
+        assert!(!is_heading("#tag in text"));
+        assert!(!is_heading("####### seven"));
+    }
 }
 
 #[tauri::command]
@@ -1961,3 +2059,4 @@ mod tests {
         assert_eq!(out, content);
     }
 }
+

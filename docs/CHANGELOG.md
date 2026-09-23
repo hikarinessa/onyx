@@ -8,6 +8,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ### Added
 - **The command palette and Quick Open learn what you use** (#74). Commands you run and files you open often and lately rise to the top; a use counts half as much after a week. Everything you have never picked keeps its usual order
+- **Faster, better-ranked full-text search** (#73). Files are read in parallel (about 20 ms instead of 45 across 2,900 notes), results appear 120 ms after you stop typing instead of 300, notes matching in a heading rank above body-only matches, and a match far along a long line is shown in its snippet instead of cut off
 - **Click a tag to search for it** (#102). Clicking a tag chip in Preview, or ⌘-clicking / ⌘Enter on a `#tag` in either mode, opens the Search tab on that tag
 
 ### Fixed

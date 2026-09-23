@@ -60,7 +60,9 @@ export function SearchPanel({ initialQuery = "" }: { initialQuery?: string }) {
       setResults([]);
       return;
     }
-    debounceRef.current = setTimeout(() => doSearch(query), 300);
+    // A search over a few thousand notes takes ~20 ms, so the wait is only there to
+    // skip queries mid-word; much longer and results feel like they lag the typing.
+    debounceRef.current = setTimeout(() => doSearch(query), 120);
     return () => clearTimeout(debounceRef.current);
   }, [query, doSearch]);
 
