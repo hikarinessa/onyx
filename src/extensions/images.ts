@@ -26,6 +26,14 @@ import {
   type ImageSize,
 } from "../lib/imageRefs";
 
+/**
+ * Built image elements, by widget identity. CM6 redraws a line from scratch when other
+ * decorations on it change (the block hover highlight does, on every mouse move), and
+ * asks the widget for a fresh element each time. Handing back the loaded element that
+ * was just detached keeps the picture on screen instead of reloading it.
+ */
+const builtElements = new Map<string, HTMLElement>();
+
 class ImageWidget extends WidgetType {
   readonly reference: string;
   readonly contextPath: string;
@@ -48,10 +56,19 @@ class ImageWidget extends WidgetType {
       other.size?.height === this.size?.height;
   }
 
+  private get key(): string {
+    return [this.contextPath, this.reference, this.alt, this.size?.width ?? "", this.size?.height ?? ""].join("\u0000");
+  }
+
   toDOM(view: EditorView): HTMLElement {
+    const existing = builtElements.get(this.key);
+    // Reuse only an element that is off screen: the same image twice needs two
+    if (existing && !existing.isConnected) return existing;
     // A loaded image changes its line's height; CM6 must re-measure to keep the cursor
     // and scroll positions right.
-    return createImageElement(this.reference, this.contextPath, this.alt, this.size, () => view.requestMeasure());
+    const dom = createImageElement(this.reference, this.contextPath, this.alt, this.size, () => view.requestMeasure());
+    builtElements.set(this.key, dom);
+    return dom;
   }
 
   /** Let a click reach the editor, which puts the cursor on the line and shows the syntax. */

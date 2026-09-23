@@ -38,6 +38,10 @@ export function splitAlt(alt: string): { alt: string; size: ImageSize | null } {
 }
 
 const resolved = new Map<string, Promise<string | null>>();
+/** Results already in, so a new element can take its src without waiting a tick. */
+const settled = new Map<string, string | null>();
+/** Natural sizes of images seen, by src, so a new element reserves its space at once. */
+const naturalSizes = new Map<string, { width: number; height: number }>();
 const MISS_TTL_MS = 5000;
 
 /** Loadable src for a reference written in `contextPath`, or null if nothing matches. */
@@ -56,9 +60,15 @@ export function resolveImageSrc(reference: string, contextPath: string): Promise
       .then((path) => (path ? convertFileSrc(path) : null))
       .catch(() => null);
     resolved.set(key, pending);
-    // A miss is retried later: the image may be added or synced in after this
     pending.then((src) => {
-      if (src === null) setTimeout(() => resolved.delete(key), MISS_TTL_MS);
+      settled.set(key, src);
+      // A miss is retried later: the image may be added or synced in after this
+      if (src === null) {
+        setTimeout(() => {
+          resolved.delete(key);
+          settled.delete(key);
+        }, MISS_TTL_MS);
+      }
     });
   }
   return pending;
@@ -79,11 +89,23 @@ export function createImageElement(
   wrap.className = "cm-image-embed";
   const img = document.createElement("img");
   img.alt = alt;
-  img.loading = "lazy";
-  img.decoding = "async";
   if (size?.width) img.style.width = `${size.width}px`;
   if (size?.height) img.style.height = `${size.height}px`;
   wrap.appendChild(img);
+
+  // Give the element its final shape before it loads, from the size seen last time, so
+  // the line never collapses to zero height and back (which reads as a blink and moves
+  // the scroll position).
+  const reserve = (src: string) => {
+    const known = naturalSizes.get(src);
+    if (known) {
+      img.width = known.width;
+      img.height = known.height;
+    }
+  };
+  img.addEventListener("load", () => {
+    if (img.naturalWidth) naturalSizes.set(img.src, { width: img.naturalWidth, height: img.naturalHeight });
+  }, { once: true });
 
   const fail = (reason: string) => {
     wrap.classList.add("cm-image-embed-missing");
@@ -93,9 +115,14 @@ export function createImageElement(
   img.addEventListener("load", () => onSettled?.(), { once: true });
   img.addEventListener("error", () => fail("Image failed to load"), { once: true });
 
-  resolveImageSrc(reference, contextPath).then((src) => {
-    if (src) img.src = src;
-    else fail("Image not found");
-  });
+  const show = (src: string | null) => {
+    if (!src) return fail("Image not found");
+    reserve(src);
+    img.src = src;
+  };
+  const key = `${contextPath}\u0000${reference}`;
+  if (/^(https?:|data:)/i.test(reference)) show(reference);
+  else if (settled.has(key)) show(settled.get(key) ?? null);
+  else resolveImageSrc(reference, contextPath).then(show);
   return wrap;
 }
