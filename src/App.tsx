@@ -36,7 +36,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { enableModernWindowStyle } from "@cloudworxx/tauri-plugin-mac-rounded-corners";
 import { invalidateCache } from "./lib/ipcCache";
 import { loadAndApplyConfig } from "./lib/configBridge";
-import { clearEditorCache, migrateEditorCache, cancelPendingSave, lastSavedContent, replaceTabContent } from "./components/Editor";
+import { clearEditorCache, migrateEditorCache, cancelPendingSave, lastSavedContent, replaceTabContent, snapshotEditor } from "./components/Editor";
 import { updateRecentDocPath, markRecentDocDeleted } from "./lib/recentDocs";
 import { createRefreshScheduler } from "./lib/refreshScheduler";
 
@@ -750,13 +750,16 @@ export default function App() {
 
         const newName = path.split("/").pop() || path;
 
-        // Migrate tabs — idempotent (no-op if fileOps already updated them)
+        // Migrate tabs — idempotent (no-op if fileOps already updated them).
+        // Snapshot each tab before updateTabPath: the cache is only synced on tab
+        // switch, and once the tab is re-keyed snapshotEditor can no longer find it.
         if (is_dir) {
           const oldPrefix = old_path.endsWith("/") ? old_path : old_path + "/";
           for (const tab of selectAllTabs(store)) {
             if (tab.path.startsWith(oldPrefix)) {
               const migratedPath = path + tab.path.slice(old_path.length);
               const migratedName = migratedPath.split("/").pop() || migratedPath;
+              snapshotEditor(tab.id);
               store.updateTabPath(tab.id, migratedPath, migratedName);
               migrateEditorCache(tab.path, migratedPath);
             }
@@ -764,6 +767,7 @@ export default function App() {
         } else {
           const openTab = selectAllTabs(store).find((t) => t.path === old_path);
           if (openTab) {
+            snapshotEditor(openTab.id);
             store.updateTabPath(openTab.id, path, newName);
             migrateEditorCache(old_path, path);
           }

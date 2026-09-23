@@ -72,10 +72,15 @@ export function EditorPane({ pane }: { pane: Pane }) {
   useEffect(() => {
     if (!containerRef.current || !activeTab) return;
 
-    // Save current tab state before switching
-    if (viewRef.current && viewTabIdRef.current && viewTabIdRef.current !== activeTab.id) {
-      editorStateCache.set(viewTabIdRef.current, viewRef.current.state);
-      scrollCache.set(viewTabIdRef.current, viewRef.current.scrollDOM.scrollTop);
+    // Save current tab state before switching. A renamed tab keeps no entry under its
+    // old id (tab ids are paths, and the rename already migrated the cache), so writing
+    // one back would leave stale state for whatever file is next created at that path.
+    const outgoingId = viewTabIdRef.current;
+    const outgoingExists = outgoingId !== null &&
+      useAppStore.getState().paneState.panes.some((p) => p.tabs.some((t) => t.id === outgoingId));
+    if (viewRef.current && outgoingId && outgoingId !== activeTab.id && outgoingExists) {
+      editorStateCache.set(outgoingId, viewRef.current.state);
+      scrollCache.set(outgoingId, viewRef.current.scrollDOM.scrollTop);
     }
 
     // Get or create EditorState

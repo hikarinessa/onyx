@@ -95,15 +95,24 @@ export async function duplicateNote(path: string): Promise<string> {
 export async function renameFile(oldPath: string, newPath: string): Promise<void> {
   const newName = newPath.split("/").pop() || newPath;
 
+  // Snapshot and save before the rename, not after: Rust emits the fs:change rename
+  // before the command returns, so App.tsx's handler can re-key the cache while this
+  // await is still pending. A snapshot taken afterwards finds the tab already moved and
+  // the handler has carried the stale cached state (empty, for a new note) to the new
+  // path. The flush keeps unsaved edits, since the handler also cancels pending saves.
+  const before = getAllTabs().find((t) => t.path === oldPath);
+  if (before) {
+    snapshotEditor(before.id);
+    await flushSaveForTab(before.id);
+  }
+
   await invoke("rename_file", { oldPath, newPath });
   // Rust emits fs:change rename — but we update the tab synchronously for responsiveness.
-  // The event handler in App.tsx will no-op if the tab was already updated.
+  // Whichever of this and the event handler in App.tsx runs second is a no-op.
 
   const store = useAppStore.getState();
-  const allTabs = getAllTabs();
-  const openTab = allTabs.find((t) => t.path === oldPath);
+  const openTab = getAllTabs().find((t) => t.path === oldPath);
   if (openTab) {
-    snapshotEditor(openTab.id);
     store.updateTabPath(openTab.id, newPath, newName);
     migrateEditorCache(oldPath, newPath);
   }
@@ -115,16 +124,22 @@ export async function renameFile(oldPath: string, newPath: string): Promise<void
 
 /** Rename a folder, updating all affected tabs and caches synchronously */
 export async function renameFolder(oldPath: string, newPath: string): Promise<void> {
+  const oldPrefix = oldPath.endsWith("/") ? oldPath : oldPath + "/";
+  // Snapshot and save before the rename, for the reason given in renameFile.
+  for (const tab of getAllTabs()) {
+    if (tab.path.startsWith(oldPrefix)) {
+      snapshotEditor(tab.id);
+      await flushSaveForTab(tab.id);
+    }
+  }
+
   await invoke("rename_file", { oldPath, newPath });
 
   const store = useAppStore.getState();
-  const allTabs = getAllTabs();
-  const oldPrefix = oldPath.endsWith("/") ? oldPath : oldPath + "/";
-  for (const tab of allTabs) {
+  for (const tab of getAllTabs()) {
     if (tab.path.startsWith(oldPrefix)) {
       const migratedPath = newPath + tab.path.slice(oldPath.length);
       const migratedName = migratedPath.split("/").pop() || migratedPath;
-      snapshotEditor(tab.id);
       store.updateTabPath(tab.id, migratedPath, migratedName);
       migrateEditorCache(tab.path, migratedPath);
     }
