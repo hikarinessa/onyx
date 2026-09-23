@@ -4,6 +4,11 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.11.10] — 2026-09-23
+
+### Fixed
+- **Existing links now follow 0.11.9's link rules.** 0.11.9 kept each link's old resolution until its note was edited; the index is rebuilt once on first launch (a few seconds in the background), after which backlinks, clicks and renames agree for every note
+
 ## [0.11.9] — 2026-09-23
 
 ### Added
