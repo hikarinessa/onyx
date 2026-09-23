@@ -109,13 +109,13 @@ fn query_all<T: rusqlite::types::FromSql, U: rusqlite::types::FromSql>(
 
 /// Case folding for note names and paths in link resolution: full Unicode lowercase, so
 /// `[[élan]]` finds `Élan.md` the way the macOS filesystem would.
-fn name_key(s: &str) -> String {
+pub(crate) fn name_key(s: &str) -> String {
     s.to_lowercase()
 }
 
 /// `target` without a trailing `.md` in any case. The suffix is ASCII, so the cut is
 /// always on a character boundary.
-fn strip_md(target: &str) -> &str {
+pub(crate) fn strip_md(target: &str) -> &str {
     let n = target.len();
     if n >= 3 && target.as_bytes()[n - 3..].eq_ignore_ascii_case(b".md") {
         &target[..n - 3]
@@ -232,22 +232,40 @@ fn reresolve_links_from(conn: &Connection, roots: &[String], source_id: i64) -> 
     reresolve(conn, roots, links)
 }
 
-/// Delete the files a WHERE clause selects, then re-resolve the links that named them:
-/// another note of the same name may take them over. Returns the number deleted.
+/// Delete the files a WHERE clause selects, adding their names to `stems` so the caller
+/// can re-resolve the links that named them once per name, however many files went.
+fn delete_files_collecting(
+    conn: &Connection,
+    condition: &str,
+    arg: &dyn rusqlite::ToSql,
+    stems: &mut std::collections::HashSet<String>,
+) -> Result<u32, String> {
+    let rows: Vec<(i64, Option<String>)> =
+        query_all(conn, &format!("SELECT id, name_key FROM files WHERE {condition}"), [arg])?;
+    stems.extend(rows.into_iter().filter_map(|(_, s)| s));
+    let count = conn.execute(&format!("DELETE FROM files WHERE {condition}"), [arg])
+        .map_err(|e| format!("Failed to delete files: {}", e))?;
+    Ok(count as u32)
+}
+
+/// Links that named deleted notes may have another note of the same name to go to.
+fn reresolve_stems(conn: &Connection, roots: &[String], stems: std::collections::HashSet<String>)
+    -> Result<(), String>
+{
+    for stem in stems {
+        reresolve_links_named(conn, roots, &stem)?;
+    }
+    Ok(())
+}
+
+/// Delete the files a WHERE clause selects, then re-resolve the links that named them.
 fn delete_files_where(conn: &Connection, roots: &[String], condition: &str, arg: &dyn rusqlite::ToSql)
     -> Result<u32, String>
 {
-    let stems: Vec<(i64, Option<String>)> =
-        query_all(conn, &format!("SELECT id, name_key FROM files WHERE {condition}"), [arg])?;
-    let count = conn.execute(&format!("DELETE FROM files WHERE {condition}"), [arg])
-        .map_err(|e| format!("Failed to delete files: {}", e))?;
-    let mut done = std::collections::HashSet::new();
-    for stem in stems.into_iter().filter_map(|(_, s)| s) {
-        if done.insert(stem.clone()) {
-            reresolve_links_named(conn, roots, &stem)?;
-        }
-    }
-    Ok(count as u32)
+    let mut stems = std::collections::HashSet::new();
+    let count = delete_files_collecting(conn, condition, arg, &mut stems)?;
+    reresolve_stems(conn, roots, stems)?;
+    Ok(count)
 }
 
 fn replace_tags(conn: &Connection, file_id: i64, tags: &[String]) -> Result<(), String> {
@@ -412,10 +430,11 @@ impl Database {
         Ok(file_id)
     }
 
-    /// Re-key a renamed file. Links that named the old name keep pointing at it: the
-    /// rename command reads them (`get_link_targets_to`) to rewrite `[[Old]]` to
-    /// `[[New]]` in the notes that contain them, and those notes' reindex then resolves
-    /// the rewritten text. Links that already named the new name may point here now.
+    /// Re-key a renamed file. Links that named the old name keep pointing at it for now:
+    /// the rename command reads them (`get_link_targets_to`) to rewrite `[[Old]]` to
+    /// `[[New]]` in the notes that contain them, then calls `reresolve_name` with the old
+    /// name for whatever was not rewritten. Links that already named the new name may
+    /// point here now.
     pub fn rename_file(&self, old_path: &str, new_path: &str) -> Result<(), String> {
         let new_title = Path::new(new_path)
             .file_stem()
@@ -535,6 +554,22 @@ impl Database {
         let nested = links_where(&tx, "instr(l.target, '/') > ?1", &0)?;
         reresolve(&tx, &self.roots, nested)?;
         tx.commit().map_err(|e| format!("Failed to commit root change: {}", e))
+    }
+
+    /// Set the roots at startup. Nothing to re-resolve: the stored links were resolved
+    /// against the same list, which only changes through `set_roots`.
+    pub fn init_roots(&mut self, roots: Vec<String>) {
+        self.roots = roots;
+    }
+
+    /// Re-resolve every link that names `name`. The rename command calls this with the
+    /// old name after rewriting links: whatever the rewrite could not change (a note it
+    /// failed to write) stops pointing at the renamed note, so backlinks and clicks agree.
+    pub fn reresolve_name(&self, name: &str) -> Result<(), String> {
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+        reresolve_links_named(&tx, &self.roots, &name_key(name))?;
+        tx.commit().map_err(|e| format!("Failed to commit re-resolve: {}", e))
     }
 
     /// Whether `path` is in the index.
@@ -914,10 +949,14 @@ impl Database {
             .map_err(|e| format!("Failed to begin batch delete transaction: {}", e))?;
 
         let mut total = 0u32;
+        let mut stems = std::collections::HashSet::new();
         for path in paths {
-            total += delete_files_where(&tx, &self.roots, "path = ?1", path)
+            total += delete_files_collecting(&tx, "path = ?1", path, &mut stems)
                 .map_err(|e| format!("Failed to delete file {}: {}", path, e))?;
         }
+        // Once per name for the whole batch: a pruned folder of README.md files would
+        // otherwise re-resolve the same name once per file.
+        reresolve_stems(&tx, &self.roots, stems)?;
 
         tx.commit().map_err(|e| format!("Failed to commit batch delete: {}", e))?;
         Ok(total)
@@ -1092,6 +1131,11 @@ mod tests {
         let pairs = t.get_link_targets_to(old).unwrap();
         assert!(pairs.contains(&("/v/s1.md".to_string(), "Old".to_string())), "{pairs:?}");
         assert!(pairs.iter().all(|(p, target)| target != "Old" || p == "/v/s1.md"), "{pairs:?}");
+        // A link the rewrite never reached is resolved afresh: it names nothing now, so
+        // it stops being a backlink of the renamed note and a click agrees.
+        t.reresolve_name("Old").unwrap();
+        assert_agree(&t, add(&t, "/v/s3.md", &["old"]), "/v/s3.md", "old", None);
+        assert!(t.get_backlinks("/v/New.md").unwrap().iter().all(|b| b.source_path != "/v/s1.md"));
         // [[New]] from the same folder now finds the renamed note first
         assert_agree(&t, to_new, "/v/s2.md", "New", Some("/v/New.md"));
     }

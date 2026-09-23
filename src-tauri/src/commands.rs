@@ -1011,11 +1011,11 @@ fn transform_link_target(old_target: &str, old_basename: &str, new_basename: &st
         Some(i) => (&old_target[..=i], &old_target[i + 1..]),
         None => ("", old_target),
     };
-    let (stem, ext) = match last.strip_suffix(".md") {
-        Some(s) => (s, ".md"),
-        None => (last, ""),
-    };
-    if stem != old_basename {
+    // Match the way resolution does (db::strip_md, db::name_key), so every link that
+    // resolved to the renamed note is rewritten, not only the exact spelling.
+    let stem = crate::db::strip_md(last);
+    let ext = &last[stem.len()..];
+    if crate::db::name_key(stem) != crate::db::name_key(old_basename) {
         return None;
     }
     Some(format!("{}{}{}", parent, new_basename, ext))
@@ -1179,6 +1179,13 @@ pub fn rename_file(
             if !old_basename.is_empty() && !new_basename.is_empty() && old_basename != new_basename {
                 if let Err(e) = propagate_rename_to_wikilinks(id, &old_basename, &new_basename, &state, &app) {
                     log::warn!("Wikilink propagation failed for {} -> {}: {}", old_path, new_path, e);
+                }
+                // Links the rewrite could not change still point here; resolve them
+                // afresh so the index stops listing them as backlinks of the new name.
+                if let Ok(db) = state.db.lock() {
+                    if let Err(e) = db.reresolve_name(&old_basename) {
+                        log::warn!("Re-resolving links to {} failed: {}", old_basename, e);
+                    }
                 }
             }
         }
@@ -2102,6 +2109,20 @@ mod tests {
             transform_link_target("A/Untitled.md", "Untitled", "MyNote"),
             Some("A/MyNote.md".to_string())
         );
+    }
+
+    #[test]
+    fn transform_link_target_matches_every_spelling_resolution_matches() {
+        for (written, expected) in [
+            ("old", "New"),
+            ("OLD", "New"),
+            ("Old.MD", "New.MD"),
+            ("A/old.md", "A/New.md"),
+            ("Élan", "New"),
+        ] {
+            let old = if written.contains("lan") { "élan" } else { "Old" };
+            assert_eq!(transform_link_target(written, old, "New").as_deref(), Some(expected), "{written}");
+        }
     }
 
     #[test]
