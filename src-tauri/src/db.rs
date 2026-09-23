@@ -71,6 +71,7 @@ pub struct BookmarkRecord {
 /// Entry n brings the database to version n + 1. Once released, append; never edit.
 const SCHEMA_MIGRATIONS: &[fn(&Connection) -> Result<(), String>] = &[
     add_name_keys,
+    reindex_under_single_resolver,
 ];
 
 /// 1: case-folded name keys, indexed, so wikilink resolution never compares text with
@@ -95,6 +96,14 @@ fn add_name_keys(conn: &Connection) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// 2: clear the cached index so startup reconciliation reindexes every file. Migration
+/// 1 backfilled the new columns but kept each link's old target, resolved under the
+/// earlier rules; resolution now also depends on the registered roots, which are not
+/// known while migrating, so the links are rebuilt from the notes instead.
+fn reindex_under_single_resolver(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch("DELETE FROM files;").map_err(|e| e.to_string())
 }
 
 fn query_all<T: rusqlite::types::FromSql, U: rusqlite::types::FromSql>(
