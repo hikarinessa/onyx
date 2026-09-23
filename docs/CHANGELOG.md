@@ -7,7 +7,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 ## [0.11.12] — 2026-09-23
 
 ### Fixed
-- **Scrolling long notes no longer jumps back up.** CodeMirror estimates the height of every line it hasn't drawn from one short sample line, and which line that was depended on what was on screen: a monospace frontmatter line, a line of two spaces, or body text. Each time it changed, the estimated height of the whole note moved by thousands of pixels at once, throwing the view back (Preconquest Consciousness jumped from line 264 to 142). Short lines are now never sampled, so the estimate stays fixed while you scroll
+- **Scrolling long notes no longer jumps back up.** CodeMirror estimates the height of every line it hasn't drawn from one short sample line, and which line that was depended on what was on screen: a monospace frontmatter line, a line of two spaces, or body text. Each time it changed, the estimated height of the whole note moved by thousands of pixels at once, throwing the view back (in one long note, from line 264 back to 142). Short lines are now never sampled, so the estimate stays fixed while you scroll
 
 ### Added
 - **Inline HTML shows formatted in Preview** (#122). Coloured text (`<font style="color:…">`, `<span style="color:…">`), `<br>`, `<u>`, `<sup>`/`<sub>`, bold/italic tags, links and `<p>` render in paragraphs and table cells, including `class="font-mono"`. The HTML is rebuilt from an allowlist, so only a text colour, a web or mail link and that one class survive; scripts, styles and embeds are dropped and other tags show as their text. Markdown inside HTML stays literal, as in Obsidian. Tags that span several lines (`<div>` blocks) and YouTube embeds are not rendered
