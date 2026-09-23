@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::object_types::{self, ObjectType};
 use crate::periodic;
@@ -402,6 +402,9 @@ pub fn register_directory(
         dirs.register(PathBuf::from(path), label, color)?
     };
     sync_index_roots(&state)?;
+    if let Err(e) = app.asset_protocol_scope().allow_directory(&dir.path, true) {
+        log::warn!("Could not allow images from {}: {}", dir.path.display(), e);
+    }
 
     // Now safe to lock watcher — directories lock is released
     let mut watcher_lock = state.watcher.lock().map_err(|e| e.to_string())?;
@@ -443,6 +446,30 @@ pub fn unregister_directory(
     db.delete_by_dir(&id)?;
 
     Ok(())
+}
+
+/// Where an image referenced in a note points (`![[photo.png]]`, `![](pics/a.jpg)`), as
+/// an absolute path the web view can load through the asset protocol. See attachments.rs.
+/// The first call walks the registered folders, so it runs off the main thread.
+#[tauri::command]
+pub async fn resolve_attachment(
+    reference: String,
+    context_path: String,
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let roots: Vec<PathBuf> = {
+            let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+            dirs.list().iter().map(|d| d.path.clone()).collect()
+        };
+        let context_dir = Path::new(&context_path).parent().map(PathBuf::from).unwrap_or_default();
+        let mut index = state.attachments.lock().map_err(|e| e.to_string())?;
+        Ok(crate::attachments::resolve(&reference, &context_dir, &roots, &mut index)
+            .map(|p| p.to_string_lossy().to_string()))
+    })
+    .await
+    .map_err(|e| format!("Attachment lookup failed: {}", e))?
 }
 
 /// Hand the index the registered roots, in sidebar order, for root-relative links.

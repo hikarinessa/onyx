@@ -216,7 +216,7 @@ impl Indexer {
 
 /// Walk filter: the registered root itself is always walked; everything below it goes
 /// through the shared skip rules so the index matches the tree and the watcher.
-fn is_ignored(entry: &walkdir::DirEntry) -> bool {
+pub(crate) fn is_ignored(entry: &walkdir::DirEntry) -> bool {
     if entry.depth() == 0 {
         return false;
     }

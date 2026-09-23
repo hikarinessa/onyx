@@ -1,3 +1,4 @@
+mod attachments;
 mod bookmarks;
 mod commands;
 mod config;
@@ -47,6 +48,8 @@ pub struct AppState {
     pub bookmarks: Mutex<bookmarks::BookmarkManager>,
     pub directories: Mutex<dirs::DirectoryManager>,
     pub tree_styles: Mutex<tree_styles::TreeStyleManager>,
+    /// File-name lookup for image embeds, built on first use
+    pub attachments: Mutex<attachments::AttachmentIndex>,
     pub watcher: Mutex<Option<watcher::FileWatcher>>,
     pub db: Arc<Mutex<db::Database>>,
     /// Tracks last-read mtime per file path to detect external modifications before write.
@@ -221,6 +224,13 @@ pub fn run() {
             let state = handle.state::<AppState>();
             let dirs = state.directories.lock().unwrap();
             let paths: Vec<_> = dirs.list().iter().map(|d| d.path.clone()).collect();
+            // Images embedded in notes load through the asset protocol, limited to the
+            // registered folders
+            for path in &paths {
+                if let Err(e) = app.asset_protocol_scope().allow_directory(path, true) {
+                    log::warn!("Could not allow images from {}: {}", path.display(), e);
+                }
+            }
             let dir_pairs: Vec<(String, std::path::PathBuf)> = dirs
                 .list()
                 .iter()
@@ -257,6 +267,7 @@ pub fn run() {
             bookmarks: Mutex::new(bookmark_manager),
             directories: Mutex::new(dir_manager),
             tree_styles: Mutex::new(tree_style_manager),
+            attachments: Mutex::new(attachments::AttachmentIndex::default()),
             watcher: Mutex::new(None),
             db,
             last_read_mtimes: Mutex::new(std::collections::HashMap::new()),
@@ -277,6 +288,7 @@ pub fn run() {
             commands::update_directory_color,
             commands::get_tree_styles,
             commands::set_tree_style,
+            commands::resolve_attachment,
             commands::reorder_directories,
             commands::search_files,
             commands::search_content,
