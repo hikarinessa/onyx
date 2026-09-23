@@ -5,6 +5,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// `path` is `prefix` itself or lies inside it. A bare `starts_with` would also match a
+/// sibling that shares the prefix ("Notes" and "Notes Archive").
+fn is_under(path: &str, prefix: &str) -> bool {
+    path == prefix || path.strip_prefix(prefix).is_some_and(|rest| rest.starts_with('/'))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bookmark {
     pub path: String,
@@ -87,7 +93,7 @@ impl BookmarkManager {
     pub fn rename_prefix(&mut self, old_prefix: &str, new_prefix: &str) -> Result<bool, String> {
         let mut changed = false;
         for bookmark in &mut self.bookmarks {
-            if bookmark.path.starts_with(old_prefix) {
+            if is_under(&bookmark.path, old_prefix) {
                 bookmark.path = format!("{}{}", new_prefix, &bookmark.path[old_prefix.len()..]);
                 changed = true;
             }
@@ -98,10 +104,10 @@ impl BookmarkManager {
         Ok(changed)
     }
 
-    /// Remove bookmark for a deleted file.
+    /// Remove bookmarks for a deleted file, or for everything inside a deleted folder.
     pub fn remove_path(&mut self, path: &str) -> Result<bool, String> {
         let len_before = self.bookmarks.len();
-        self.bookmarks.retain(|b| b.path != path);
+        self.bookmarks.retain(|b| !is_under(&b.path, path));
         if self.bookmarks.len() != len_before {
             self.recompute_positions();
             self.save()?;
@@ -178,5 +184,42 @@ impl BookmarkManager {
             let _ = fs::remove_file(&temp_path);
             format!("Failed to rename bookmarks temp file: {}", e)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manager(paths: &[&str]) -> (BookmarkManager, PathBuf) {
+        let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("onyx-bm-test-{}-{}", std::process::id(), counter));
+        fs::create_dir_all(&dir).unwrap();
+        let bookmarks = paths.iter().enumerate().map(|(i, p)| Bookmark {
+            path: p.to_string(),
+            label: p.rsplit('/').next().unwrap().to_string(),
+            position: i as u32,
+        }).collect();
+        (BookmarkManager { config_path: dir.join("bookmarks.json"), bookmarks }, dir)
+    }
+
+    fn paths(m: &BookmarkManager) -> Vec<&str> {
+        m.list().iter().map(|b| b.path.as_str()).collect()
+    }
+
+    #[test]
+    fn folder_rename_leaves_siblings_sharing_a_prefix() {
+        let (mut m, dir) = manager(&["/v/Notes/a.md", "/v/Notes Archive/b.md"]);
+        m.rename_prefix("/v/Notes", "/v/Journal").unwrap();
+        assert_eq!(paths(&m), ["/v/Journal/a.md", "/v/Notes Archive/b.md"]);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn folder_delete_drops_bookmarks_inside_it_only() {
+        let (mut m, dir) = manager(&["/v/Notes/a.md", "/v/Notes2.md", "/v/c.md"]);
+        m.remove_path("/v/Notes").unwrap();
+        assert_eq!(paths(&m), ["/v/Notes2.md", "/v/c.md"]);
+        fs::remove_dir_all(dir).unwrap();
     }
 }

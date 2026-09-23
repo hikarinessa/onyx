@@ -12,6 +12,7 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ### Fixed
 - **Renaming a note from its title no longer blanks the body.** The rename event reached the editor before the rename finished, and moved the note's stale cached copy (empty, for a new note) to the new name; the body came back only after switching away and back. Onyx now saves the note and snapshots the editor before renaming, so the order no longer matters. Edits typed just before a rename are saved rather than dropped
+- **Renaming a folder no longer re-points bookmarks in a sibling that shares its name as a prefix.** Renaming `Notes` also moved bookmarks under `Notes Archive/`. Trashing a folder now also drops bookmarks to the files inside it, which were left pointing at paths that no longer existed
 
 ## [0.11.7] — 2026-09-13
 
