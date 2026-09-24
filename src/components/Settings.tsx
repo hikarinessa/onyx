@@ -295,6 +295,22 @@ function GeneralSection({
         />
       </SettingRow>
 
+      <SettingRow
+        label="Canvas navigation"
+        description={(config.canvas?.input_mode ?? "mouse") === "mouse"
+          ? "Mouse: the wheel zooms; drag with the right or middle button to pan"
+          : "Trackpad: two fingers pan, pinch to zoom"}
+      >
+        <select
+          className="settings-select"
+          value={config.canvas?.input_mode ?? "mouse"}
+          onChange={(e) => updateConfig({ canvas: { input_mode: e.target.value } })}
+        >
+          <option value="mouse">Mouse</option>
+          <option value="trackpad">Trackpad</option>
+        </select>
+      </SettingRow>
+
     </div>
   );
 }
