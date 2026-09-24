@@ -140,10 +140,15 @@ function TextItem({ node, editing, fit, actions }: {
   }, [fit, node.onyx?.fontSize]);
 
   useEffect(() => {
-    const area = areaRef.current;
-    if (!editing || !area) return;
-    area.focus();
-    area.setSelectionRange(area.value.length, area.value.length);
+    if (!editing) return;
+    // After the click that started editing has finished, so nothing takes focus back
+    const frame = requestAnimationFrame(() => {
+      const area = areaRef.current;
+      if (!area) return;
+      area.focus();
+      area.setSelectionRange(area.value.length, area.value.length);
+    });
+    return () => cancelAnimationFrame(frame);
   }, [editing]);
 
   return (

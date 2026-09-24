@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   FileText, Frame, Image as ImageIcon, Maximize, Minus, MousePointer2, Plus,
   RectangleHorizontal, Redo2, StickyNote, Trash2, Type, Undo2,
@@ -389,7 +390,13 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
     if (node?.type === "group" && !frameTitle && !selection.has(node.id)) node = null;
 
     if (!node) {
-      if (tool !== "select") { createAt(tool, p); return; }
+      if (tool !== "select") {
+        // The browser would move focus to the board after this handler, pulling it out
+        // of the new item's text box, which ends the edit and removes the empty item
+        e.preventDefault();
+        createAt(tool, p);
+        return;
+      }
       setSelectedEdge(null);
       const base = e.shiftKey ? new Set(selection) : new Set<string>();
       if (!e.shiftKey) setSelection(new Set());
@@ -593,6 +600,13 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
   const addFile = useCallback(async (abs: string, at: Point, subpath?: string) => {
     const ref = await canvasFileRef(abs, path);
     const node = newFileCard(ref, 0, 0, subpath);
+    // An image card takes the picture's proportions, its longer side 400
+    const size = kindOf(node) === "image" ? await naturalSize(convertFileSrc(abs)) : null;
+    if (size) {
+      const k = 400 / Math.max(size.width, size.height);
+      node.width = Math.round(size.width * k);
+      node.height = Math.round(size.height * k);
+    }
     node.x = Math.round(at.x - node.width / 2);
     node.y = Math.round(at.y - node.height / 2);
     addNode(node);
@@ -788,6 +802,15 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
   );
+}
+
+function naturalSize(src: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img.naturalWidth && img.naturalHeight ? { width: img.naturalWidth, height: img.naturalHeight } : null);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
 }
 
 function outline(r: Rect): React.CSSProperties {
