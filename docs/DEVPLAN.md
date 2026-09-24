@@ -731,7 +731,7 @@ Build incrementally as desired. Includes original Tier 2 items plus medium-prior
 - 11.6 Tracker widgets (inline charts from frontmatter data) — #32
 - 11.7 Text extraction / OCR (images, PDFs) — #33
 - 11.8 Print / PDF export — #34
-- 11.9 Canvas read-only viewer (parse `.canvas` JSON, render visual) — #35
+- 11.9 Canvas: editable thinking board on JSON Canvas, live note cards, search and backlinks — spec in `docs/specs/canvas.md`
 
 ### Architecture (when hitting pain points)
 

@@ -934,12 +934,12 @@ Nice to have, build when the foundation is solid.
 | Print / export | PDF export with theme-aware styling |
 | Text extraction | OCR from images, text from PDFs |
 | Advanced theming | Per-element styling, custom theme files |
+| Canvas | Thinking board: stickies, markdown and note cards, images, frames, edges (`docs/specs/canvas.md`) |
 
 ### Tier 3 — Someday
 
 | Feature | Description |
 |---------|-------------|
-| Canvas | Infinite canvas with note cards |
 | Graph view | Visual note connection map |
 | Dataview-like queries | Query notes by properties inline |
 | Sync | Git-based or custom sync between devices |
@@ -988,7 +988,7 @@ Decisions made during the design phase:
 
 1. **Inline Dataview fields** (`Key:: Value`) — **YAML only.** Onyx standardizes on YAML frontmatter as the sole property source. Existing notes using `Key:: Value` syntax should be migrated to frontmatter (a one-time conversion script). This avoids the two-sources-of-truth problem and keeps the parser simple.
 2. **Templater user functions** (`tp.user.week_summary()`) — **Skip.** Custom JS execution in templates is out of scope. Users can achieve similar automation via Claude Code skills operating on Onyx files externally.
-3. **Canvas files** (`.canvas`) — **Read-only display.** Parse Obsidian's JSON canvas format and render a non-editable visual view. Enough to reference existing canvases without needing to switch apps.
+3. **Canvas files** (`.canvas`) — **Editable boards in JSON Canvas 1.0 plus an `onyx` object.** Existing Obsidian canvases open unchanged; stickies, dashed edges and palette colours live in the `onyx` fields. Full design in `docs/specs/canvas.md`.
 4. **Embed rendering** (`![[note]]`) — **Full content inline.** Embeds render the complete content of the linked note within the current document, read-only. Recursive embeds are capped at 2 levels deep to prevent infinite loops.
 5. **Spellcheck** — **OS-native.** WebKit provides macOS spellcheck for free. No custom implementation needed.
 6. **File saving & conflict resolution** — **Pseudo-immediate save** (500ms debounce). External file changes are auto-merged when possible, reloaded with notification when not. No "unsaved changes" dialogs.
@@ -996,7 +996,7 @@ Decisions made during the design phase:
 ## 17. Additional Design Decisions
 
 1. **Property display** — Properties are YAML frontmatter only. The context panel renders them as a structured property editor for typed notes. In the editor, frontmatter is folded by default with a subtle header showing the note type.
-2. **Canvas editing** — Read-only in v1. Basic editing (move/add cards) is a Tier 3 goal, only if read-only proves useful enough to warrant investment.
+2. **Canvas editing** — Viewer and editor ship together: stickies, markdown cards, note cards, images, frames and edges, with undo. See `docs/specs/canvas.md`.
 3. **Search scope** — Ripgrep-style direct file search via Rust. No full-text index in SQLite. Simpler, no stale index risk, fast enough for vaults under 50k files. If performance becomes an issue, full-text indexing can be added later without changing the UX.
 4. **Periodic note navigation** — Calendar widget in the context panel is the sole navigation mechanism. No prev/next buttons in the editor header — keeps the editor chrome minimal.
 5. **Live preview architecture** — CM6 `ViewPlugin` + `StateField<boolean>`. Viewport-aware from day one. "Focus line" (cursor's line) always shows raw markdown; all other lines render inline. Decorations rebuilt on `docChanged || viewportChanged || selectionSet || mode toggle`. Pre-scan caches frontmatter end and code-block states per visible range. **The livePreview plugin is visual-only** — it hides syntax and applies styling. It must never own click dispatch. Click handling for all link-like elements (wikilinks, URLs) lives in `wikilinks.ts` using document-model extraction (`posAtCoords` + regex), not DOM class lookups.
