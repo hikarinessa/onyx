@@ -4,6 +4,7 @@
  * a line becomes a widget; the line holding the cursor shows the raw HTML for editing,
  * code is left alone, and table rows render their cells themselves.
  */
+import { revealedLine } from "./contextPath";
 import {
   Decoration,
   type DecorationSet,
@@ -51,7 +52,7 @@ function inCode(view: EditorView, pos: number): boolean {
 
 function buildHtmlDecos(view: EditorView): DecorationSet {
   if (!view.state.field(previewModeField)) return Decoration.none;
-  const cursorLine = view.state.doc.lineAt(view.state.selection.main.head).number;
+  const cursorLine = revealedLine(view.state);
   const builder = new RangeSetBuilder<Decoration>();
 
   for (const { from, to } of view.visibleRanges) {

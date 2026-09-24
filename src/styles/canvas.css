@@ -607,6 +607,7 @@
 .canvas-md .cm-scroller {
   overflow: hidden !important;
   padding: 0 !important;
+  font-size: var(--editor-preview-font-size, var(--editor-font-size, 16px)) !important;
 }
 
 .canvas-item.is-editing .canvas-md .cm-scroller,

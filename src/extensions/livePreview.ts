@@ -6,6 +6,7 @@ import {
   EditorView,
   WidgetType,
 } from "@codemirror/view";
+import { revealedLine } from "./contextPath";
 import {
   StateField,
   StateEffect,
@@ -801,7 +802,7 @@ function detectTableRanges(
   decos: { from: number; to: number; text: string; table: Table }[];
 } {
   const doc = view.state.doc;
-  const cursorLine = doc.lineAt(view.state.selection.main.head).number;
+  const cursorLine = revealedLine(view.state);
   const skipLines = new Set<number>();
   const focusedTableLines = new Set<number>();
   const decos: { from: number; to: number; text: string; table: Table }[] = [];
@@ -916,7 +917,7 @@ function buildPreviewDecorations(view: EditorView, scan: PreScanResult, tableSki
   const metrics = getHangMetrics(view);
   const unitLen = view.state.facet(indentUnit).length;
 
-  const cursorLine = doc.lineAt(view.state.selection.main.head).number;
+  const cursorLine = revealedLine(view.state);
   const collapsedLists = view.state.field(listFoldField);
 
   // Cache list fold ranges to avoid double computation per list item
@@ -1460,7 +1461,7 @@ function buildTableBlockDecos(state: EditorState): DecorationSet {
   if (!state.field(previewModeField)) return Decoration.none;
 
   const doc = state.doc;
-  const cursorLine = doc.lineAt(state.selection.main.head).number;
+  const cursorLine = revealedLine(state);
   const tree = syntaxTree(state);
 
   // Determine frontmatter end

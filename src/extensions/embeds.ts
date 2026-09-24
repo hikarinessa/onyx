@@ -15,7 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { previewModeField, togglePreviewEffect } from "./livePreview";
 import { wikilinkFollowRef } from "./wikilinks";
-import { contextPathOf } from "./contextPath";
+import { contextPathOf, revealedLine } from "./contextPath";
 import { extractSection, splitSubpath } from "../lib/sections";
 
 // ── Regex ──
@@ -467,8 +467,7 @@ function buildEmbedDecos(state: import("@codemirror/state").EditorState, view?: 
 
   const builder = new RangeSetBuilder<Decoration>();
   const doc = state.doc;
-  const cursorLine = state.selection.main.head;
-  const cursorLineNumber = doc.lineAt(cursorLine).number;
+  const cursorLineNumber = revealedLine(state);
   const contextPath = contextPathOf(state);
 
   // Scan only visible ranges (with margin) to avoid full-document iteration

@@ -13,3 +13,11 @@ export const contextPathFacet = Facet.define<string, string | null>({
 export function contextPathOf(state: EditorState): string {
   return state.facet(contextPathFacet) ?? selectActiveTabPath(useAppStore.getState()) ?? "";
 }
+
+/**
+ * The line whose markdown Preview shows raw, for editing: the cursor's. A read-only view
+ * (a canvas card, the theme preview) is never being edited, so it reveals no line.
+ */
+export function revealedLine(state: EditorState): number {
+  return state.readOnly ? -1 : state.doc.lineAt(state.selection.main.head).number;
+}

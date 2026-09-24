@@ -120,5 +120,7 @@ export function CardEditor({ text, contextPath, editing, onChange, onExit }: Car
     }
   }, [editing]);
 
-  return <div ref={ref} className="canvas-md" />;
+  // The note editor's classes give cards its fonts and Preview styles; canvas.css
+  // takes back its page padding and width
+  return <div ref={ref} className="canvas-md editor-container preview-mode" />;
 }

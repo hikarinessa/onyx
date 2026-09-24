@@ -14,6 +14,7 @@
  * at the top of the viewport can take its number from a label first used off screen.
  */
 
+import { revealedLine } from "./contextPath";
 import { StateField, type EditorState, type Extension, type Range } from "@codemirror/state";
 import {
   Decoration,
@@ -78,7 +79,7 @@ class FootnoteNumberWidget extends WidgetType {
  */
 const BODY = Decoration.mark({ class: "cm-footnote-body" });
 
-const cursorLine = (state: EditorState) => state.doc.lineAt(state.selection.main.head).number;
+const cursorLine = (state: EditorState) => revealedLine(state);
 
 function buildDecorations(state: EditorState): DecorationSet {
   if (!state.field(previewModeField)) return Decoration.none;

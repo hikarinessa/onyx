@@ -338,7 +338,7 @@ export function EditorPane({ pane }: { pane: Pane }) {
           <InlineTitle key={activeTab.id} path={activeTab.path} name={activeTab.name} />
           {/* The note editor stays mounted, hidden, so switching back keeps its view */}
           <div className="editor-container" ref={containerRef} hidden />
-          <CanvasView key={activeTab.id} path={activeTab.path} active={isActive} />
+          <CanvasView key={`canvas:${activeTab.id}`} path={activeTab.path} active={isActive} />
         </div>
       </div>
     );
