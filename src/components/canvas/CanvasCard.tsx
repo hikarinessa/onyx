@@ -9,7 +9,8 @@ import { CardEditor } from "./CardEditor";
 export interface CardActions {
   setText: (id: string, text: string) => void;
   setLabel: (id: string, label: string) => void;
-  stopEditing: () => void;
+  /** End editing; with an id, only if that item is still the one being edited */
+  stopEditing: (id?: string) => void;
   openFile: (path: string, newTab: boolean) => void;
   openUrl: (url: string) => void;
 }
@@ -60,7 +61,7 @@ function CardImpl({ node, canvasPath, selected, editing, far, scale, actions }: 
             contextPath={canvasPath}
             editing={editing}
             onChange={(t) => actions.setText(node.id, t)}
-            onExit={actions.stopEditing}
+            onExit={() => actions.stopEditing(node.id)}
           />;
       break;
     case "note":
@@ -167,12 +168,12 @@ function TextItem({ node, editing, fit, actions }: {
           value={text}
           spellCheck
           onChange={(e) => actions.setText(node.id, e.target.value)}
-          onBlur={actions.stopEditing}
+          onBlur={() => actions.stopEditing(node.id)}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
               e.preventDefault();
-              actions.stopEditing();
+              actions.stopEditing(node.id);
             }
           }}
         />
@@ -193,11 +194,11 @@ function FrameTitle({ node, editing, actions }: { node: CanvasNode; editing: boo
       autoFocus
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => { actions.setLabel(node.id, draft.trim()); actions.stopEditing(); }}
+      onBlur={() => { actions.setLabel(node.id, draft.trim()); actions.stopEditing(node.id); }}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        if (e.key === "Escape") { setDraft(node.label ?? ""); actions.stopEditing(); }
+        if (e.key === "Escape") { setDraft(node.label ?? ""); actions.stopEditing(node.id); }
       }}
     />
   );

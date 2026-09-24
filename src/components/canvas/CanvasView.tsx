@@ -16,7 +16,7 @@ import {
 import {
   PALETTE, colorOf, cssColor, kindOf, newEdge, newFileCard, newFrame, newId, newLabel, newLinkCard,
   newMarkdownCard, newSticky, withColor, withoutNodes,
-  type CanvasDoc, type CanvasEdge, type CanvasNode, type PaletteName, type Side,
+  type CanvasDoc, type CanvasEdge, type CanvasNode, type Side,
 } from "../../lib/canvas/model";
 import {
   boundsOf, centreOn, contains, fitViewport, intersects, nodeAt, nodesInFrame, normaliseRect, toBoard, zoomAround,
@@ -63,11 +63,12 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ type: "node" | "edge"; id: string } | null>(null);
   const [tool, setTool] = useState<Tool>("select");
-  const [stickyColor, setStickyColor] = useState<PaletteName>("yellow");
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [pending, setPending] = useState<{ from: CanvasNode; side: Side; to: Point; toSide: Side | null } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; sections: MenuSection[] } | null>(null);
   const [picker, setPicker] = useState<Point | null>(null);
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
   const gesture = useRef<Gesture | null>(null);
   const space = useRef(false);
 
@@ -285,7 +286,9 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
       if (!label) delete next.label;
       return next;
     }),
-    stopEditing: () => {
+    stopEditing: (id) => {
+      // A blur arriving after another item started editing must not end that item's edit
+      if (id && editingRef.current?.id !== id) return;
       setEditing(null);
       boardRef.current?.focus();
     },
@@ -299,15 +302,16 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
     setText: (...a) => actionsRef.current.setText(...a),
     setLabel: (...a) => actionsRef.current.setLabel(...a),
     setEdgeLabel: (...a) => actionsRef.current.setEdgeLabel(...a),
-    stopEditing: () => actionsRef.current.stopEditing(),
+    stopEditing: (id) => actionsRef.current.stopEditing(id),
     openFile: (...a) => actionsRef.current.openFile(...a),
     openUrl: (...a) => actionsRef.current.openUrl(...a),
   }), []);
 
-  // Leaving a text item empty removes it, as with a sticky that was never written on
+  // Leaving a text label empty removes it, since an empty label can't be seen. An empty
+  // sticky stays: placing several before writing on any is a normal way to start.
   const stopEditingNode = useCallback((id: string) => {
     const n = getCanvasDoc(path)?.nodes.find((m) => m.id === id);
-    if (n && (kindOf(n) === "sticky" || kindOf(n) === "label") && !(n.text ?? "").trim()) {
+    if (n && kindOf(n) === "label" && !(n.text ?? "").trim()) {
       change((d) => withoutNodes(d, new Set([id])), { history: false });
       setSelection(new Set());
     }
@@ -332,12 +336,13 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
 
   const createAt = (t: Tool, p: Point): void => {
     switch (t) {
-      case "sticky": addNode(newSticky(p.x - 100, p.y - 100, stickyColor), true); break;
+      case "sticky": addNode(newSticky(p.x - 100, p.y - 100), true); break;
       case "card": addNode(newMarkdownCard(p.x - 180, p.y - 120), true); break;
       case "label": addNode(newLabel(p.x - 20, p.y - 30), true); break;
       case "frame": addNode(newFrame(p.x - 400, p.y - 300)); break;
     }
-    setTool("select");
+    // The sticky tool stays on so a run of clicks lays down a run of stickies
+    if (t !== "sticky") setTool("select");
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -759,16 +764,8 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
 
       <div className="canvas-toolbar">
         <ToolButton icon={<MousePointer2 size={17} />} label="Select (V)" on={tool === "select"} onClick={() => setTool("select")} />
-        <ToolButton icon={<StickyNote size={17} />} label="Sticky (N)" on={tool === "sticky"} onClick={() => setTool("sticky")}
-          dot={cssColor(stickyColor)} />
-        {tool === "sticky" && (
-          <div className="canvas-toolbar-colors">
-            {PALETTE.map((c) => (
-              <button key={c} className={`canvas-swatch ${stickyColor === c ? "is-current" : ""}`} style={{ background: cssColor(c) }}
-                title={c} onClick={() => setStickyColor(c)} />
-            ))}
-          </div>
-        )}
+        <ToolButton icon={<StickyNote size={17} />} label="Sticky (N) — stays on until Esc or V" on={tool === "sticky"}
+          onClick={() => setTool(tool === "sticky" ? "select" : "sticky")} />
         <ToolButton icon={<RectangleHorizontal size={17} />} label="Card (C)" on={tool === "card"} onClick={() => setTool("card")} />
         <ToolButton icon={<Type size={17} />} label="Text (T)" on={tool === "label"} onClick={() => setTool("label")} />
         <ToolButton icon={<Frame size={17} />} label="Frame (F)" on={tool === "frame"} onClick={() => setTool("frame")} />
@@ -862,13 +859,12 @@ function Handles({ node, zoom }: { node: CanvasNode; zoom: number }) {
   );
 }
 
-function ToolButton({ icon, label, on, onClick, dot }: {
-  icon: React.ReactNode; label: string; on?: boolean; onClick: () => void; dot?: string;
+function ToolButton({ icon, label, on, onClick }: {
+  icon: React.ReactNode; label: string; on?: boolean; onClick: () => void;
 }) {
   return (
     <button className={`canvas-tool ${on ? "is-on" : ""}`} title={label} aria-label={label} onClick={onClick}>
       {icon}
-      {dot && <span className="canvas-tool-dot" style={{ background: dot }} />}
     </button>
   );
 }

@@ -18,7 +18,7 @@ function arrowHead(tip: Point, towards: Point, size: number): string {
 
 export interface EdgeActions {
   setEdgeLabel: (id: string, label: string) => void;
-  stopEditing: () => void;
+  stopEditing: (id?: string) => void;
 }
 
 interface Props {
@@ -119,11 +119,11 @@ function EdgeLabel({ edge, at, editing, selected, actions }: {
       placeholder="Label"
       size={Math.max(6, draft.length + 1)}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => { actions.setEdgeLabel(edge.id, draft.trim()); actions.stopEditing(); }}
+      onBlur={() => { actions.setEdgeLabel(edge.id, draft.trim()); actions.stopEditing(edge.id); }}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        if (e.key === "Escape") { setDraft(edge.label ?? ""); actions.stopEditing(); }
+        if (e.key === "Escape") { setDraft(edge.label ?? ""); actions.stopEditing(edge.id); }
       }}
     />
   );
