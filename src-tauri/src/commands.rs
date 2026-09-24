@@ -552,8 +552,13 @@ pub async fn search_files(
 
 #[derive(Debug, Serialize)]
 pub struct LineMatch {
+    /// A note's 1-based line, or for a canvas the matched item's 0-based index in
+    /// `nodes` (or in `edges`, for an edge label).
     pub line_number: u32,
     pub line_text: String,
+    /// For a canvas, the `id` of the matched node or edge, so the view can centre it.
+    /// Always null for a note.
+    pub node_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -620,7 +625,7 @@ fn search_content_blocking(
             Box::new(move |entry| {
                 let Ok(entry) = entry else { return WalkState::Continue };
                 let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) != Some("md") || !path.is_file() {
+                if !crate::indexer::is_indexed_file(path) || !path.is_file() {
                     return WalkState::Continue;
                 }
                 if let Some(result) = search_file(path, &path.to_string_lossy(), query_lower) {
@@ -641,7 +646,7 @@ fn search_content_blocking(
     for orphan in &orphan_paths {
         let path = std::path::Path::new(orphan);
         if !path.is_file() { continue; }
-        if path.extension().and_then(|e| e.to_str()) != Some("md") { continue; }
+        if !crate::indexer::is_indexed_file(path) { continue; }
         if let Some(result) = search_file(path, orphan, &query_lower) {
             results.push(result);
         }
@@ -717,6 +722,10 @@ fn search_file(
     let content = std::fs::read_to_string(path).ok()?;
     if content.len() > 1_048_576 { return None; }
 
+    if crate::canvas::is_canvas_path(path) {
+        return canvas_result(path_str, title, title_match, &content, query_lower);
+    }
+
     let mut line_matches: Vec<LineMatch> = Vec::new();
     let mut match_count: u32 = 0;
     let mut heading_hits: u32 = 0;
@@ -739,6 +748,7 @@ fn search_file(
                 line_matches.push(LineMatch {
                     line_number: (i + 1) as u32,
                     line_text: snippet(line, match_at),
+                    node_id: None,
                 });
             }
         }
@@ -748,6 +758,46 @@ fn search_file(
         return None;
     }
 
+    Some(ContentSearchResult {
+        path: path_str.to_string(),
+        title,
+        match_count,
+        title_match,
+        line_matches,
+        heading_hits,
+    })
+}
+
+/// A canvas searched by what it shows (`canvas::search`), never its raw JSON: one line
+/// match per matching card, frame, link or edge label, carrying its id.
+fn canvas_result(
+    path_str: &str,
+    title: String,
+    title_match: bool,
+    content: &str,
+    query_lower: &str,
+) -> Option<ContentSearchResult> {
+    let matches = crate::canvas::search(content, query_lower);
+    let match_count: u32 = matches.iter().map(|m| m.hits).sum();
+    // Ranking only asks whether any heading matched: count items whose matched line is one
+    let heading_hits = matches.iter().filter(|m| is_heading(&m.line)).count() as u32;
+    if !title_match && match_count == 0 {
+        return None;
+    }
+    let line_matches = matches
+        .into_iter()
+        .take(10)
+        .map(|m| {
+            // Same windowing as a note's line (see search_file)
+            let lower = m.line.to_lowercase();
+            let match_at = m.line.is_ascii().then(|| lower.find(query_lower)).flatten();
+            LineMatch {
+                line_number: m.index as u32,
+                line_text: snippet(&m.line, match_at),
+                node_id: Some(m.id),
+            }
+        })
+        .collect();
     Some(ContentSearchResult {
         path: path_str.to_string(),
         title,
@@ -807,6 +857,39 @@ mod search_tests {
             let s = snippet(&three, Some(at));
             assert!(s.trim_matches('…').chars().all(|c| c == '€'), "at {at}: {s}");
         }
+    }
+
+    #[test]
+    fn a_canvas_is_searched_by_its_cards_and_reports_their_ids() {
+        let dir = std::env::temp_dir().join(format!("onyx-search-canvas-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let board = dir.join("Board.canvas");
+        std::fs::write(&board, r#"{"nodes":[
+            {"id":"n1","type":"text","text":"first\n## Needle plan\nneedle again"},
+            {"id":"n2","type":"file","file":"needle.md"},
+            {"id":"n3","type":"group","label":"No match"}
+        ],"edges":[{"id":"e1","fromNode":"n1","toNode":"n3","label":"a needle"}]}"#).unwrap();
+        let note = dir.join("note.md");
+        std::fs::write(&note, "a needle here").unwrap();
+
+        let r = search_file(&board, &board.to_string_lossy(), "needle").unwrap();
+        assert_eq!(r.title, "Board");
+        assert!(!r.title_match);
+        assert_eq!(r.match_count, 3);
+        assert_eq!(r.heading_hits, 1);
+        let got: Vec<(u32, &str, Option<&str>)> = r.line_matches.iter()
+            .map(|m| (m.line_number, m.line_text.as_str(), m.node_id.as_deref()))
+            .collect();
+        assert_eq!(got, [(0, "## Needle plan", Some("n1")), (0, "a needle", Some("e1"))]);
+        assert!(search_file(&board, &board.to_string_lossy(), "nodes").is_none(), "JSON keys are not searched");
+        assert!(search_file(&board, &board.to_string_lossy(), "board").unwrap().title_match);
+
+        let r = search_file(&note, &note.to_string_lossy(), "needle").unwrap();
+        assert_eq!(r.line_matches[0].node_id, None);
+        let json = serde_json::to_value(&r.line_matches[0]).unwrap();
+        assert_eq!(json, serde_json::json!({"line_number": 1, "line_text": "a needle here", "node_id": null}));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
