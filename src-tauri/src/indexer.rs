@@ -1,3 +1,4 @@
+use crate::canvas;
 use crate::db::{Database, LinkRecord};
 use crate::skip;
 use regex::Regex;
@@ -16,6 +17,12 @@ struct IndexProgress {
 }
 
 pub struct Indexer;
+
+/// Files the index holds: notes and canvases. Canvases get a row (title = file stem, so
+/// Quick Open finds them) and the links they make, and no frontmatter or tags.
+pub fn is_indexed_file(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e == "md") || canvas::is_canvas_path(path)
+}
 
 impl Indexer {
     /// Reindex a single file (used for watcher delta updates)
@@ -47,7 +54,7 @@ impl Indexer {
                 .filter_map(|e| e.ok())
             {
                 let path = entry.path().to_path_buf();
-                if path.is_file() && path.extension().map_or(false, |e| e == "md") {
+                if path.is_file() && is_indexed_file(&path) {
                     let path_str = path.to_string_lossy().to_string();
                     let mtime = path.metadata().ok()
                         .and_then(|m| m.modified().ok())
@@ -169,7 +176,7 @@ impl Indexer {
             .filter_map(|e| e.ok())
         {
             let path = entry.path().to_path_buf();
-            if path.is_file() && path.extension().map_or(false, |e| e == "md") {
+            if path.is_file() && is_indexed_file(&path) {
                 let path_str = path.to_string_lossy().to_string();
                 let changed = match indexed_map.get(&path_str) {
                     None => true,
@@ -244,11 +251,20 @@ fn index_single_file(path: &Path, dir_id: &str, db: &Mutex<Database>) -> Result<
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs() as i64);
 
+    let path_str = path.to_string_lossy().to_string();
+
+    if canvas::is_canvas_path(path) {
+        let db = db.lock().map_err(|e| e.to_string())?;
+        // File nodes are written relative to the canvas's root; the root is only
+        // known to the index, so the links are read under its lock.
+        let links = canvas::links(&content, db.root_of(&path_str).as_deref());
+        db.index_file(&path_str, dir_id, title.as_deref(), modified_at, None, &links, &[])?;
+        return Ok(());
+    }
+
     let frontmatter_json = extract_frontmatter(&content);
     let links = extract_wikilinks(&content);
     let tags = extract_tags(&content);
-
-    let path_str = path.to_string_lossy().to_string();
 
     let db = db.lock().map_err(|e| e.to_string())?;
     db.index_file(
@@ -321,7 +337,7 @@ fn lines_outside_code_blocks(content: &str) -> Vec<(usize, &str)> {
 }
 
 /// Extract wikilinks [[target]] from content, with line numbers and context
-fn extract_wikilinks(content: &str) -> Vec<LinkRecord> {
+pub(crate) fn extract_wikilinks(content: &str) -> Vec<LinkRecord> {
     let mut links = Vec::new();
 
     for (line_idx, line) in lines_outside_code_blocks(content) {
@@ -404,6 +420,51 @@ mod tests {
         assert_eq!(links[0].target, "Note A");
         assert_eq!(links[1].target, "Note B");
         assert_eq!(links[2].target, "Note C");
+    }
+
+    #[test]
+    fn a_note_on_a_canvas_lists_the_canvas_as_a_backlink() {
+        let dir = std::env::temp_dir().join(format!("onyx-indexer-canvas-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let root = dir.join("root");
+        std::fs::create_dir_all(root.join("Notes")).unwrap();
+        let root_str = root.to_string_lossy().to_string();
+        let note = root.join("Notes/Gamma.md");
+        let other = root.join("Alpha.md");
+        let board = root.join("Plan.canvas");
+        std::fs::write(&note, "# Gamma\n#tag").unwrap();
+        std::fs::write(&other, "alpha").unwrap();
+        std::fs::write(&board, r##"{"nodes":[
+            {"id":"t","type":"text","text":"About [[Alpha]] #notatag"},
+            {"id":"f","type":"file","file":"Notes/Gamma.md"}
+        ],"edges":[]}"##).unwrap();
+
+        let mut database = Database::new(&dir.join("index.db")).unwrap();
+        database.set_roots(vec![root_str.clone()]).unwrap();
+        let db = Mutex::new(database);
+        for p in [&note, &other, &board] {
+            Indexer::reindex_file(p, "d", &db).unwrap();
+        }
+        let db = db.lock().unwrap();
+
+        let back = db.get_backlinks(&note.to_string_lossy()).unwrap();
+        assert_eq!(back.len(), 1);
+        assert_eq!(back[0].source_path, board.to_string_lossy());
+        assert_eq!(back[0].source_title.as_deref(), Some("Plan"));
+        assert_eq!(back[0].line_number, Some(1));
+        assert_eq!(back[0].context.as_deref(), Some("Gamma.md"));
+
+        let back = db.get_backlinks(&other.to_string_lossy()).unwrap();
+        assert_eq!(back[0].line_number, Some(0));
+        assert_eq!(back[0].context.as_deref(), Some("About [[Alpha]] #notatag"));
+
+        let found = db.search_files("plan").unwrap();
+        assert!(found.iter().any(|r| r.path == board.to_string_lossy()), "Quick Open finds the canvas");
+        assert_eq!(db.get_frontmatter(&board.to_string_lossy()).unwrap(), None);
+        let tags: Vec<String> = db.get_all_tags().unwrap().into_iter().map(|t| t.tag).collect();
+        assert_eq!(tags, ["tag"], "a canvas contributes no tags");
+        drop(db);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -133,10 +133,18 @@ pub(crate) fn strip_md(target: &str) -> &str {
     }
 }
 
+/// `target` without a `#Heading` or `#^block` suffix: `![[note#Section]]` and
+/// `[[note#^abc]]` point at `note`. Note names cannot contain `#`, so everything after
+/// the first one is a subpath.
+pub(crate) fn strip_subpath(target: &str) -> &str {
+    target.split('#').next().unwrap_or(target).trim_end()
+}
+
 /// The note name a link target can only resolve to: its last path segment, without
-/// `.md`, case-folded. `[[Notes/Consent]]` and `[[consent.MD]]` both give `consent`.
+/// `#subpath` or `.md`, case-folded. `[[Notes/Consent]]`, `[[consent.MD]]` and
+/// `[[Consent#Terms]]` all give `consent`.
 fn link_stem(target: &str) -> String {
-    let base = strip_md(target);
+    let base = strip_md(strip_subpath(target));
     name_key(base.rsplit('/').next().unwrap_or(base))
 }
 
@@ -151,7 +159,9 @@ fn parent_dir(path: &str) -> &str {
 ///   2. the note's name in the linking note's own folder (`[[sub/note]]` relative to it)
 ///   3. any note with that name, the first path alphabetically
 ///   4. `[[folder/note]]` as the tail of any path, first alphabetically
-/// Names and paths compare `name_key`-folded. Every candidate carries the link's last
+/// An absolute target (a canvas file node outside its root) matches only that path.
+/// Only notes are targets: a canvas shares `name_key` with a note of the same name, but
+/// `[[Board]]` means `Board.md`. Names and paths compare `name_key`-folded. Every candidate carries the link's last
 /// segment as its name, so the name index finds them and the rest is string comparison:
 /// no link text is ever a LIKE pattern.
 fn resolve_link(
@@ -160,7 +170,7 @@ fn resolve_link(
     target: &str,
     source_dir: &str,
 ) -> Result<Option<(i64, String)>, String> {
-    let base = strip_md(target);
+    let base = strip_md(strip_subpath(target));
     let stem = link_stem(target);
     if stem.is_empty() {
         return Ok(None);
@@ -169,7 +179,10 @@ fn resolve_link(
         conn,
         "SELECT id, path FROM files WHERE name_key = ?1 ORDER BY path",
         params![stem],
-    ).map_err(|e| format!("Failed to resolve link target: {}", e))?;
+    ).map_err(|e| format!("Failed to resolve link target: {}", e))?
+        .into_iter()
+        .filter(|(_, path): &(i64, String)| strip_md(path).len() != path.len())
+        .collect();
     let folded: Vec<String> = candidates.iter().map(|(_, p)| name_key(p)).collect();
     let pick = |i: usize| Some(candidates[i].clone());
     let at = |path: String| {
@@ -177,6 +190,9 @@ fn resolve_link(
         folded.iter().position(|p| *p == want)
     };
 
+    if base.starts_with('/') {
+        return Ok(at(format!("{}.md", base)).and_then(pick));
+    }
     let nested = base.contains('/');
     if nested {
         for root in roots {
@@ -581,6 +597,23 @@ impl Database {
         tx.commit().map_err(|e| format!("Failed to commit re-resolve: {}", e))
     }
 
+    /// The registered root containing `path`, first in sidebar order. Canvas file
+    /// nodes are written relative to it.
+    pub fn root_of(&self, path: &str) -> Option<String> {
+        self.roots.iter()
+            .find(|r| path.starts_with(&format!("{}/", r.trim_end_matches('/'))))
+            .cloned()
+    }
+
+    /// Every indexed canvas, for rewriting file-node paths after a rename.
+    pub fn canvas_paths(&self) -> Result<Vec<String>, String> {
+        let mut stmt = self.conn.prepare_cached("SELECT path FROM files WHERE path LIKE '%.canvas'")
+            .map_err(|e| format!("Failed to prepare canvas query: {}", e))?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))
+            .map_err(|e| format!("Failed to list canvases: {}", e))?;
+        rows.collect::<Result<_, _>>().map_err(|e| format!("Failed to list canvases: {}", e))
+    }
+
     /// Whether `path` is in the index.
     pub fn is_indexed(&self, path: &str) -> Result<bool, String> {
         Ok(self.get_file_id(path)?.is_some())
@@ -825,14 +858,15 @@ impl Database {
         Ok(())
     }
 
+    /// A file's frontmatter as JSON; None for a file with none, or not in the index.
     pub fn get_frontmatter(&self, path: &str) -> Result<Option<String>, String> {
         let result = self.conn.query_row(
             "SELECT frontmatter FROM files WHERE path = ?1",
             params![path],
-            |row| row.get(0),
+            |row| row.get::<_, Option<String>>(0),
         ).optional().map_err(|e| format!("Failed to get frontmatter: {}", e))?;
 
-        Ok(result)
+        Ok(result.flatten())
     }
 
     /// Get all unique tags with usage counts (for autocomplete)
@@ -855,10 +889,12 @@ impl Database {
         Ok(results)
     }
 
-    /// Get all file titles for wikilink autocomplete
+    /// Note titles for wikilink autocomplete. Canvases are left out: `[[Board]]` never
+    /// resolves to `Board.canvas` (see `resolve_link`), so offering one would insert a
+    /// broken link.
     pub fn get_all_titles(&self) -> Result<Vec<SearchResult>, String> {
         let mut stmt = self.conn.prepare(
-            "SELECT path, title FROM files ORDER BY title ASC"
+            "SELECT path, title FROM files WHERE path NOT LIKE '%.canvas' ORDER BY title ASC"
         ).map_err(|e| format!("Failed to prepare titles query: {}", e))?;
 
         let rows = stmt.query_map([], |row| {
@@ -1051,6 +1087,14 @@ mod tests {
     }
 
     #[test]
+    fn a_file_without_frontmatter_reads_as_none_rather_than_an_error() {
+        let t = temp_db(&[]);
+        add(&t, "/v/plain.md", &[]);
+        assert_eq!(t.get_frontmatter("/v/plain.md").unwrap(), None);
+        assert_eq!(t.get_frontmatter("/v/missing.md").unwrap(), None);
+    }
+
+    #[test]
     fn migrations_record_the_schema_version_and_rerun_cleanly() {
         let t = temp_db(&[]);
         let v: i64 = t.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
@@ -1200,6 +1244,63 @@ mod tests {
         assert_agree(&t, src, "/two/s.md", "Notes/Plan", Some("/one/Notes/Plan.md"));
         t.db.set_roots(vec!["/two".into(), "/one".into()]).unwrap();
         assert_agree(&t, src, "/two/s.md", "Notes/Plan", Some("/two/Notes/Plan.md"));
+    }
+
+    #[test]
+    fn a_canvas_never_takes_a_link_meant_for_a_note_of_the_same_name() {
+        let t = temp_db(&["/v"]);
+        add(&t, "/v/a/Board.canvas", &[]);
+        let src = add(&t, "/v/a/src.md", &["Board"]);
+        assert_agree(&t, src, "/v/a/src.md", "Board", None);
+        add(&t, "/v/z/Board.md", &[]);
+        assert_agree(&t, src, "/v/a/src.md", "Board", Some("/v/z/Board.md"));
+        assert!(t.get_backlinks("/v/a/Board.canvas").unwrap().is_empty());
+        let titles: Vec<String> = t.get_all_titles().unwrap().into_iter().map(|r| r.path).collect();
+        assert_eq!(titles, ["/v/z/Board.md", "/v/a/src.md"]);
+    }
+
+    #[test]
+    fn an_absolute_target_resolves_to_exactly_that_path() {
+        let t = temp_db(&["/v", "/w"]);
+        add(&t, "/v/Plan.md", &[]);
+        add(&t, "/w/Deep/Plan.md", &[]);
+        let src = add(&t, "/v/board.canvas", &["/w/Deep/Plan"]);
+        assert_agree(&t, src, "/v/board.canvas", "/w/Deep/Plan", Some("/w/Deep/Plan.md"));
+        assert_eq!(t.resolve_link_path("/w/Missing/Plan", "/v/board.canvas").unwrap(), None);
+    }
+
+    #[test]
+    fn canvas_paths_lists_only_canvases() {
+        let t = temp_db(&["/v"]);
+        add(&t, "/v/a.canvas", &[]);
+        add(&t, "/v/sub/b.canvas", &[]);
+        add(&t, "/v/canvas.md", &[]);
+        let mut got = t.canvas_paths().unwrap();
+        got.sort();
+        assert_eq!(got, ["/v/a.canvas", "/v/sub/b.canvas"]);
+    }
+
+    #[test]
+    fn root_of_finds_the_containing_root_not_a_sibling_with_the_same_prefix() {
+        let t = temp_db(&["/v", "/vault"]);
+        assert_eq!(t.root_of("/vault/a.canvas").as_deref(), Some("/vault"));
+        assert_eq!(t.root_of("/v/b/a.canvas").as_deref(), Some("/v"));
+        assert_eq!(t.root_of("/elsewhere/a.canvas"), None);
+    }
+
+    #[test]
+    fn a_heading_or_block_suffix_resolves_the_note_it_names() {
+        let t = temp_db(&["/v"]);
+        add(&t, "/v/Notes/Plan.md", &[]);
+        for target in ["Plan#Goals", "Plan#^b1c2", "Notes/Plan#Goals", "plan.md#Goals", "Plan #Goals"] {
+            assert_eq!(
+                t.resolve_link_path(target, "/v/s.md").unwrap().as_deref(),
+                Some("/v/Notes/Plan.md"),
+                "{target}"
+            );
+        }
+        assert_eq!(link_stem("Notes/Plan#Goals"), "plan");
+        assert_eq!(t.resolve_link_path("#Goals", "/v/s.md").unwrap(), None);
     }
 
     #[test]

@@ -15,6 +15,21 @@ pub struct Config {
     pub behavior: BehaviorConfig,
     pub style: StyleConfig,
     pub linting: LintingConfig,
+    pub canvas: CanvasConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CanvasConfig {
+    /// How the board reads pointer input: `"mouse"` (wheel zooms, right/middle-drag
+    /// pans) or `"trackpad"` (two-finger scroll pans, pinch zooms).
+    pub input_mode: String,
+}
+
+impl Default for CanvasConfig {
+    fn default() -> Self {
+        Self { input_mode: "mouse".to_string() }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,6 +116,7 @@ impl Default for Config {
             behavior: BehaviorConfig::default(),
             style: StyleConfig::default(),
             linting: LintingConfig::default(),
+            canvas: CanvasConfig::default(),
         }
     }
 }
@@ -406,4 +422,27 @@ pub fn save_keybindings(bindings: &[KeyBinding]) -> Result<(), String> {
         let _ = fs::remove_file(&temp_path);
         format!("Failed to rename keybindings temp file: {}", e)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_config_written_before_canvases_loads_with_the_mouse_default() {
+        let old: Config = serde_json::from_str(r#"{"behavior": {"auto_save_ms": 900}}"#).unwrap();
+        assert_eq!(old.canvas.input_mode, "mouse");
+        assert_eq!(old.behavior.auto_save_ms, 900);
+        let json = serde_json::to_value(&old).unwrap();
+        assert_eq!(json["canvas"], serde_json::json!({"input_mode": "mouse"}));
+    }
+
+    #[test]
+    fn a_partial_update_sets_the_input_mode_and_keeps_the_rest() {
+        let mut base = serde_json::to_value(Config::default()).unwrap();
+        deep_merge(&mut base, &serde_json::json!({"canvas": {"input_mode": "trackpad"}}));
+        let merged: Config = serde_json::from_value(base).unwrap();
+        assert_eq!(merged.canvas.input_mode, "trackpad");
+        assert_eq!(merged.behavior.auto_save_ms, BehaviorConfig::default().auto_save_ms);
+    }
 }
