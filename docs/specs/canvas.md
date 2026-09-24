@@ -66,11 +66,13 @@ The first release ships viewer and editor together. The work is still ordered in
 - **Colours: palette names resolved per theme** — follows `treeStyles.ts` (`"teal"` → `var(--canvas-color-teal)`). JSON Canvas presets `"1"`–`"6"` map to palette names on read; hex values are kept as custom colours. Chosen over storing hex so stickies stay legible in every theme (P5).
 - **File paths in file nodes: relative to the canvas's registered root** — matches Obsidian's vault-relative paths, so existing files resolve unchanged. A file outside that root is stored as an absolute path. A path that no longer exists falls back to name lookup, as images in notes already do (`resolve_attachment`).
 - **Rendering: DOM items in one transformed world layer, edges in an SVG layer inside it** — chosen over drawing to a `<canvas>` element because cards must reuse the note renderer (DOM) and a later drawing layer fits as SVG. Pan and zoom are one CSS transform on the world layer. Items outside the viewport are not mounted.
-- **Card content renders through CodeMirror, read-only, with live preview** — provisional pending spike S1. Chosen over extending the hand-written HTML converter in `embeds.ts` (it has no tables, images, callouts or inline HTML, and a second renderer would drift from how notes look) and over adding a markdown library (a new dependency that would also drift). Markdown cards need an editor for editing anyway, so the same view serves both. To stay fast: a card's view mounts only when on screen and above a zoom threshold; below it the card shows a lightweight summary (title and first lines). Stickies and labels render with the inline renderer and switch to a minimal editor while being edited.
+- **Card content renders through CodeMirror, read-only, with live preview** — confirmed by spike S1. Chosen over extending the hand-written HTML converter in `embeds.ts` (it has no tables, images, callouts or inline HTML, and a second renderer would drift from how notes look) and over adding a markdown library (a new dependency that would also drift). Markdown cards need an editor for editing anyway, so the same view serves both. To stay fast: a card's view mounts only when on screen and above a zoom threshold; below it the card shows a lightweight summary (title and first lines). Stickies and labels render with the inline renderer and switch to a minimal editor while being edited.
 - **Link context comes from the view, not the active tab** — `embeds.ts`, `images.ts` and `livePreview.ts` read `selectActiveTabPath()` to resolve links. On a canvas, links inside a note card must resolve from the note's folder. A facet on each view supplies its context path, defaulting to the tab's path, so note editors behave as before (I4).
 - **Saving: one conflict-safe save function shared by notes and canvases** — the canvas serialises its model and saves through a helper that handles `CONFLICT:` and `DELETED:` rejections and raises the status bar prompt. Note auto-save moves onto the same helper, which fixes #124. Chosen over a canvas-only save path because two save paths could disagree about the same conflict.
 - **Viewport is saved per machine, in the session** — pan and zoom position belong to the machine, not the board, so they live in `session.json` beside the tab, and viewing a canvas never writes the file (I1).
 - **Undo: board-level history of model snapshots** — the model is small (hundreds of items), so each committed change stores the previous model. A text edit inside a card commits as one entry when the card loses focus. Chosen over command objects for simplicity.
+- **Photos render from downscaled copies** — a year board holds 70+ full-size phone photos, and zooming over them produced the only long frames in S1. Each image is decoded once, drawn into a copy no larger than about twice its card size (`createImageBitmap` with a resize), and the copy is what the card shows; the full image loads only when a card is zoomed past its copy's resolution. A thumbnail cache on the Rust side is the next step if decoding still shows up in frame times.
+- **Pinch arrives as WebKit gesture events** — S2 showed a trackpad pinch in WKWebView fires `gesturestart` / `gesturechange` / `gestureend` with a `scale`, and no Ctrl+wheel. `useViewport` zooms from gesture events and treats Ctrl+wheel as a fallback that is ignored while a gesture is active.
 - **Input modes (setting `canvas.inputMode`, default `mouse`):**
   - Mouse: wheel zooms at the pointer; right- or middle-drag pans; right-click without movement (under 4px) opens the context menu; left-drag on empty space draws a marquee; Space + left-drag pans.
   - Trackpad: two-finger scroll pans; pinch zooms at the pointer; left-drag on empty space draws a marquee; Space + drag pans.
@@ -113,17 +115,21 @@ The first release ships viewer and editor together. The work is still ordered in
 | `docs/ARCHITECTURE.md`, `docs/DEVPLAN.md`, `CLAUDE.md` | Modify | Record the canvas design and file map |
 
 **Order of operations:**
-1. Spikes S1 and S2 (below). Their results confirm or change the rendering and input decisions before anything is built on them.
-2. P1 file type: `skip.rs`, `fileKinds`, tab kind in `EditorPane`, open/session, `model.ts` with round-trip tests.
-3. P1 viewer: world layer, culling, cards, edges, `useViewport` in both modes.
-4. P2: context-path facet, #123 section resolution and extraction, card views.
-5. P3: shared save (#124), history, tools, selection, stickies with autofit, frames, connectors, fs:change handling.
-6. P4: `canvas.rs`, indexing, rename rewrite, search.
-7. P5: palette, look, Settings toggle; docs.
+1. P1 file type: `skip.rs`, `fileKinds`, tab kind in `EditorPane`, open/session, `model.ts` with round-trip tests.
+2. P1 viewer: world layer, culling, cards, edges, `useViewport` in both modes.
+3. P2: context-path facet, #123 section resolution and extraction, card views.
+4. P3: shared save (#124), history, tools, selection, stickies with autofit, frames, connectors, fs:change handling.
+5. P4: `canvas.rs`, indexing, rename rewrite, search.
+6. P5: palette, look, Settings toggle; docs.
 
-**Spikes:**
-- **S1. Card views at scale.** 30 read-only live-preview CodeMirror views inside a CSS-scaled container, in the dev app: frame time while panning, memory, and whether cursor and selection land correctly at zoom 0.5 and 2.0 when a card is being edited. Pass: smooth panning at 30 visible cards, correct cursor placement. Fail: fall back to extending the `embeds.ts` renderer for display and mount an editor only on the card being edited.
-- **S2. Pinch in WKWebView.** Which events a trackpad pinch produces in Tauri's WebKit (`wheel` with `ctrlKey`, or WebKit `gesturestart/gesturechange`), and whether a mouse wheel and a two-finger scroll are delivered identically (they are expected to be, which is why the mode is a setting).
+**Spike results (2026-09-24, dev app, on the largest year board plus 30 stress cards):**
+- **S1. Card views at scale — pass.**
+  - Building 22 live-preview card views took 14–16 ms in total.
+  - Panning over 52 live views with culling off: 17.8 ms average frame, 28 ms at the 95th percentile, 63 ms worst. With culling on (36 live): 17.3 ms average, 18 ms at the 95th percentile.
+  - Zooming 4× over the stress cards: 17.1 ms average, 18 ms at the 95th percentile.
+  - Zooming 6× over the photo-heavy board produced 3 frames over 100 ms (worst 320 ms) while no view was built and no image finished loading, which points at re-rasterising full-size photos. That attribution is by elimination, not measured directly; the downscaled-photos decision addresses it and P1 confirms it.
+  - Inside a card at 50%, 100% and 200%: text positions match the DOM exactly (0.0 px), and a drawn selection covers exactly its text (0.0 px). Clicking back to a position missed by one character in 3 of 22 samples at 50% only, within the test's own half-pixel tolerance at that scale. Clicking into a card by hand placed the caret correctly (zoom level not recorded). The automated caret check could not measure, because the caret is not drawn while the window is unfocused; a focused rerun is owed.
+- **S2. Input events — answered.** Pinch fires WebKit gesture events (see Decisions). Two-finger scroll arrives as `wheel` events with small whole-number deltas (1–5); a mouse wheel arrives as larger fractional deltas (4–344). The difference could later suggest the input mode on first use; the Settings toggle stays the deciding control.
 
 **Data / contract changes:**
 - `.canvas` files are written by Onyx (JSON Canvas 1.0 plus `onyx` fields).
@@ -134,11 +140,10 @@ The first release ships viewer and editor together. The work is still ordered in
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Many CodeMirror card views are slow or misplace the cursor under zoom | M | H | Spike S1 first; culling and zoom threshold; fallback renderer named in S1 |
-| 76 full-size photos exhaust memory | M | M | Lazy decode, unmount off-screen, downscaled rendering at low zoom |
+| Many CodeMirror card views are slow or misplace the cursor under zoom | L | H | S1 passed at 52 live views; culling and a zoom threshold keep the count down. Fallback: display through a static renderer and mount an editor only on the card being edited |
+| Full-size photos stall zooming or exhaust memory | M | M | Downscaled copies (Decisions), lazy decode, unmount off-screen |
 | Canvas files in the index change Quick Open, rename rewriting and the empty-folder check in ways notes notice (I4) | M | M | P4 tests cover each: rename rewriting leaves notes untouched, Quick Open ranks notes as before |
 | Rename rewriting corrupts canvas JSON | L | H | Rewrite through a JSON parse and serialise, never text replacement; round-trip test on every existing file shape |
-| Pinch events differ from expectation in WKWebView | M | M | Spike S2 before `useViewport` |
 | Obsidian-written fields lost on save (I6) | L | H | Round-trip tests on copies of real files' structure |
 | XL scope stalls with nothing usable | M | M | Slices ordered so P1 alone opens every existing canvas |
 
@@ -167,8 +172,8 @@ The first release ships viewer and editor together. The work is still ordered in
 ## Size & Confidence
 
 **Size:** large, bordering on XL.
-**Confidence:** 60% in the plan as written. It drops if S1 fails (the rendering decision changes and card editing needs its own path), and rises to about 75% once S1 and S2 pass.
+**Confidence:** 75% in the plan as written. It drops if downscaled photos don't remove the long frames on photo-heavy boards, or if card views show new costs once they carry real notes with embeds.
 
 ## Open Questions
 
-- **OQ1.** The rendering decision is provisional on S1.
+None blocking. Two measurements are owed: that downscaled photos remove the long zoom frames on the year boards (checked in P1), and the caret check at 50% and 200% with the window focused.
