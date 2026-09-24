@@ -321,7 +321,7 @@ fn lines_outside_code_blocks(content: &str) -> Vec<(usize, &str)> {
 }
 
 /// Extract wikilinks [[target]] from content, with line numbers and context
-fn extract_wikilinks(content: &str) -> Vec<LinkRecord> {
+pub(crate) fn extract_wikilinks(content: &str) -> Vec<LinkRecord> {
     let mut links = Vec::new();
 
     for (line_idx, line) in lines_outside_code_blocks(content) {

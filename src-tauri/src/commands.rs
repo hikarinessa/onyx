@@ -1064,7 +1064,7 @@ fn transform_link_target(old_target: &str, old_basename: &str, new_basename: &st
 /// Rewrite every wikilink in `content` whose target is in `targets_to_rewrite` so
 /// that its basename portion becomes `new_basename`. Preserves `#heading` and
 /// `|alias` suffixes and any leading `!` (embeds).
-fn rewrite_wikilinks(
+pub(crate) fn rewrite_wikilinks(
     content: &str,
     old_basename: &str,
     new_basename: &str,

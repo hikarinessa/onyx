@@ -1,5 +1,6 @@
 mod attachments;
 mod bookmarks;
+mod canvas;
 mod commands;
 mod config;
 mod db;
