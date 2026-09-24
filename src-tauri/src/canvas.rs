@@ -9,11 +9,9 @@ use crate::db::{name_key, strip_md, LinkRecord};
 use serde::Serialize;
 use serde_json::Value;
 
-/// Whether `path` names a canvas file.
+/// Whether `path` names a canvas file (`.canvas`, spelled as the indexer spells `.md`).
 pub fn is_canvas_path(path: &std::path::Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("canvas"))
+    path.extension().is_some_and(|e| e == "canvas")
 }
 
 fn parse(json: &str) -> Option<Value> {

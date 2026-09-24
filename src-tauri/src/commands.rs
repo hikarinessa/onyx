@@ -54,7 +54,7 @@ fn commit_file(target: &PathBuf, content: &str, state: &State<AppState>) -> Resu
     }
 
     // Reindex immediately — watcher event is suppressed, so we must reindex here
-    if target.extension().and_then(|e| e.to_str()) == Some("md") {
+    if crate::indexer::is_indexed_file(target) {
         let dirs = state.directories.lock().map_err(|e| e.to_string())?;
         let dir_id = dirs.list().iter().find_map(|d| {
             if target.starts_with(&d.path) { Some(d.id.clone()) } else { None }

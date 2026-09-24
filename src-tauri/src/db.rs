@@ -159,7 +159,9 @@ fn parent_dir(path: &str) -> &str {
 ///   2. the note's name in the linking note's own folder (`[[sub/note]]` relative to it)
 ///   3. any note with that name, the first path alphabetically
 ///   4. `[[folder/note]]` as the tail of any path, first alphabetically
-/// Names and paths compare `name_key`-folded. Every candidate carries the link's last
+/// An absolute target (a canvas file node outside its root) matches only that path.
+/// Only notes are targets: a canvas shares `name_key` with a note of the same name, but
+/// `[[Board]]` means `Board.md`. Names and paths compare `name_key`-folded. Every candidate carries the link's last
 /// segment as its name, so the name index finds them and the rest is string comparison:
 /// no link text is ever a LIKE pattern.
 fn resolve_link(
@@ -177,7 +179,10 @@ fn resolve_link(
         conn,
         "SELECT id, path FROM files WHERE name_key = ?1 ORDER BY path",
         params![stem],
-    ).map_err(|e| format!("Failed to resolve link target: {}", e))?;
+    ).map_err(|e| format!("Failed to resolve link target: {}", e))?
+        .into_iter()
+        .filter(|(_, path): &(i64, String)| strip_md(path).len() != path.len())
+        .collect();
     let folded: Vec<String> = candidates.iter().map(|(_, p)| name_key(p)).collect();
     let pick = |i: usize| Some(candidates[i].clone());
     let at = |path: String| {
@@ -185,6 +190,9 @@ fn resolve_link(
         folded.iter().position(|p| *p == want)
     };
 
+    if base.starts_with('/') {
+        return Ok(at(format!("{}.md", base)).and_then(pick));
+    }
     let nested = base.contains('/');
     if nested {
         for root in roots {
@@ -589,6 +597,14 @@ impl Database {
         tx.commit().map_err(|e| format!("Failed to commit re-resolve: {}", e))
     }
 
+    /// The registered root containing `path`, first in sidebar order. Canvas file
+    /// nodes are written relative to it.
+    pub fn root_of(&self, path: &str) -> Option<String> {
+        self.roots.iter()
+            .find(|r| path.starts_with(&format!("{}/", r.trim_end_matches('/'))))
+            .cloned()
+    }
+
     /// Whether `path` is in the index.
     pub fn is_indexed(&self, path: &str) -> Result<bool, String> {
         Ok(self.get_file_id(path)?.is_some())
@@ -864,10 +880,12 @@ impl Database {
         Ok(results)
     }
 
-    /// Get all file titles for wikilink autocomplete
+    /// Note titles for wikilink autocomplete. Canvases are left out: `[[Board]]` never
+    /// resolves to `Board.canvas` (see `resolve_link`), so offering one would insert a
+    /// broken link.
     pub fn get_all_titles(&self) -> Result<Vec<SearchResult>, String> {
         let mut stmt = self.conn.prepare(
-            "SELECT path, title FROM files ORDER BY title ASC"
+            "SELECT path, title FROM files WHERE path NOT LIKE '%.canvas' ORDER BY title ASC"
         ).map_err(|e| format!("Failed to prepare titles query: {}", e))?;
 
         let rows = stmt.query_map([], |row| {
@@ -1217,6 +1235,37 @@ mod tests {
         assert_agree(&t, src, "/two/s.md", "Notes/Plan", Some("/one/Notes/Plan.md"));
         t.db.set_roots(vec!["/two".into(), "/one".into()]).unwrap();
         assert_agree(&t, src, "/two/s.md", "Notes/Plan", Some("/two/Notes/Plan.md"));
+    }
+
+    #[test]
+    fn a_canvas_never_takes_a_link_meant_for_a_note_of_the_same_name() {
+        let t = temp_db(&["/v"]);
+        add(&t, "/v/a/Board.canvas", &[]);
+        let src = add(&t, "/v/a/src.md", &["Board"]);
+        assert_agree(&t, src, "/v/a/src.md", "Board", None);
+        add(&t, "/v/z/Board.md", &[]);
+        assert_agree(&t, src, "/v/a/src.md", "Board", Some("/v/z/Board.md"));
+        assert!(t.get_backlinks("/v/a/Board.canvas").unwrap().is_empty());
+        let titles: Vec<String> = t.get_all_titles().unwrap().into_iter().map(|r| r.path).collect();
+        assert_eq!(titles, ["/v/z/Board.md", "/v/a/src.md"]);
+    }
+
+    #[test]
+    fn an_absolute_target_resolves_to_exactly_that_path() {
+        let t = temp_db(&["/v", "/w"]);
+        add(&t, "/v/Plan.md", &[]);
+        add(&t, "/w/Deep/Plan.md", &[]);
+        let src = add(&t, "/v/board.canvas", &["/w/Deep/Plan"]);
+        assert_agree(&t, src, "/v/board.canvas", "/w/Deep/Plan", Some("/w/Deep/Plan.md"));
+        assert_eq!(t.resolve_link_path("/w/Missing/Plan", "/v/board.canvas").unwrap(), None);
+    }
+
+    #[test]
+    fn root_of_finds_the_containing_root_not_a_sibling_with_the_same_prefix() {
+        let t = temp_db(&["/v", "/vault"]);
+        assert_eq!(t.root_of("/vault/a.canvas").as_deref(), Some("/vault"));
+        assert_eq!(t.root_of("/v/b/a.canvas").as_deref(), Some("/v"));
+        assert_eq!(t.root_of("/elsewhere/a.canvas"), None);
     }
 
     #[test]

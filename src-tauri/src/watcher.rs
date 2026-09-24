@@ -200,10 +200,10 @@ impl FileWatcher {
                 }
 
                 for path in &event.paths {
-                    // Report what the tree lists (notes and plain text files); only notes
-                    // are reindexed below
+                    // Report what the tree lists (notes, canvases and plain text files);
+                    // only notes and canvases are reindexed below
                     let is_dir = path.is_dir();
-                    let is_md = path.extension().map_or(false, |e| e == "md");
+                    let is_indexed = crate::indexer::is_indexed_file(path);
                     if !is_dir && !skip::is_listed_file(path) {
                         continue;
                     }
@@ -246,8 +246,8 @@ impl FileWatcher {
                         is_dir,
                     });
 
-                    // Schedule reindex with debounce for .md files
-                    if is_md {
+                    // Schedule reindex with debounce for notes and canvases
+                    if is_indexed {
                         let mut pending = pending_reindex.lock().unwrap();
                         pending.insert(
                             path.clone(),
