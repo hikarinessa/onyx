@@ -127,8 +127,9 @@ The first release ships viewer and editor together. The work is still ordered in
   - Building 22 live-preview card views took 14–16 ms in total.
   - Panning over 52 live views with culling off: 17.8 ms average frame, 28 ms at the 95th percentile, 63 ms worst. With culling on (36 live): 17.3 ms average, 18 ms at the 95th percentile.
   - Zooming 4× over the stress cards: 17.1 ms average, 18 ms at the 95th percentile.
+  - A heavier rerun with 70 live views (culling off) held a 20 ms average and 32 ms at the 95th percentile while panning, with one frame at 110 ms. That count is above what culling leaves on screen in practice, so it bounds the worst case rather than the normal one.
   - Zooming 6× over the photo-heavy board produced 3 frames over 100 ms (worst 320 ms) while no view was built and no image finished loading, which points at re-rasterising full-size photos. That attribution is by elimination, not measured directly; the downscaled-photos decision addresses it and P1 confirms it.
-  - Inside a card at 50%, 100% and 200%: text positions match the DOM exactly (0.0 px), and a drawn selection covers exactly its text (0.0 px). Clicking back to a position missed by one character in 3 of 22 samples at 50% only, within the test's own half-pixel tolerance at that scale. Clicking into a card by hand placed the caret correctly (zoom level not recorded). The automated caret check could not measure, because the caret is not drawn while the window is unfocused; a focused rerun is owed.
+  - Inside a card at 50%, 100% and 200%: text positions match the DOM exactly (0.0 px), and a drawn selection covers exactly its text (0.0 px). Clicking back to a position missed by one character in 3 of 22 samples at 50% only, within the test's own half-pixel tolerance at that scale. The drawn caret sits 0.6 px from its text position at every zoom level, so it tracks the text exactly under scaling (the constant offset is the caret's own width).
 - **S2. Input events — answered.** Pinch fires WebKit gesture events (see Decisions). Two-finger scroll arrives as `wheel` events with small whole-number deltas (1–5); a mouse wheel arrives as larger fractional deltas (4–344). The difference could later suggest the input mode on first use; the Settings toggle stays the deciding control.
 
 **Data / contract changes:**
@@ -176,4 +177,4 @@ The first release ships viewer and editor together. The work is still ordered in
 
 ## Open Questions
 
-None blocking. Two measurements are owed: that downscaled photos remove the long zoom frames on the year boards (checked in P1), and the caret check at 50% and 200% with the window focused.
+None blocking. One measurement is owed: that downscaled photos remove the long zoom frames on the year boards, checked in P1.
