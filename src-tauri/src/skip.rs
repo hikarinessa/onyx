@@ -43,9 +43,10 @@ pub fn is_skipped_entry(name: &str, parent: Option<&str>) -> bool {
     name.starts_with('.') && name != ".claude"
 }
 
-/// Files the tree lists and the watcher reports: notes, plus the plain text kinds the
-/// editor opens in Source mode (see src/lib/fileKinds.ts). Only notes are indexed.
-pub const LISTED_EXTENSIONS: &[&str] = &["md", "txt", "json", "yaml", "yml"];
+/// Files the tree lists and the watcher reports: notes, canvases (JSON Canvas), plus the
+/// plain text kinds the editor opens in Source mode (see src/lib/fileKinds.ts). Notes and
+/// canvases are indexed (`indexer::is_indexed_file`).
+pub const LISTED_EXTENSIONS: &[&str] = &["md", "canvas", "txt", "json", "yaml", "yml"];
 
 pub fn is_listed_file(path: &Path) -> bool {
     path.extension()
@@ -98,5 +99,13 @@ mod tests {
         assert!(!is_skipped_path(Path::new(".claude/skills/spec/SKILL.md")));
         assert!(!is_skipped_path(Path::new("docs/worktrees/plan.md")));
         assert!(!is_skipped_path(Path::new("Notes/daily.md")));
+    }
+
+    #[test]
+    fn canvases_are_listed_alongside_notes() {
+        assert!(is_listed_file(Path::new("/v/Boards/plan.canvas")));
+        assert!(is_listed_file(Path::new("/v/Boards/Plan.CANVAS")));
+        assert!(is_listed_file(Path::new("/v/note.md")));
+        assert!(!is_listed_file(Path::new("/v/photo.png")));
     }
 }
