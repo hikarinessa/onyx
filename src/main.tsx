@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import "./styles/theme.css";
 import "./styles/reset.css";
 import "./styles/layout.css";
+import "./styles/canvas.css";
 import App from "./App";
 
 // Global error trap: webview exceptions are invisible in release builds

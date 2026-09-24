@@ -4,6 +4,8 @@ import { openFileInEditor } from "./openFile";
 import { getActiveThemeId, applyTheme } from "./themes";
 import { editorStateCache, scrollCache, snapshotEditor } from "../components/Editor";
 import { setCursorPosition, flushCursorPositions, loadCursorPositions } from "./cursorPositions";
+import { allViewports, restoreViewports } from "./canvas/store";
+import type { Viewport } from "./canvas/geometry";
 
 const SAVE_INTERVAL_MS = 10_000;
 const SESSION_BACKUP_KEY = "onyx-session-backup";
@@ -34,7 +36,15 @@ interface SessionData {
   orphanIcon?: string;
   sidebarWidth?: number;
   contextPanelWidth?: number;
+  /** Where each canvas was panned and zoomed to, per machine */
+  canvasViewports?: Record<string, Viewport>;
   timestamp: number;
+}
+
+/** Viewports of canvases still open in a tab, so the session file doesn't collect old ones */
+function openCanvasViewports(): Record<string, Viewport> {
+  const open = new Set(useAppStore.getState().paneState.panes.flatMap((p) => p.tabs.map((t) => t.path)));
+  return Object.fromEntries(Object.entries(allViewports()).filter(([path]) => open.has(path)));
 }
 
 function getSessionData(): SessionData {
@@ -58,6 +68,7 @@ function getSessionData(): SessionData {
     orphanIcon: state.orphanIcon,
     sidebarWidth: state.sidebarWidth,
     contextPanelWidth: state.contextPanelWidth,
+    canvasViewports: openCanvasViewports(),
     timestamp: Date.now(),
   };
 }
@@ -127,6 +138,8 @@ export async function restoreSession(): Promise<void> {
 
   // Clean up legacy key after successful migration
   localStorage.removeItem(SESSION_LEGACY_KEY);
+
+  restoreViewports(data.canvasViewports);
 
   // Restore theme (authoritative source — overrides localStorage fast-path)
   if (data.themeId) {

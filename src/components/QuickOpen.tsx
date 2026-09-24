@@ -101,7 +101,7 @@ export function QuickOpen() {
             if (!cancelled) {
               setResults(
                 hits.slice(0, 10).map((f) => ({
-                  name: f.title ? f.title + ".md" : f.path.split("/").pop() || f.path,
+                  name: f.path.endsWith(".canvas") || !f.title ? f.path.split("/").pop() || f.path : f.title + ".md",
                   path: f.path,
                 }))
               );
@@ -118,7 +118,7 @@ export function QuickOpen() {
             // a file used often can rise, but can't push out the closest match.
             setResults(
               rankByFrecency("files", hits.slice(0, 10), (f) => f.path).map((f) => ({
-                name: f.title ? f.title + ".md" : f.path.split("/").pop() || f.path,
+                name: f.path.endsWith(".canvas") || !f.title ? f.path.split("/").pop() || f.path : f.title + ".md",
                 path: f.path,
               }))
             );

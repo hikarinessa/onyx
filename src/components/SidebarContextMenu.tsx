@@ -13,6 +13,7 @@ export function SidebarContextMenu({
   menu,
   onClose,
   onNewNote,
+  onNewCanvas,
   onNewFolder,
   onDuplicate,
   onRename,
@@ -23,6 +24,7 @@ export function SidebarContextMenu({
   menu: ContextMenuState;
   onClose: () => void;
   onNewNote: (entry: DirEntry) => void;
+  onNewCanvas: (entry: DirEntry) => void;
   onNewFolder: (entry: DirEntry) => void;
   onDuplicate: (entry: DirEntry) => void;
   onRename: (entry: DirEntry) => void;
@@ -79,6 +81,15 @@ export function SidebarContextMenu({
         }}
       >
         {isDir ? "New Note" : "New Note (sibling)"}
+      </div>
+      <div
+        className="context-menu-item"
+        onClick={() => {
+          onNewCanvas(menu.entry);
+          onClose();
+        }}
+      >
+        {isDir ? "New Canvas" : "New Canvas (sibling)"}
       </div>
       {isDir && (
         <div

@@ -16,6 +16,7 @@ let defaultEditorMode: string = "preview";
 let showLineNumbers = true;
 let tabSize = 4;
 let indentGuides = true;
+let canvasInputMode: "mouse" | "trackpad" = "mouse";
 
 // Per-rule flags (all default true)
 let ruleTrailingSpaces = true;
@@ -32,6 +33,10 @@ let ruleEmptyLinks = true;
 
 export function getAutoSaveMs(): number {
   return autoSaveMs;
+}
+
+export function getCanvasInputMode(): "mouse" | "trackpad" {
+  return canvasInputMode;
 }
 
 export function isLintingEnabled(): boolean {
@@ -237,6 +242,7 @@ export function applyConfig(config: AppConfig) {
 
   // Behavior
   autoSaveMs = config.behavior.auto_save_ms;
+  canvasInputMode = config.canvas?.input_mode === "trackpad" ? "trackpad" : "mouse";
   spellcheckEnabled = config.behavior.spellcheck;
   sortOrder = config.behavior.sort_order || "name";
 

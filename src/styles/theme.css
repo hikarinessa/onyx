@@ -136,6 +136,26 @@
     --tree-color-blue: oklch(var(--tree-hue-l) var(--tree-hue-c) 255);
     --tree-color-violet: oklch(var(--tree-hue-l) var(--tree-hue-c) 295);
     --tree-color-pink: oklch(var(--tree-hue-l) var(--tree-hue-c) 345);
+
+    /* Canvas: post-it colours, one lightness and chroma for every hue like the tree
+       palette. Stickies keep dark ink on every theme, as paper does; dark themes use a
+       slightly dimmer paper so a board of them doesn't glare. */
+    --canvas-l: 0.84;
+    --canvas-c: 0.1;
+    --canvas-yellow: oklch(var(--canvas-l) calc(var(--canvas-c) * 1.25) 95);
+    --canvas-orange: oklch(var(--canvas-l) var(--canvas-c) 60);
+    --canvas-red: oklch(calc(var(--canvas-l) - 0.04) var(--canvas-c) 25);
+    --canvas-pink: oklch(var(--canvas-l) var(--canvas-c) 350);
+    --canvas-purple: oklch(var(--canvas-l) var(--canvas-c) 300);
+    --canvas-blue: oklch(var(--canvas-l) var(--canvas-c) 250);
+    --canvas-cyan: oklch(var(--canvas-l) var(--canvas-c) 210);
+    --canvas-green: oklch(var(--canvas-l) var(--canvas-c) 145);
+    --canvas-gray: oklch(var(--canvas-l) 0.008 250);
+    --canvas-ink: oklch(0.27 0.01 250);
+    --canvas-edge: var(--text-tertiary);
+    --canvas-dot: color-mix(in oklab, var(--text-tertiary) 30%, transparent);
+    --canvas-card-shadow: 0 1px 2px rgb(0 0 0 / 0.22), 0 6px 18px rgb(0 0 0 / 0.16);
+    --canvas-sticky-shadow: 0 1px 1px rgb(0 0 0 / 0.18), 0 5px 12px -2px rgb(0 0 0 / 0.28);
   }
 
   :root[data-theme="light"],
@@ -144,6 +164,10 @@
   :root[data-theme="reef"] {
     --tree-hue-l: 0.58;
     --tree-hue-c: 0.1;
+    --canvas-l: 0.92;
+    --canvas-c: 0.085;
+    --canvas-card-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 6px 18px rgb(0 0 0 / 0.07);
+    --canvas-sticky-shadow: 0 1px 1px rgb(0 0 0 / 0.08), 0 6px 12px -3px rgb(0 0 0 / 0.16);
   }
 
   :root[data-theme="light"] {

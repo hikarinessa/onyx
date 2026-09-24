@@ -17,6 +17,7 @@ interface FileDragState {
  * A pointerdown arms the drag; it starts once the pointer moves DRAG_THRESHOLD px
  * vertically. Folder rows (`data-tree-dir="true"`) under the pointer get `drop-target`,
  * except the file's own ancestors. Dropping moves the file through fileOps.renameFile.
+ * Dropping on a canvas board (`data-canvas-drop`) hands the file to the board instead.
  *
  * Returns the function a row calls on pointerdown; it keeps one identity.
  */
@@ -65,7 +66,7 @@ export function useFileDrag(): (sourcePath: string, sourceEl: HTMLElement, start
       }
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (e: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
       const target = dropTargetRef.current;
@@ -74,6 +75,15 @@ export function useFileDrag(): (sourcePath: string, sourceEl: HTMLElement, start
       drag.sourceEl.style.opacity = "";
       document.body.classList.remove("dragging");
       if (target) clearHighlight(target);
+
+      // Dropped on a canvas: the board places the file as a card where it landed
+      if (drag.active && !target) {
+        const board = document.elementsFromPoint(e.clientX, e.clientY)
+          .find((el) => el instanceof HTMLElement && el.dataset.canvasDrop !== undefined);
+        board?.dispatchEvent(new CustomEvent("canvas-drop", {
+          detail: { path: drag.sourcePath, clientX: e.clientX, clientY: e.clientY },
+        }));
+      }
 
       // Perform the move
       if (drag.active && target) {

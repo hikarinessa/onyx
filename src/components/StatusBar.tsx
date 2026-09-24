@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { isCanvasPath } from "../lib/fileKinds";
+import { reloadCanvas } from "../lib/canvas/store";
 import { useEffect } from "react";
 import { useAppStore, selectActiveTab, selectActiveTabPath, selectActiveEditorMode } from "../stores/app";
 import { replaceTabContent } from "./Editor";
@@ -33,8 +35,12 @@ export function StatusBar() {
   const handleReload = async () => {
     if (!saveConflictPath) return;
     try {
-      const content = await invoke<string>("read_file", { path: saveConflictPath });
-      replaceTabContent(saveConflictPath, content);
+      if (isCanvasPath(saveConflictPath)) {
+        await reloadCanvas(saveConflictPath);
+      } else {
+        const content = await invoke<string>("read_file", { path: saveConflictPath });
+        replaceTabContent(saveConflictPath, content);
+      }
       useAppStore.getState().setModified(saveConflictPath, false);
       useAppStore.getState().setSaveConflictPath(null);
     } catch (err) {

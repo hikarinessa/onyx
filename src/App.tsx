@@ -29,7 +29,9 @@ import {
   normaliseCombo,
   getGlobalKeyMap,
 } from "./lib/keybindings";
-import { createNewNote } from "./lib/fileOps";
+import { createNewCanvas, createNewNote } from "./lib/fileOps";
+import { isCanvasPath } from "./lib/fileKinds";
+import { canvasChangedOnDisk, migrateCanvas } from "./lib/canvas/store";
 import { navigateHistory, openFileInEditor } from "./lib/openFile";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -178,6 +180,12 @@ function registerCommands() {
     shortcut: "Cmd+N",
     category: "File",
     execute: () => createNewNote(),
+  });
+  registerCommand({
+    id: "file.newCanvas",
+    label: "New Canvas",
+    category: "File",
+    execute: () => createNewCanvas(),
   });
   registerCommand({
     id: "file.closeTab",
@@ -762,6 +770,7 @@ export default function App() {
               snapshotEditor(tab.id);
               store.updateTabPath(tab.id, migratedPath, migratedName);
               migrateEditorCache(tab.path, migratedPath);
+              migrateCanvas(tab.path, migratedPath);
             }
           }
         } else {
@@ -770,6 +779,7 @@ export default function App() {
             snapshotEditor(openTab.id);
             store.updateTabPath(openTab.id, path, newName);
             migrateEditorCache(old_path, path);
+            migrateCanvas(old_path, path);
           }
         }
 
@@ -785,7 +795,10 @@ export default function App() {
         if (kind === "modify") treeRefresh.request();
 
         const changedTab = selectAllTabs(store).find((t) => t.path === path);
-        if (changedTab) {
+        if (changedTab && isCanvasPath(path)) {
+          // The canvas store tells its own writes apart and handles unsaved changes
+          invoke<string>("read_file", { path }).then((text) => canvasChangedOnDisk(path, text)).catch(() => {});
+        } else if (changedTab) {
           if (!changedTab.modified) {
             invoke<string>("read_file", { path }).then((newContent) => {
               const cached = lastSavedContent.get(changedTab.id);
@@ -836,7 +849,7 @@ export default function App() {
       } else if (type === "drop") {
         setDragOver(false);
         for (const filePath of event.payload.paths) {
-          if (filePath.endsWith(".md")) {
+          if (filePath.endsWith(".md") || isCanvasPath(filePath)) {
             const name = filePath.split("/").pop() || filePath;
             openFileInEditor(filePath, name).catch(console.error);
           }

@@ -4,6 +4,8 @@ import { loadFileIntoCache, scrollCache } from "../components/Editor";
 import { recordRecentDoc } from "./recentDocs";
 import { getCursorPosition } from "./cursorPositions";
 import { needsReview } from "./criticMarkup";
+import { isCanvasPath } from "./fileKinds";
+import { loadCanvas } from "./canvas/store";
 
 /** Check if a file path is under any registered directory */
 async function isUnderRegisteredDir(filePath: string): Promise<boolean> {
@@ -51,10 +53,16 @@ export async function openFileInEditor(
     useAppStore.getState().addOrphanPath(path);
   }
 
-  const content = await invoke<string>("read_file", { path });
-  const saved = getCursorPosition(path);
-  loadFileIntoCache(path, content, saved ? { head: saved.head, anchor: saved.anchor } : null);
-  if (saved) scrollCache.set(path, saved.scrollTop);
+  // A canvas reads its own file into the canvas store; a note seeds the editor cache
+  let content = "";
+  if (isCanvasPath(path)) {
+    await loadCanvas(path);
+  } else {
+    content = await invoke<string>("read_file", { path });
+    const saved = getCursorPosition(path);
+    loadFileIntoCache(path, content, saved ? { head: saved.head, anchor: saved.anchor } : null);
+    if (saved) scrollCache.set(path, saved.scrollTop);
+  }
 
   // Read fresh state after await
   const fresh = useAppStore.getState();
@@ -92,8 +100,12 @@ export async function navigateHistory(direction: "back" | "forward"): Promise<vo
     : store.navigateForward(tab.id);
   if (!entry) return;
 
-  const content = await invoke<string>("read_file", { path: entry.path });
-  loadFileIntoCache(entry.path, content);
+  if (isCanvasPath(entry.path)) {
+    await loadCanvas(entry.path);
+  } else {
+    const content = await invoke<string>("read_file", { path: entry.path });
+    loadFileIntoCache(entry.path, content);
+  }
 
   // Replace the tab with the nav target
   const name = entry.path.split("/").pop() || entry.path;

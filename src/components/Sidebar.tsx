@@ -18,10 +18,11 @@ import { defaultDirColor, resolveColor, TreeStylesContext, type TreeStyle } from
 /** What the icon picker is styling: a registered root (by id) or a tree entry (by path). */
 type PickerTarget = { kind: "root"; id: string } | { kind: "entry"; path: string; isDir: boolean };
 
-function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder, onStyle, onReveal, onUnregister }: {
+function RootDirContextMenu({ x, y, onClose, onNewNote, onNewCanvas, onNewFolder, onStyle, onReveal, onUnregister }: {
   x: number; y: number;
   onClose: () => void;
   onNewNote: () => void;
+  onNewCanvas: () => void;
   onNewFolder: () => void;
   onStyle: () => void;
   onReveal: () => void;
@@ -45,6 +46,7 @@ function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder, onStyle, on
   return (
     <div ref={ref} className="context-menu" style={{ left: x, top: y, position: "fixed", zIndex: 1000 }}>
       <div className="context-menu-item" onClick={onNewNote}>New Note</div>
+      <div className="context-menu-item" onClick={onNewCanvas}>New Canvas</div>
       <div className="context-menu-item" onClick={onNewFolder}>New Folder</div>
       <div className="context-menu-separator" />
       <div className="context-menu-item" onClick={onStyle}>Icon & Colour…</div>
@@ -54,6 +56,7 @@ function RootDirContextMenu({ x, y, onClose, onNewNote, onNewFolder, onStyle, on
     </div>
   );
 }
+import { isCanvasPath } from "../lib/fileKinds";
 import { SearchPanel } from "./SearchPanel";
 import { Icon } from "./Icon";
 import { IconPicker } from "./IconPicker";
@@ -137,7 +140,7 @@ function StylePicker({ target, directories, treeStyles, onDirsChanged, onStylesC
       title={name}
       icon={current.icon ?? null}
       color={current.color ?? null}
-      fallbackIcon={isDir ? "folder" : name.endsWith(".md") ? "file-text" : "file"}
+      fallbackIcon={isDir ? "folder" : name.endsWith(".md") ? "file-text" : isCanvasPath(name) ? "chalkboard" : "file"}
       allowNoColor
       onIconChange={(icon) => { save({ icon }); onClose(); }}
       onColorChange={(color) => save({ color })}
@@ -377,7 +380,7 @@ export function Sidebar() {
   // The handlers below are passed to every TreeNode, so they keep one identity for
   // the sidebar's lifetime; a fresh function per render would defeat TreeNode's memo.
   const handleFileClick = useCallback(async (path: string, name: string, metaKey: boolean) => {
-    if (!name.endsWith(".md")) return;
+    if (!name.endsWith(".md") && !isCanvasPath(name)) return;
 
     try {
       await openFileInEditor(path, name, { replaceActive: !metaKey });
@@ -399,6 +402,15 @@ export function Sidebar() {
       setRenamingPath(newPath);
     } catch (err) {
       fileOps.reportFailure("Could not create note", err);
+    }
+  };
+
+  const handleNewCanvas = async (dirPath: string) => {
+    try {
+      const newPath = await fileOps.createCanvas(dirPath);
+      setRenamingPath(newPath);
+    } catch (err) {
+      fileOps.reportFailure("Could not create canvas", err);
     }
   };
 
@@ -692,6 +704,7 @@ export function Sidebar() {
           menu={contextMenu}
           onClose={() => setContextMenu(null)}
           onNewNote={handleNewNote}
+          onNewCanvas={(entry) => handleNewCanvas(entry.is_dir ? entry.path : entry.path.replace(/\/[^/]+$/, ""))}
           onNewFolder={handleNewFolder}
           onDuplicate={handleDuplicate}
           onRename={handleRename}
@@ -707,6 +720,7 @@ export function Sidebar() {
           y={rootDirMenu.y}
           onClose={() => setRootDirMenu(null)}
           onNewNote={() => { handleNewNoteInDir(rootDirMenu.dirPath); setRootDirMenu(null); }}
+          onNewCanvas={() => { handleNewCanvas(rootDirMenu.dirPath); setRootDirMenu(null); }}
           onNewFolder={async () => {
             try {
               const folderPath = await fileOps.createFolder(rootDirMenu.dirPath);

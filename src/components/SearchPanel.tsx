@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { isCanvasPath } from "../lib/fileKinds";
+import { requestCanvasFocus } from "../lib/canvas/store";
 import { openFileInEditor } from "../lib/openFile";
 import { getEditorView } from "./Editor";
 import { EditorSelection } from "@codemirror/state";
@@ -10,6 +12,8 @@ import { useAppStore } from "../stores/app";
 interface LineMatch {
   line_number: number;
   line_text: string;
+  /** For a canvas: the card, frame or edge that matched */
+  node_id?: string | null;
 }
 
 interface ContentSearchResult {
@@ -75,8 +79,14 @@ export function SearchPanel({ initialQuery = "" }: { initialQuery?: string }) {
     });
   };
 
-  const openAtLine = async (path: string, lineNumber: number) => {
+  const openAtLine = async (path: string, lineNumber: number, nodeId?: string | null) => {
     const name = path.split("/").pop() || path;
+    if (isCanvasPath(path)) {
+      // The board centres the matched item once it has opened
+      if (nodeId) requestCanvasFocus(path, nodeId);
+      await openFileInEditor(path, name, { replaceActive: true });
+      return;
+    }
     await openFileInEditor(path, name, { replaceActive: true });
     // Position cursor after editor swaps state
     requestAnimationFrame(() => {
@@ -238,7 +248,7 @@ function FileResult({
   query: string;
   expanded: boolean;
   onToggle: () => void;
-  onLineClick: (path: string, line: number) => void;
+  onLineClick: (path: string, line: number, nodeId?: string | null) => void;
   onContextMenu: (e: React.MouseEvent, path: string) => void;
   highlightMatch: (text: string, q: string) => React.ReactNode;
 }) {
@@ -264,7 +274,7 @@ function FileResult({
         ) : (
           <span style={{ width: 12 }} />
         )}
-        <Icon name="file-text" size={13} />
+        <Icon name={isCanvasPath(result.path) ? "layout-dashboard" : "file-text"} size={13} />
         <span className="search-file-name">{highlightMatch(result.title, query)}</span>
         {result.match_count > 0 && (
           <span className="search-match-count">{result.match_count}</span>
@@ -274,11 +284,11 @@ function FileResult({
         <div className="search-line-matches">
           {result.line_matches.map((lm) => (
             <div
-              key={lm.line_number}
+              key={`${lm.line_number}:${lm.node_id ?? ""}`}
               className="search-line-match"
-              onClick={() => onLineClick(result.path, lm.line_number)}
+              onClick={() => onLineClick(result.path, lm.line_number, lm.node_id)}
             >
-              <span className="search-line-number">{lm.line_number}</span>
+              {!lm.node_id && <span className="search-line-number">{lm.line_number}</span>}
               <span className="search-line-text">
                 {highlightMatch(lm.line_text, query)}
               </span>

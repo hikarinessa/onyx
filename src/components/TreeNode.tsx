@@ -152,7 +152,7 @@ export const TreeNode = memo(function TreeNode({ entry, depth, renamingPath, fla
         <span className="tree-item-icon">
           <TreeIcon
             name={style?.icon}
-            fallback={entry.is_dir ? "folder" : isMarkdown ? "file-text" : /^(json|ya?ml)$/i.test(entry.extension ?? "") ? "file-code" : "file"}
+            fallback={entry.is_dir ? "folder" : isMarkdown ? "file-text" : entry.extension === "canvas" ? "chalkboard" : /^(json|ya?ml)$/i.test(entry.extension ?? "") ? "file-code" : "file"}
             color={style?.color}
             size={15}
           />

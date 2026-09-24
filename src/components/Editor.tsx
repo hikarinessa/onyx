@@ -40,8 +40,9 @@ import { lintingExtension, autofixContent, applyLintFix } from "../extensions/li
 import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
 import { embedExtension } from "../extensions/embeds";
-import { isMarkdownPath, isPlainTextPath } from "../lib/fileKinds";
+import { isCanvasPath, isMarkdownPath, isPlainTextPath } from "../lib/fileKinds";
 import { saveFile } from "../lib/saveFile";
+import { dropClosedCanvases, flushCanvasSave } from "../lib/canvas/store";
 import { imageExtension } from "../extensions/images";
 import { htmlInlineExtension } from "../extensions/htmlInline";
 import { heightSampleExtension } from "../extensions/heightSample";
@@ -569,6 +570,7 @@ export function applyLintFixSingle(issueId: string) {
 
 /** Flush any pending save for a tab */
 export async function flushSaveForTab(id: string): Promise<void> {
+  if (isCanvasPath(id)) return flushCanvasSave(id);
   const state = editorStateCache.get(id);
   if (!state) return;
   clearTimeout(saveTimer);
@@ -684,6 +686,7 @@ export function Editor() {
     for (const p of panes) {
       for (const t of p.tabs) allTabIds.add(t.id);
     }
+    dropClosedCanvases(allTabIds);
     for (const key of editorStateCache.keys()) {
       if (!allTabIds.has(key)) {
         editorStateCache.delete(key);

@@ -75,6 +75,10 @@ export interface AppConfig {
     syntax_strikethrough: string;
     syntax_highlight_bg: string;
   };
+  canvas?: {
+    /** "mouse": the wheel zooms. "trackpad": two fingers pan, a pinch zooms. */
+    input_mode: "mouse" | "trackpad";
+  };
   linting: {
     enabled: boolean;
     autofix_on_save: boolean;

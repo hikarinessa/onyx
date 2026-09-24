@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, selectAllTabs, type Tab } from "../stores/app";
+import { EMPTY_CANVAS } from "./canvas/model";
+import { loadCanvas, migrateCanvas } from "./canvas/store";
 import { loadFileIntoCache, migrateEditorCache, clearEditorCache, snapshotEditor, flushSaveForTab } from "../components/Editor";
 import { openFileInEditor } from "./openFile";
 
@@ -38,6 +40,30 @@ export async function createNote(dirPath: string): Promise<string> {
   useAppStore.getState().openFile(path, name);
   useAppStore.getState().bumpFileTreeVersion();
   return path;
+}
+
+/** Create an empty canvas in a directory, open it, and return its path */
+export async function createCanvas(dirPath: string): Promise<string> {
+  const { path, name } = await findAvailablePath(dirPath, "canvas");
+  await invoke("create_file", { path, content: EMPTY_CANVAS });
+  await loadCanvas(path);
+  useAppStore.getState().openFile(path, name);
+  useAppStore.getState().bumpFileTreeVersion();
+  return path;
+}
+
+/** Create a canvas beside the active tab's file, or in the first registered directory. */
+export async function createNewCanvas(): Promise<void> {
+  const activeTabId = useAppStore.getState().paneState.panes
+    .find((p) => p.id === useAppStore.getState().paneState.activePaneId)?.activeTabId;
+  const activeTab = getAllTabs().find((t) => t.id === activeTabId);
+  try {
+    let dir = activeTab?.path.replace(/\/[^/]+$/, "");
+    if (!dir) dir = (await invoke<{ path: string }[]>("get_registered_directories"))[0]?.path;
+    if (dir) await createCanvas(dir);
+  } catch (err) {
+    reportFailure("Could not create canvas", err);
+  }
 }
 
 /**
@@ -115,6 +141,7 @@ export async function renameFile(oldPath: string, newPath: string): Promise<void
   if (openTab) {
     store.updateTabPath(openTab.id, newPath, newName);
     migrateEditorCache(oldPath, newPath);
+    migrateCanvas(oldPath, newPath);
   }
 
   // Clear any stale deleted marker for the old path
@@ -142,6 +169,7 @@ export async function renameFolder(oldPath: string, newPath: string): Promise<vo
       const migratedName = migratedPath.split("/").pop() || migratedPath;
       store.updateTabPath(tab.id, migratedPath, migratedName);
       migrateEditorCache(tab.path, migratedPath);
+      migrateCanvas(tab.path, migratedPath);
     }
   }
 
@@ -245,15 +273,15 @@ export async function revealInFinder(path: string): Promise<void> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function findAvailablePath(dir: string): Promise<{ path: string; name: string }> {
+async function findAvailablePath(dir: string, ext = "md"): Promise<{ path: string; name: string }> {
   const baseName = "Untitled";
-  let name = `${baseName}.md`;
+  let name = `${baseName}.${ext}`;
   let path = `${dir}/${name}`;
   let counter = 1;
 
   while (await invoke<boolean>("path_exists", { path })) {
     counter++;
-    name = `${baseName} ${counter}.md`;
+    name = `${baseName} ${counter}.${ext}`;
     path = `${dir}/${name}`;
   }
 

@@ -39,6 +39,8 @@ function syncEditorMode(view: EditorView, mode: EditorMode): void {
 }
 import { frontmatterTabRef } from "../extensions/frontmatter";
 import { renameFile } from "../lib/fileOps";
+import { isCanvasPath } from "../lib/fileKinds";
+import { CanvasView } from "./canvas/CanvasView";
 import {
   editorStateCache,
   scrollCache,
@@ -53,7 +55,9 @@ import {
  * the file, which changes the tab id and so remounts this with the new name.
  */
 function InlineTitle({ path, name }: { path: string; name: string }) {
-  const saved = name.replace(/\.md$/, "");
+  // The title is the name without its extension; renaming keeps the extension
+  const ext = /\.canvas$/i.test(name) ? ".canvas" : ".md";
+  const saved = name.replace(/\.(md|canvas)$/i, "");
   const [draft, setDraft] = useState(saved);
   const ref = useRef<HTMLInputElement>(null);
   // Escape blurs in the same event that resets the draft, before the reset renders, so
@@ -72,7 +76,7 @@ function InlineTitle({ path, name }: { path: string; name: string }) {
     }
     const dir = path.substring(0, path.lastIndexOf("/"));
     try {
-      await renameFile(path, `${dir}/${trimmed}.md`);
+      await renameFile(path, `${dir}/${trimmed}${ext}`);
     } catch (err) {
       console.error("Failed to rename:", err);
       setDraft(saved);
@@ -124,9 +128,30 @@ export function EditorPane({ pane }: { pane: Pane }) {
     }
   }, [isActive, pane.id]);
 
+  const isCanvas = !!activeTab && isCanvasPath(activeTab.path);
+
   // Create or swap EditorView when active tab changes
   useEffect(() => {
     if (!containerRef.current || !activeTab) return;
+
+    // A canvas tab has no editor state. Park the note that was showing, and forget which
+    // tab the view held so the next switch doesn't file the view's state under the canvas.
+    if (isCanvasPath(activeTab.path)) {
+      const outgoing = viewTabIdRef.current;
+      if (viewRef.current && outgoing && outgoing !== activeTab.id) {
+        editorStateCache.set(outgoing, viewRef.current.state);
+        scrollCache.set(outgoing, viewRef.current.scrollDOM.scrollTop);
+      }
+      viewTabIdRef.current = null;
+      // Commands that act on "the editor" must not reach a note that is no longer shown
+      if (viewRef.current) {
+        unregisterPaneView(pane.id);
+        viewRef.current.destroy();
+        viewRef.current = null;
+        setCardView(null);
+      }
+      return;
+    }
 
     // Save current tab state before switching. A renamed tab keeps no entry under its
     // old id (tab ids are paths, and the rename already migrated the cache), so writing
@@ -228,11 +253,11 @@ export function EditorPane({ pane }: { pane: Pane }) {
 
   // Focus this pane's editor when it becomes active
   useEffect(() => {
-    if (isActive && viewRef.current) {
+    if (isActive && viewRef.current && !isCanvas) {
       registerPaneView(pane.id, viewRef.current);
       viewRef.current.focus();
     }
-  }, [isActive, pane.id]);
+  }, [isActive, pane.id, isCanvas]);
 
   // Scroll sync — when scroll lock is active, synchronize scroll with other panes
   useEffect(() => {
@@ -302,6 +327,22 @@ export function EditorPane({ pane }: { pane: Pane }) {
   }
 
   const modeClass = activeTab.editorMode === "source" ? "source-mode" : "preview-mode";
+
+  if (isCanvas) {
+    return (
+      <div
+        className={`editor-pane ${isActive ? "editor-pane-active" : ""}`}
+        onPointerDown={handlePointerDown}
+      >
+        <div className="editor-area canvas-area">
+          <InlineTitle key={activeTab.id} path={activeTab.path} name={activeTab.name} />
+          {/* The note editor stays mounted, hidden, so switching back keeps its view */}
+          <div className="editor-container" ref={containerRef} hidden />
+          <CanvasView key={activeTab.id} path={activeTab.path} active={isActive} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
