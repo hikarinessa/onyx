@@ -9,11 +9,16 @@ import App from "./App";
 // Global error trap: webview exceptions are invisible in release builds
 // (no devtools), so forward them to the Rust log (~/Library/Logs/app.onyx.notes).
 // Capped per session so an exception storm can't flood the log or IPC.
+// The last report says the cap was reached, so a quiet log is never mistaken for no errors.
+const MAX_ERROR_REPORTS = 50;
 let errorReports = 0;
 function reportError(kind: string, detail: string) {
-  if (errorReports >= 50) return;
+  if (errorReports > MAX_ERROR_REPORTS) return;
   errorReports++;
-  invoke("log_js_error", { message: `${kind}: ${detail}` }).catch(() => {});
+  const message = errorReports > MAX_ERROR_REPORTS
+    ? `report cap reached: ${MAX_ERROR_REPORTS} errors forwarded this session, later ones are not logged`
+    : `${kind}: ${detail}`;
+  invoke("log_js_error", { message }).catch(() => {});
 }
 window.addEventListener("error", (e) => {
   const stack = e.error instanceof Error ? `\n${e.error.stack}` : "";
