@@ -1180,24 +1180,31 @@ pub(crate) fn rewrite_wikilinks(
 /// so it points at `new_basename` instead of `old_basename`. Files are rewritten
 /// in-place via `commit_file` (atomic + reindex + self-write mark) and a
 /// `fs:change modify` event is emitted for each so any open tab reloads.
+/// Canvases are JSON, never rewritten as text: their link targets are returned, by
+/// canvas path, for `rewrite_canvases_after_move` to apply inside text nodes.
 fn propagate_rename_to_wikilinks(
     renamed_file_id: i64,
     old_basename: &str,
     new_basename: &str,
     state: &State<AppState>,
     app: &tauri::AppHandle,
-) -> Result<u32, String> {
+) -> Result<HashMap<String, HashSet<String>>, String> {
     let pairs = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         db.get_link_targets_to(renamed_file_id)?
     };
 
     let mut by_source: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut canvas_targets: HashMap<String, HashSet<String>> = HashMap::new();
     for (source_path, target) in pairs {
-        by_source.entry(source_path).or_default().insert(target);
+        let by = if crate::canvas::is_canvas_path(Path::new(&source_path)) {
+            &mut canvas_targets
+        } else {
+            &mut by_source
+        };
+        by.entry(source_path).or_default().insert(target);
     }
 
-    let mut rewritten = 0u32;
     for (source_path, targets) in by_source {
         let path = PathBuf::from(&source_path);
         let content = match std::fs::read_to_string(&path) {
@@ -1215,7 +1222,6 @@ fn propagate_rename_to_wikilinks(
             log::warn!("Failed to write wikilink rewrite to {}: {}", source_path, e);
             continue;
         }
-        rewritten += 1;
         crate::watcher::emit_changes(&app, vec![FileChangeEvent {
             kind: "modify".to_string(),
             path: source_path,
@@ -1224,7 +1230,65 @@ fn propagate_rename_to_wikilinks(
         }]);
     }
 
-    Ok(rewritten)
+    Ok(canvas_targets)
+}
+
+/// The wikilink rename applied inside canvas text nodes: which link texts to rewrite in
+/// each canvas, and the note's old and new names.
+struct CanvasTextRename<'a> {
+    targets: &'a HashMap<String, HashSet<String>>,
+    old_basename: &'a str,
+    new_basename: &'a str,
+}
+
+/// After a file or folder moves (renamed or only moved), rewrite every indexed canvas
+/// whose file nodes point at it or into it, and, for a renamed note, the wikilinks in
+/// its text nodes. Always through `canvas::rewrite_paths`, which parses and re-serialises
+/// the JSON rather than editing it as text, and leaves a file it cannot parse alone.
+/// Each changed canvas is written
+/// via `commit_file` (reindexing it) and announced with `fs:change modify`.
+fn rewrite_canvases_after_move(
+    moved: &crate::canvas::PathMove,
+    text: Option<CanvasTextRename>,
+    state: &State<AppState>,
+    app: &tauri::AppHandle,
+) -> Result<(), String> {
+    let canvases = state.db.lock().map_err(|e| e.to_string())?.canvas_paths()?;
+    let roots: Vec<PathBuf> = {
+        let dirs = state.directories.lock().map_err(|e| e.to_string())?;
+        dirs.list().iter().map(|d| d.path.clone()).collect()
+    };
+    for canvas_path in canvases {
+        let path = PathBuf::from(&canvas_path);
+        let root = roots.iter().find(|r| path.starts_with(r)).map(|r| r.to_string_lossy().to_string());
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("Skipping canvas rewrite for {}: {}", canvas_path, e);
+                continue;
+            }
+        };
+        let rewrite_text = text.as_ref().and_then(|t| {
+            let targets = t.targets.get(&canvas_path)?;
+            Some(move |s: &str| rewrite_wikilinks(s, t.old_basename, t.new_basename, targets))
+        });
+        let rewrite_text: Option<&dyn Fn(&str) -> String> = rewrite_text.as_ref().map(|f| f as _);
+        let Some(new_content) = crate::canvas::rewrite_paths(&content, root.as_deref(), Some(moved), rewrite_text)
+        else {
+            continue;
+        };
+        if let Err(e) = commit_file(&path, &new_content, state) {
+            log::warn!("Failed to write canvas rewrite to {}: {}", canvas_path, e);
+            continue;
+        }
+        crate::watcher::emit_changes(app, vec![FileChangeEvent {
+            kind: "modify".to_string(),
+            path: canvas_path,
+            old_path: None,
+            is_dir: false,
+        }]);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1293,23 +1357,40 @@ pub fn rename_file(
     // Folder rename is intentionally out of scope for v1 — links inside a
     // renamed folder still resolve by basename, and the link rewrite for
     // `[[A/file]]`-style absolute targets needs separate handling.
-    if !is_dir {
+    let old_basename = std::path::Path::new(&old_path)
+        .file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let new_basename = new.file_stem()
+        .map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let renamed_note = !is_dir && renamed_file_id.is_some()
+        && !old_basename.is_empty() && !new_basename.is_empty() && old_basename != new_basename;
+    let mut canvas_targets = HashMap::new();
+    if renamed_note {
         if let Some(id) = renamed_file_id {
-            let old_basename = std::path::Path::new(&old_path)
-                .file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-            let new_basename = new.file_stem()
-                .map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-            if !old_basename.is_empty() && !new_basename.is_empty() && old_basename != new_basename {
-                if let Err(e) = propagate_rename_to_wikilinks(id, &old_basename, &new_basename, &state, &app) {
-                    log::warn!("Wikilink propagation failed for {} -> {}: {}", old_path, new_path, e);
-                }
-                // Links the rewrite could not change still point here; resolve them
-                // afresh so the index stops listing them as backlinks of the new name.
-                if let Ok(db) = state.db.lock() {
-                    if let Err(e) = db.reresolve_name(&old_basename) {
-                        log::warn!("Re-resolving links to {} failed: {}", old_basename, e);
-                    }
-                }
+            match propagate_rename_to_wikilinks(id, &old_basename, &new_basename, &state, &app) {
+                Ok(targets) => canvas_targets = targets,
+                Err(e) => log::warn!("Wikilink propagation failed for {} -> {}: {}", old_path, new_path, e),
+            }
+        }
+    }
+
+    // Canvas file nodes hold exact paths, so any move of a file or folder can change
+    // them, not only a rename of a note.
+    let moved = crate::canvas::PathMove { old: &old_path, new: &new_path, is_dir };
+    let text = renamed_note.then(|| CanvasTextRename {
+        targets: &canvas_targets,
+        old_basename: &old_basename,
+        new_basename: &new_basename,
+    });
+    if let Err(e) = rewrite_canvases_after_move(&moved, text, &state, &app) {
+        log::warn!("Canvas rewrite failed for {} -> {}: {}", old_path, new_path, e);
+    }
+
+    if renamed_note {
+        // Links the rewrite could not change still point here; resolve them
+        // afresh so the index stops listing them as backlinks of the new name.
+        if let Ok(db) = state.db.lock() {
+            if let Err(e) = db.reresolve_name(&old_basename) {
+                log::warn!("Re-resolving links to {} failed: {}", old_basename, e);
             }
         }
     }

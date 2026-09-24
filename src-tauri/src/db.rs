@@ -605,6 +605,15 @@ impl Database {
             .cloned()
     }
 
+    /// Every indexed canvas, for rewriting file-node paths after a rename.
+    pub fn canvas_paths(&self) -> Result<Vec<String>, String> {
+        let mut stmt = self.conn.prepare_cached("SELECT path FROM files WHERE path LIKE '%.canvas'")
+            .map_err(|e| format!("Failed to prepare canvas query: {}", e))?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))
+            .map_err(|e| format!("Failed to list canvases: {}", e))?;
+        rows.collect::<Result<_, _>>().map_err(|e| format!("Failed to list canvases: {}", e))
+    }
+
     /// Whether `path` is in the index.
     pub fn is_indexed(&self, path: &str) -> Result<bool, String> {
         Ok(self.get_file_id(path)?.is_some())
@@ -1258,6 +1267,17 @@ mod tests {
         let src = add(&t, "/v/board.canvas", &["/w/Deep/Plan"]);
         assert_agree(&t, src, "/v/board.canvas", "/w/Deep/Plan", Some("/w/Deep/Plan.md"));
         assert_eq!(t.resolve_link_path("/w/Missing/Plan", "/v/board.canvas").unwrap(), None);
+    }
+
+    #[test]
+    fn canvas_paths_lists_only_canvases() {
+        let t = temp_db(&["/v"]);
+        add(&t, "/v/a.canvas", &[]);
+        add(&t, "/v/sub/b.canvas", &[]);
+        add(&t, "/v/canvas.md", &[]);
+        let mut got = t.canvas_paths().unwrap();
+        got.sort();
+        assert_eq!(got, ["/v/a.canvas", "/v/sub/b.canvas"]);
     }
 
     #[test]
