@@ -1,7 +1,7 @@
 # Canvas: an offline thinking board that shows your notes
 
-**Status:** Draft, 2026-09-24. Supersedes #35 (read-only viewer).
-**Tier:** XL (about 30 files across Rust and TypeScript). Needs explicit approval before implementation.
+**Status:** P1–P5 built on `feature/canvas` (2026-09-25), in hands-on testing. Tracked in #125; supersedes #35.
+**Tier:** XL (about 30 files across Rust and TypeScript).
 
 ## Why
 

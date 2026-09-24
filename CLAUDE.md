@@ -64,6 +64,12 @@ src/                          # Frontend (React + TypeScript)
 │   ├── IconPicker.tsx        #  176 lines — Icon & colour picker for tree entries (Phosphor duotone, OKLCH palette, custom colour)
 │   ├── TreeIcon.tsx          #   18 lines — File-tree icon: Phosphor duotone tinted by the entry's colour
 │   ├── SearchPanel.tsx       #  247 lines — Full-text search panel (sidebar tab)
+│   ├── canvas/
+│   │   ├── CanvasView.tsx    #  852 lines — Canvas tab: board, viewport + input modes, selection, move/resize/connect, tools, keyboard, menus
+│   │   ├── CanvasCard.tsx    #  284 lines — One item: sticky (auto-fit text), label, markdown/note card, image (downscaled), link, frame
+│   │   ├── CanvasEdges.tsx   #  130 lines — SVG edges (side-anchored curves, arrows, dashes) + labels
+│   │   ├── CardEditor.tsx    #  126 lines — CM6 view for card markdown (note editor's extensions, per-card context path)
+│   │   └── NotePicker.tsx    #   61 lines — Add-note search (name#Heading places one section)
 │   └── LintPanel.tsx         #   98 lines — Lint diagnostics panel (toggle from status bar)
 ├── extensions/
 │   ├── frontmatter.ts        #  176 lines — CM6: frontmatter detection, styling, auto-fold, toggle-fold command
@@ -77,6 +83,7 @@ src/                          # Frontend (React + TypeScript)
 │   ├── criticMarkup.ts       #   439 lines — CM6: CriticMarkup decorations, Review mode field, decisions
 │   ├── footnotes.ts          #   215 lines — CM6: footnote numbers in preview, hover text, jump targets (clicks routed via wikilinks.ts)
 │   ├── livePreview.ts        # 1579 lines — CM6: live preview (headings, bold/italic, checkboxes, wikilinks, URLs, callouts, tag chips, fold, hanging indent, indent guides)
+│   ├── contextPath.ts        #   23 lines — Per-view link context (canvas cards) + which line Preview reveals raw
 │   ├── embeds.ts             #  717 lines — CM6: ![[note]] embeds (StateField-based block decorations); images go to images.ts
 │   ├── htmlInline.ts         #  107 lines — CM6: allowlisted inline HTML in preview (coloured font/span, br, u, sup, links)
 │   ├── images.ts             #  152 lines — CM6: images in preview (![[photo.png|300]], ![alt](url)), inline anywhere on a line
@@ -91,6 +98,14 @@ src/                          # Frontend (React + TypeScript)
 │   ├── tableAdapter.ts       #  243 lines — CM6: md-advanced-tables adapter (0-indexed↔1-indexed)
 │   └── tableEditor.ts        #  175 lines — CM6: table keymap (Tab/Enter) + TSV paste + command palette
 ├── lib/
+│   ├── canvas/
+│   │   ├── model.ts          #  227 lines — JSON Canvas + `onyx` fields: parse/serialise (unknown fields kept), kinds, palette colours
+│   │   ├── store.ts          #  250 lines — Open canvases: document, undo history, save via saveFile, disk changes, viewports
+│   │   ├── geometry.ts       #  134 lines — Viewport maths, edge curves, hit testing, frame containment
+│   │   ├── noteContent.ts    #   84 lines — Note-card content, shared per note, refreshed on fs:change
+│   │   └── paths.ts          #   22 lines — File-node paths relative to the canvas's registered root
+│   ├── saveFile.ts           #   33 lines — The one save path: write_file with CONFLICT:/DELETED: turned into store state
+│   ├── sections.ts           #   74 lines — `note#Heading` / `note#^block` subpaths: split and extract
 │   ├── criticMarkup.ts       #   359 lines — CriticMarkup parser + decision operations (accept/reject/dismiss/reply)
 │   ├── codeRanges.ts         #    69 lines — Fenced-block and inline-code ranges, so syntax parsers skip examples
 │   ├── footnotes.ts          #   189 lines — Footnote parser (references, multi-line definitions, first-reference numbering)
@@ -119,6 +134,7 @@ src/                          # Frontend (React + TypeScript)
 │   └── treeStyles.ts         #   91 lines — Tree palette (OKLCH hues), colour resolution, Lucide→Phosphor name aliases
 └── styles/
     ├── reset.css             #   67 lines — CSS reset (@layer reset, prefers-reduced-motion)
+    ├── canvas.css            #  636 lines — Canvas board, items, edges, floating chrome (+ unlayered CM overrides for cards)
     ├── theme.css             #  446 lines — CSS layer order + custom properties (themes via data-theme)
     └── layout.css            # 4198 lines — Layout/component styles (@layer layout, components) + unlayered editor overrides
 
@@ -139,6 +155,7 @@ src-tauri/                    # Backend (Rust)
     ├── periodic.rs           #  504 lines — Periodic notes config, template engine (incl. script() function), date formatting
     ├── scripts.rs            #  159 lines — User scripts (~/.onyx/scripts/): discovery, sidecar config, timeout-killed execution
     ├── folder_rules.rs       #   73 lines — Per-folder new-note rules (template or script) (~/.onyx/folder-rules.json)
+    ├── canvas.rs             #  445 lines — JSON Canvas for the index: links, search text per node, rename rewrite
     ├── bookmarks.rs          #  182 lines — Bookmark persistence (~/.onyx/bookmarks.json), migration from legacy storage
     ├── attachments.rs        #  176 lines — Image references: folder/name resolution, file-name lookup built from a skip-rule walk
     ├── tree_styles.rs        #  182 lines — Per-path icon + colour for tree entries (~/.onyx/tree-styles.json), follows rename/trash
@@ -166,6 +183,7 @@ For full architecture details, see `docs/ARCHITECTURE.md`. Key patterns an AI as
 - **Hook injection pattern:** When module A needs to call into module B but importing B from A would create a circular import, A exports `setXHook(fn)`, B calls it during init. Used for `setFlushSaveHook`, `setSnapshotEditorHook`, `setRemeasureHook`.
 - **Tree icons and colours:** Two icon sets with separate jobs. Lucide (`Icon`, `iconCatalog.ts`) draws app chrome; Phosphor duotone (`TreeIcon`, `treeIconCatalog.ts`) draws file-tree entries and is what the picker offers. A stored colour is a palette name (`"teal"` → `var(--tree-color-teal)`, lightness/chroma per theme in `theme.css`) or a custom `#rrggbb`. Roots keep icon + colour in `directories.json` (by id); every other entry in `tree_styles.rs` (by path, moved by `rename_file`, dropped by `trash_file`).
 - **Bookmarks:** Stored in `~/.onyx/bookmarks.json` via `BookmarkManager` (path-based, decoupled from SQLite index). File renames/deletes update bookmark paths automatically.
+- **Canvas:** `.canvas` files open in `CanvasView` instead of an editor (`isCanvasPath` in `fileKinds.ts`; `EditorPane` branches on it and destroys its hidden editor so commands can't reach a note that isn't shown). The document lives in `lib/canvas/store.ts`, not CM6: every change is `commit()` of a new value (undoable, saved on the auto-save timer through `saveFile`). Unsaved means "differs from the file as Onyx would write it", so a canvas another app formatted is not dirty on open. Items are DOM in one CSS-transformed world layer; cards render markdown through the note editor's own extensions, with `contextPathFacet` giving each card's links their own note. Rust indexes canvases (links from file nodes and card wikilinks, so they show in backlinks), searches their text (results carry `node_id`), and rewrites their paths on rename. Spec: `docs/specs/canvas.md`.
 - **No Tailwind.** Plain CSS with custom properties.
 
 ## IPC Commands
