@@ -126,6 +126,7 @@
   }
 
   .canvas-label .canvas-text {
+    overflow: visible;
     padding: 4px 6px;
     font-weight: 500;
     line-height: 1.15;
@@ -331,8 +332,6 @@
     position: absolute;
     left: 0;
     top: 0;
-    width: 1px;
-    height: 1px;
     overflow: visible;
     pointer-events: none;
   }

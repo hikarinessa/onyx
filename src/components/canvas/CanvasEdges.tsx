@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { colorOf, cssColor, type CanvasEdge, type CanvasNode, type Side } from "../../lib/canvas/model";
-import { anchor, centreOf, edgeGeometry, facingSide, pointOnEdge, type Point } from "../../lib/canvas/geometry";
+import { anchor, boundsOf, centreOf, edgeGeometry, facingSide, pointOnEdge, type Point } from "../../lib/canvas/geometry";
 
 /** The sides an edge actually uses: its own, or the ones facing the other end. */
 export function edgeSides(e: CanvasEdge, from: CanvasNode, to: CanvasNode): [Side, Side] {
@@ -42,9 +42,21 @@ function EdgesImpl({ nodes, edges, selectedEdge, editingEdge, pending, actions }
     return { e, g, stroke: color ? `color-mix(in oklab, ${cssColor(color)} 65%, var(--text-primary))` : "var(--canvas-edge)" };
   }).filter((x): x is NonNullable<typeof x> => !!x);
 
+  // The layer covers every card plus a margin: WebKit doesn't hit-test SVG content
+  // outside its box, and edges must stay clickable wherever they run.
+  const box = boundsOf([...nodes.values()]) ?? { x: 0, y: 0, width: 0, height: 0 };
+  const m = 2000;
+  const frame = { x: box.x - m, y: box.y - m, width: box.width + m * 2, height: box.height + m * 2 };
+
   return (
     <>
-      <svg className="canvas-edges">
+      <svg
+        className="canvas-edges"
+        style={{ transform: `translate(${frame.x}px, ${frame.y}px)` }}
+        width={frame.width}
+        height={frame.height}
+        viewBox={`${frame.x} ${frame.y} ${frame.width} ${frame.height}`}
+      >
         {drawn.map(({ e, g, stroke }) => {
           const selected = e.id === selectedEdge;
           const arrowEnd = (e.toEnd ?? "arrow") === "arrow";
