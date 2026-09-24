@@ -44,6 +44,7 @@ The first release ships viewer and editor together. The work is still ordered in
 - Dataview blocks: they render as code, like any unknown fenced block.
 - Freehand pen, shapes, freestanding lines and arrows. The format keeps room for them (Decision: format).
 - Editing a note from inside its card (opening it in a tab is one click away).
+- Converting a sticky into a note.
 - Export to image or PDF.
 - Opening Onyx canvases in Obsidian (not guaranteed, though the base format keeps it largely possible).
 - Pasting or dropping images from outside the registered directories, and clipboard images.
@@ -68,6 +69,7 @@ The first release ships viewer and editor together. The work is still ordered in
 - **Card content renders through CodeMirror, read-only, with live preview** — provisional pending spike S1. Chosen over extending the hand-written HTML converter in `embeds.ts` (it has no tables, images, callouts or inline HTML, and a second renderer would drift from how notes look) and over adding a markdown library (a new dependency that would also drift). Markdown cards need an editor for editing anyway, so the same view serves both. To stay fast: a card's view mounts only when on screen and above a zoom threshold; below it the card shows a lightweight summary (title and first lines). Stickies and labels render with the inline renderer and switch to a minimal editor while being edited.
 - **Link context comes from the view, not the active tab** — `embeds.ts`, `images.ts` and `livePreview.ts` read `selectActiveTabPath()` to resolve links. On a canvas, links inside a note card must resolve from the note's folder. A facet on each view supplies its context path, defaulting to the tab's path, so note editors behave as before (I4).
 - **Saving: one conflict-safe save function shared by notes and canvases** — the canvas serialises its model and saves through a helper that handles `CONFLICT:` and `DELETED:` rejections and raises the status bar prompt. Note auto-save moves onto the same helper, which fixes #124. Chosen over a canvas-only save path because two save paths could disagree about the same conflict.
+- **Viewport is saved per machine, in the session** — pan and zoom position belong to the machine, not the board, so they live in `session.json` beside the tab, and viewing a canvas never writes the file (I1).
 - **Undo: board-level history of model snapshots** — the model is small (hundreds of items), so each committed change stores the previous model. A text edit inside a card commits as one entry when the card loses focus. Chosen over command objects for simplicity.
 - **Input modes (setting `canvas.inputMode`, default `mouse`):**
   - Mouse: wheel zooms at the pointer; right- or middle-drag pans; right-click without movement (under 4px) opens the context menu; left-drag on empty space draws a marquee; Space + left-drag pans.
@@ -170,5 +172,3 @@ The first release ships viewer and editor together. The work is still ordered in
 ## Open Questions
 
 - **OQ1.** The rendering decision is provisional on S1.
-- **OQ2.** Should a sticky ever turn into a note (for example "Convert to note")? Not asked for; left out of v1 unless raised.
-- **OQ3.** Whether canvas viewport (pan and zoom) is saved in the file (shared across machines) or in the session (per machine). Proposed: session.
