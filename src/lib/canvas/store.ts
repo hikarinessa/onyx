@@ -18,8 +18,14 @@ const HISTORY_LIMIT = 200;
 interface Entry {
   doc: CanvasDoc | null;
   error: string | null;
-  /** Serialised content last read from or written to disk */
+  /** Exact text last read from or written to disk, to recognise our own writes coming back */
   lastSaved: string;
+  /**
+   * The same content as Onyx would write it. "Unsaved" compares against this rather than
+   * the raw text, so a file another app formatted differently isn't modified until its
+   * content changes, and undoing back to it writes nothing.
+   */
+  baseline: string;
   past: CanvasDoc[];
   future: CanvasDoc[];
   /** Changes with the same key within COALESCE_MS extend one history step (typing, nudging) */
@@ -34,7 +40,7 @@ const entries = new Map<string, Entry>();
 function entryFor(path: string): Entry {
   let e = entries.get(path);
   if (!e) {
-    e = { doc: null, error: null, lastSaved: "", past: [], future: [], coalesce: null, saveTimer: null, listeners: new Set() };
+    e = { doc: null, error: null, lastSaved: "", baseline: "", past: [], future: [], coalesce: null, saveTimer: null, listeners: new Set() };
     entries.set(path, e);
   }
   return e;
@@ -51,6 +57,7 @@ export async function loadCanvas(path: string): Promise<void> {
     const text = await invoke<string>("read_file", { path });
     e.doc = parseCanvas(text);
     e.lastSaved = text;
+    e.baseline = serializeCanvas(e.doc);
     e.error = null;
   } catch (err) {
     e.doc = null;
@@ -126,7 +133,7 @@ export function redo(path: string): void {
 }
 
 function scheduleSave(path: string, e: Entry) {
-  const dirty = !!e.doc && serializeCanvas(e.doc) !== e.lastSaved;
+  const dirty = !!e.doc && serializeCanvas(e.doc) !== e.baseline;
   useAppStore.getState().setModified(path, dirty);
   if (e.saveTimer) clearTimeout(e.saveTimer);
   e.saveTimer = dirty ? setTimeout(() => { void flushCanvasSave(path); }, getAutoSaveMs()) : null;
@@ -138,9 +145,10 @@ export async function flushCanvasSave(path: string): Promise<void> {
   if (!e?.doc) return;
   if (e.saveTimer) { clearTimeout(e.saveTimer); e.saveTimer = null; }
   const text = serializeCanvas(e.doc);
-  if (text === e.lastSaved) return;
+  if (text === e.baseline) return;
   if (await saveFile(path, text) === "saved") {
     e.lastSaved = text;
+    e.baseline = text;
     // Edits made while the write was in flight stay modified and schedule their own save
     if (e.doc && serializeCanvas(e.doc) === text) useAppStore.getState().setModified(path, false);
   }
@@ -154,7 +162,7 @@ export async function flushCanvasSave(path: string): Promise<void> {
 export function canvasChangedOnDisk(path: string, text: string): void {
   const e = entries.get(path);
   if (!e?.doc || text === e.lastSaved) return;
-  if (serializeCanvas(e.doc) !== e.lastSaved) {
+  if (serializeCanvas(e.doc) !== e.baseline) {
     useAppStore.getState().setSaveConflictPath(path);
     return;
   }
@@ -164,6 +172,7 @@ export function canvasChangedOnDisk(path: string, text: string): void {
     e.future = [];
     e.doc = next;
     e.lastSaved = text;
+    e.baseline = serializeCanvas(next);
     notify(e);
   } catch {
     // A half-written file from another app: wait for its next write
