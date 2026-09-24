@@ -364,6 +364,8 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
     }
     if (e.button !== 0) return;
     const p = boardPoint(e);
+    // A drag on the board must never leave a text selection behind in the cards it crosses
+    window.getSelection()?.removeAllRanges();
 
     const handle = target.closest("[data-resize]") as HTMLElement | null;
     if (handle) {
@@ -459,14 +461,6 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
         if (g.dir.includes("s")) r.height = Math.max(MIN_SIZE, g.orig.height + dy);
         if (g.dir.includes("w")) { r.width = Math.max(MIN_SIZE, g.orig.width - dx); r.x = g.orig.x + g.orig.width - r.width; }
         if (g.dir.includes("n")) { r.height = Math.max(MIN_SIZE, g.orig.height - dy); r.y = g.orig.y + g.orig.height - r.height; }
-        const n = getCanvasDoc(path)?.nodes.find((m) => m.id === g.id);
-        // Stickies stay square unless Shift is held
-        if (n && kindOf(n) === "sticky" && !e.shiftKey) {
-          const s = Math.max(r.width, r.height);
-          if (g.dir.includes("w")) r.x = g.orig.x + g.orig.width - s;
-          if (g.dir.includes("n")) r.y = g.orig.y + g.orig.height - s;
-          r.width = r.height = s;
-        }
         updateNodes(new Set([g.id]), (m) => ({ ...m, x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }), { history: false });
       } else if (g.kind === "marquee") {
         const r = normaliseRect(g.start, boardPoint(e));

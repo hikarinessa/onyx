@@ -20,6 +20,8 @@
     outline: none;
     touch-action: none;
     cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
     background-color: var(--bg-base);
     background-image: radial-gradient(circle, var(--canvas-dot) 1.1px, transparent 1.3px);
     background-size: 24px 24px;
@@ -468,7 +470,8 @@
     align-items: center;
     gap: 5px;
     padding: 6px 8px;
-    transform: translate(-50%, calc(-100% - 14px));
+    /* Clear of the edge dot that sits above the item's top */
+    transform: translate(-50%, calc(-100% - 40px));
     white-space: nowrap;
   }
 
@@ -613,4 +616,18 @@
 .canvas-sticky.is-editing,
 .canvas-label.is-editing {
   outline-offset: 3px;
+}
+
+/* Card text is selectable only while the card is being edited, so dragging across the
+   board never selects it (CM6 makes its content selectable at runtime) */
+.canvas-item:not(.is-editing) .cm-content,
+.canvas-item:not(.is-editing) .cm-content * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.canvas-item.is-editing .cm-content,
+.canvas-text-input {
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
