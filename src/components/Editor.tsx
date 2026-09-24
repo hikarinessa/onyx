@@ -41,6 +41,7 @@ import { blocksExtension } from "../extensions/blocks";
 import { spellcheckExtension } from "../extensions/spellcheck";
 import { embedExtension } from "../extensions/embeds";
 import { isMarkdownPath, isPlainTextPath } from "../lib/fileKinds";
+import { saveFile } from "../lib/saveFile";
 import { imageExtension } from "../extensions/images";
 import { htmlInlineExtension } from "../extensions/htmlInline";
 import { heightSampleExtension } from "../extensions/heightSample";
@@ -260,29 +261,13 @@ function buildExtensions(): { markdown: Extension[]; plain: Extension[] } {
                   }
                 }
               }
-              // Auto-save guard: skip if file was deleted
-              if (useAppStore.getState().deletedPaths.has(tab.path)) {
-                return;
-              }
-              const result = await invoke<string>("write_file", {
-                path: tab.path,
-                content: saveContent,
-              });
-              if (typeof result === "string" && result.startsWith("CONFLICT:")) {
-                useAppStore.getState().setSaveConflictPath(tab.path);
-              } else {
+              if (await saveFile(tab.path, saveContent) === "saved") {
                 lastSavedContent.set(tabId, saveContent);
                 useAppStore.getState().setModified(tabId, false);
                 useAppStore.getState().bumpSaveVersion();
               }
             } catch (err) {
-              const msg = String(err);
-              if (msg.startsWith("DELETED:")) {
-                // File was deleted externally — don't resurrect it
-                useAppStore.getState().addDeletedPath(tab.path);
-              } else {
-                console.error("Auto-save failed:", err);
-              }
+              console.error("Auto-save failed:", err);
             }
           }, getAutoSaveMs());
         }
@@ -598,14 +583,9 @@ export async function flushSaveForTab(id: string): Promise<void> {
       const tab = pane.tabs.find((t) => t.id === id);
       if (tab) { tabPath = tab.path; break; }
     }
-    if (tabPath) {
-      try {
-        await invoke("write_file", { path: tabPath, content });
-        lastSavedContent.set(id, content);
-        useAppStore.getState().setModified(id, false);
-      } catch (err) {
-        console.error("Failed to flush save for tab:", err);
-      }
+    if (tabPath && await saveFile(tabPath, content) === "saved") {
+      lastSavedContent.set(id, content);
+      useAppStore.getState().setModified(id, false);
     }
   }
 }
