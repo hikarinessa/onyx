@@ -30,7 +30,7 @@ Kill any running dev app first (step 4). Then start it as a tracked background t
 cargo tauri dev > <scratchpad>/dev.log 2>&1        # run_in_background: true
 ```
 
-Wait with a Monitor/until-loop on `Reconciliation complete|panicked|error\[` in that log, then ~8 s more for the window to paint. Only `console.error` from the page reaches the log (as `[JS] console.error: …`), so temporary instruments must log with `console.error` and a unique prefix.
+Wait with a Monitor/until-loop on `Reconciliation complete|panicked|error\[` in that log, then ~8 s more for the window to paint. Only `console.error` from the page reaches the log (as `[JS] console.error: …`), so temporary instruments log with a unique prefix through `invoke("log_js_error", { message })`. Plain `console.error` also reaches the log, but forwarding stops after 50 reports per page load (the log then says `report cap reached`), and a dev session's own errors can use up most of that.
 
 Rust changes rebuild and relaunch the app on save: stop it before editing `src-tauri/`. Changes to editor extensions need a full restart (`sharedExtensions` is cached; HMR won't rebuild it).
 
