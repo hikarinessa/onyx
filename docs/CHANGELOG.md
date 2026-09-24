@@ -4,6 +4,23 @@ All notable changes to Onyx. Follows [Keep a Changelog](https://keepachangelog.c
 
 ---
 
+## [0.12.0] — 2026-09-25
+
+### Added
+- **Canvas: a thinking board beside your notes** (#125). `.canvas` files open as a pan-and-zoom board, and Obsidian canvases open as they are, including section embeds and photos. New canvases come from the sidebar menu or "New Canvas" in the palette
+  - **Stickies** are coloured post-its whose text sizes itself to fit; they resize to any rectangle. The sticky tool (N) stays on, so each click places one, and a new sticky takes the colour of the last one you selected
+  - **Cards** hold markdown rendered like a note (C), **text** labels sit on the board (T), and **frames** group what's inside them and move it together (F)
+  - **Notes and images**: drag a note from the sidebar onto the board, or add one by name; `name#Heading` shows just that section. Note cards update when the note changes, and the title opens it. Images keep their proportions and render from a downscaled copy, so a board of photos zooms smoothly
+  - **Edges** run from the dots around a selected item to another item: curved, solid or dashed, with arrows and a label (double-click)
+  - **Colour** anything from the bar above the selection; colours follow the theme
+  - **Navigation**: Settings → General → Canvas navigation picks Mouse (the wheel zooms, right- or middle-drag pans) or Trackpad (two fingers pan, pinch zooms). Space-drag pans in both; ⇧1 fits the board. Each canvas reopens where you left it
+  - Undo and redo, copy, paste, duplicate, arrow-key nudging, bring to front and send to back. Text on a canvas is found by full-text search, and a result centres the item; a note on a canvas lists the canvas in its backlinks, and renaming the note updates the canvas
+
+### Fixed
+- **Section embeds show their section** (#123). `![[note#Section]]` showed "Note not found"; it now shows that heading's section, and `![[note#^id]]` shows the block
+- **A save refused because the file changed outside Onyx now always says so** (#124). Auto-save only logged the refusal, and closing the tab ignored it; the status bar's reload prompt now appears from every save
+- **Notes without frontmatter no longer fail to load their properties** in the properties panel, which quietly showed nothing
+
 ## [0.11.12] — 2026-09-23
 
 ### Fixed
