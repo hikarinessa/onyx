@@ -855,15 +855,11 @@ fn resolve_link_target(
     // in the same order: root-relative folder path, then the linking note's folder. A
     // file the index already knows is not taken from disk: the index has ruled on it,
     // and a click must not open what backlinks and rename rewriting say is not the target.
-    let base = link.strip_suffix(".md").unwrap_or(link);
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if base.contains('/') {
+    let roots: Vec<PathBuf> = {
         let dirs = state.directories.lock().map_err(|e| e.to_string())?;
-        candidates.extend(dirs.list().iter().map(|dir| dir.path.join(format!("{}.md", base))));
-    }
-    let context_dir = context_path.parent().map(PathBuf::from).unwrap_or_default();
-    candidates.push(context_dir.join(format!("{}.md", base)));
-    for candidate in candidates {
+        dirs.list().iter().map(|d| d.path.clone()).collect()
+    };
+    for candidate in disk_link_candidates(link, &roots, context_path) {
         if !candidate.exists() {
             continue;
         }
@@ -876,6 +872,23 @@ fn resolve_link_target(
         return Ok(Some(path));
     }
     Ok(None)
+}
+
+/// Where on disk a link could point when the index has no answer, in resolution order:
+/// `[[folder/note]]` under each root, then the linking note's folder. A `#Heading` or
+/// `#^block` suffix is not part of the file name.
+fn disk_link_candidates(link: &str, roots: &[PathBuf], context_path: &Path) -> Vec<PathBuf> {
+    let base = crate::db::strip_md(crate::db::strip_subpath(link));
+    if base.is_empty() {
+        return Vec::new();
+    }
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if base.contains('/') {
+        candidates.extend(roots.iter().map(|root| root.join(format!("{}.md", base))));
+    }
+    let context_dir = context_path.parent().map(PathBuf::from).unwrap_or_default();
+    candidates.push(context_dir.join(format!("{}.md", base)));
+    candidates
 }
 
 #[tauri::command]
@@ -2112,6 +2125,21 @@ mod tests {
             sorted_keys(&m),
             vec!["/v/ab/z.md", "/v/b/sub/y.md", "/v/b/x.md"]
         );
+    }
+
+    #[test]
+    fn disk_fallback_ignores_a_heading_or_block_suffix() {
+        let roots = [PathBuf::from("/v")];
+        let ctx = Path::new("/v/a/src.md");
+        assert_eq!(
+            disk_link_candidates("Plan#Goals", &roots, ctx),
+            vec![PathBuf::from("/v/a/Plan.md")]
+        );
+        assert_eq!(
+            disk_link_candidates("Notes/Plan.md#^b1", &roots, ctx),
+            vec![PathBuf::from("/v/Notes/Plan.md"), PathBuf::from("/v/a/Notes/Plan.md")]
+        );
+        assert!(disk_link_candidates("#Goals", &roots, ctx).is_empty());
     }
 
     #[test]

@@ -133,10 +133,18 @@ pub(crate) fn strip_md(target: &str) -> &str {
     }
 }
 
+/// `target` without a `#Heading` or `#^block` suffix: `![[note#Section]]` and
+/// `[[note#^abc]]` point at `note`. Note names cannot contain `#`, so everything after
+/// the first one is a subpath.
+pub(crate) fn strip_subpath(target: &str) -> &str {
+    target.split('#').next().unwrap_or(target).trim_end()
+}
+
 /// The note name a link target can only resolve to: its last path segment, without
-/// `.md`, case-folded. `[[Notes/Consent]]` and `[[consent.MD]]` both give `consent`.
+/// `#subpath` or `.md`, case-folded. `[[Notes/Consent]]`, `[[consent.MD]]` and
+/// `[[Consent#Terms]]` all give `consent`.
 fn link_stem(target: &str) -> String {
-    let base = strip_md(target);
+    let base = strip_md(strip_subpath(target));
     name_key(base.rsplit('/').next().unwrap_or(base))
 }
 
@@ -160,7 +168,7 @@ fn resolve_link(
     target: &str,
     source_dir: &str,
 ) -> Result<Option<(i64, String)>, String> {
-    let base = strip_md(target);
+    let base = strip_md(strip_subpath(target));
     let stem = link_stem(target);
     if stem.is_empty() {
         return Ok(None);
@@ -1200,6 +1208,21 @@ mod tests {
         assert_agree(&t, src, "/two/s.md", "Notes/Plan", Some("/one/Notes/Plan.md"));
         t.db.set_roots(vec!["/two".into(), "/one".into()]).unwrap();
         assert_agree(&t, src, "/two/s.md", "Notes/Plan", Some("/two/Notes/Plan.md"));
+    }
+
+    #[test]
+    fn a_heading_or_block_suffix_resolves_the_note_it_names() {
+        let t = temp_db(&["/v"]);
+        add(&t, "/v/Notes/Plan.md", &[]);
+        for target in ["Plan#Goals", "Plan#^b1c2", "Notes/Plan#Goals", "plan.md#Goals", "Plan #Goals"] {
+            assert_eq!(
+                t.resolve_link_path(target, "/v/s.md").unwrap().as_deref(),
+                Some("/v/Notes/Plan.md"),
+                "{target}"
+            );
+        }
+        assert_eq!(link_stem("Notes/Plan#Goals"), "plan");
+        assert_eq!(t.resolve_link_path("#Goals", "/v/s.md").unwrap(), None);
     }
 
     #[test]
