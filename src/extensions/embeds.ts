@@ -15,7 +15,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { previewModeField, togglePreviewEffect } from "./livePreview";
 import { wikilinkFollowRef } from "./wikilinks";
-import { useAppStore, selectActiveTabPath } from "../stores/app";
+import { contextPathOf } from "./contextPath";
+import { extractSection, splitSubpath } from "../lib/sections";
 
 // ── Regex ──
 
@@ -90,11 +91,12 @@ async function resolveAndFetch(
   depth: number,
   ancestors: Set<string>,
 ): Promise<void> {
-  // Resolve the wikilink to an absolute path
+  // Resolve the note the link names; a `#Heading` or `#^block` subpath picks part of it
+  const { target, subpath } = splitSubpath(link);
   let resolvedPath: string | null;
   try {
     resolvedPath = await invoke<string | null>("resolve_wikilink", {
-      link,
+      link: target,
       contextPath,
     });
   } catch {
@@ -119,11 +121,18 @@ async function resolveAndFetch(
   }
 
   try {
-    const content = await invoke<string>("read_file", { path: resolvedPath });
+    const whole = await invoke<string>("read_file", { path: resolvedPath });
+    const content = subpath ? extractSection(whole, subpath) : whole;
+    registerPathLink(resolvedPath, link);
+    if (content === null) {
+      embedCache.set(link, { content: "", status: "error", error: `Section not found: ${subpath}` });
+      view.dispatch({ effects: embedContentReady.of(undefined) });
+      return;
+    }
     const entry: CacheEntry = { content, status: "ready" };
     embedCache.set(link, entry);
-    embedCache.set(resolvedPath, entry);
-    registerPathLink(resolvedPath, link);
+    // The resolved path's entry stands for the whole note, never for one of its sections
+    if (!subpath) embedCache.set(resolvedPath, entry);
 
     // Pre-fetch nested embeds (depth + 1) if within cap
     if (depth < 1) {
@@ -291,7 +300,7 @@ function renderMarkdownToHtml(
   return parts.join("\n");
 }
 
-function renderInline(text: string): string {
+export function renderInline(text: string): string {
   let s = escapeHtml(text);
   // Bold
   s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
@@ -460,7 +469,7 @@ function buildEmbedDecos(state: import("@codemirror/state").EditorState, view?: 
   const doc = state.doc;
   const cursorLine = state.selection.main.head;
   const cursorLineNumber = doc.lineAt(cursorLine).number;
-  const contextPath = selectActiveTabPath(useAppStore.getState()) || "";
+  const contextPath = contextPathOf(state);
 
   // Scan only visible ranges (with margin) to avoid full-document iteration
   const ranges = view?.visibleRanges ?? [{ from: 0, to: doc.length }];
@@ -533,7 +542,7 @@ const embedViewTracker = ViewPlugin.define((view) => {
   const state = view.state;
   const preview = state.field(previewModeField);
   if (preview) {
-    const contextPath = selectActiveTabPath(useAppStore.getState()) || "";
+    const contextPath = contextPathOf(state);
     const doc = state.doc;
     for (let i = 1; i <= doc.lines; i++) {
       const match = doc.line(i).text.match(EMBED_RE);

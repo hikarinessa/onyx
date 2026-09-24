@@ -16,7 +16,7 @@ import {
 import { RangeSetBuilder, type Extension } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 import { previewModeField, togglePreviewEffect } from "./livePreview";
-import { useAppStore, selectActiveTabPath } from "../stores/app";
+import { contextPathOf } from "./contextPath";
 import {
   MD_IMAGE_RE,
   WIKI_IMAGE_RE,
@@ -86,7 +86,7 @@ function inCode(view: EditorView, pos: number): boolean {
 
 function buildImageDecos(view: EditorView): DecorationSet {
   if (!view.state.field(previewModeField)) return Decoration.none;
-  const contextPath = selectActiveTabPath(useAppStore.getState()) || "";
+  const contextPath = contextPathOf(view.state);
   const cursorLine = view.state.doc.lineAt(view.state.selection.main.head).number;
   const found: { from: number; to: number; widget: ImageWidget }[] = [];
 
