@@ -354,7 +354,7 @@ pub fn run() {
                     .filter_map(|url| {
                         url.to_file_path().ok().and_then(|p| {
                             let s = p.to_string_lossy().to_string();
-                            if s.ends_with(".md") || s.ends_with(".markdown") {
+                            if s.ends_with(".md") || s.ends_with(".markdown") || s.ends_with(".canvas") {
                                 Some(s)
                             } else {
                                 None
