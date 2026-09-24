@@ -833,14 +833,15 @@ impl Database {
         Ok(())
     }
 
+    /// A file's frontmatter as JSON; None for a file with none, or not in the index.
     pub fn get_frontmatter(&self, path: &str) -> Result<Option<String>, String> {
         let result = self.conn.query_row(
             "SELECT frontmatter FROM files WHERE path = ?1",
             params![path],
-            |row| row.get(0),
+            |row| row.get::<_, Option<String>>(0),
         ).optional().map_err(|e| format!("Failed to get frontmatter: {}", e))?;
 
-        Ok(result)
+        Ok(result.flatten())
     }
 
     /// Get all unique tags with usage counts (for autocomplete)
@@ -1056,6 +1057,14 @@ mod tests {
             let back = db.get_backlinks(w).unwrap();
             assert!(back.iter().any(|b| b.source_path == source_path), "backlink on {w}");
         }
+    }
+
+    #[test]
+    fn a_file_without_frontmatter_reads_as_none_rather_than_an_error() {
+        let t = temp_db(&[]);
+        add(&t, "/v/plain.md", &[]);
+        assert_eq!(t.get_frontmatter("/v/plain.md").unwrap(), None);
+        assert_eq!(t.get_frontmatter("/v/missing.md").unwrap(), None);
     }
 
     #[test]
