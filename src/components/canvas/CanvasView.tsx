@@ -50,6 +50,9 @@ const MIN_SIZE = 40;
 /** Items copied with Cmd+C, shared by every canvas tab */
 let clipboard: { nodes: CanvasNode[]; edges: CanvasEdge[] } | null = null;
 
+/** Colour of the sticky last selected or recoloured, which new stickies take (this session) */
+let stickyColor: string = "yellow";
+
 export function CanvasView({ path, active }: { path: string; active: boolean }) {
   const { doc, error } = useCanvas(path);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -336,7 +339,7 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
 
   const createAt = (t: Tool, p: Point): void => {
     switch (t) {
-      case "sticky": addNode(newSticky(p.x - 100, p.y - 100), true); break;
+      case "sticky": addNode(withColor(newSticky(p.x - 100, p.y - 100), stickyColor), true); break;
       case "card": addNode(newMarkdownCard(p.x - 180, p.y - 120), true); break;
       case "label": addNode(newLabel(p.x - 20, p.y - 30), true); break;
       case "frame": addNode(newFrame(p.x - 400, p.y - 300)); break;
@@ -701,6 +704,13 @@ export function CanvasView({ path, active }: { path: string; active: boolean }) 
   const single = selectedNodes.length === 1 && !editing ? selectedNodes[0] : null;
   const selBounds = boundsOf(selectedNodes);
   const edge = selectedEdge ? doc?.edges.find((x) => x.id === selectedEdge) ?? null : null;
+
+  // Selecting a sticky makes its colour the one the sticky tool places next
+  const lastSticky = [...selectedNodes].reverse().find((n) => kindOf(n) === "sticky");
+  const lastStickyColor = lastSticky ? colorOf(lastSticky) ?? "yellow" : null;
+  useEffect(() => {
+    if (lastStickyColor) stickyColor = lastStickyColor;
+  }, [lastStickyColor]);
 
   const setColor = (color: string | null) => {
     if (edge) updateEdge(edge.id, (x) => withColor(x, color));
